@@ -1,0 +1,22 @@
+Ok, i didn't like how it looked. I am giving you new parameters for portrait layout. 
+Left player cards and right player cards are rotated by the same principle as in landscape. You figured out how to make it work in landscape just do the same in portrait.
+1. sheet size 137x297
+2. portrait
+3. x, y, w, h  Here x-distance from the left edge to the left side of rectangle, y - distance from the bottom edge to the bottom side of rectangle
+   pile is in the very centre of the screen 46, 139, 45, 64
+   message 46, 218, 45, 10
+   your cards area 5, 55, 127, 35
+   size of a single your card 25x35
+   center of your avatar circle 68.5, 28.5, diameter 27
+   your name area 55, 45, 27, 5
+   DRAW button 46, 112, 45, 10
+   size of a single other players card 19x27
+   centre of left player avatar circle 18.5, 233.5, diameter 27
+   left player name area 5, 212, 27, 5
+   left player cards area 5, 95, 27, 112
+   centre of top player avatar circle 118.5, 268.5, diameter 27
+   top player name area 105, 247, 27, 5
+   top player cards area 5, 255, 95, 27 
+   centre of right player avatar circle 118.5, 108.5, diameter 27
+   right player name area 105, 125, 27, 5
+   right player cards area 105, 135, 27, 107

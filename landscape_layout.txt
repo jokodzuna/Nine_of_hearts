@@ -1,0 +1,30 @@
+- pile: x, y, w, h
+- message: x, y, w, h
+- yourCardsArea: x, y, w, h
+- yourAvatar: x, y, w, h
+- drawButton: x, y, w, h
+- topPlayerCardsArea: x, y, w, h
+- topAvatar: x, y, w, h
+
+1. sheet size 297x137
+2. landscape
+3. x, y, w, h  Here x-distance from the left edge to the left side of rectangle, y - distance from the bottom edge to the bottom side of rectangle
+   pile is in the very centre of the screen 131, 43.5, 35, 50
+   message 175, 63.5, 50, 10
+   your cards area 100, 10, 135, 27
+   size of a single your card 19x27
+   center of your avatar circle 80.5, 23.5, diameter 27
+   your name area 67, 37, 27, 5
+   make Draw button circle 
+   centre of Draw button 80.5, 68.5, diameter 27
+   size of a single other players card 19x27
+   centre of left player avatar circle 33.5, 113.5, diameter 27
+   left player name area 20, 95, 27, 5
+   left player cards area 20, 10, 27, 80
+   centre of top player avatar circle 216.5, 113.5, diameter 27
+   top player name area 203, 95, 27, 5
+   top player cards area 67, 100, 126, 27 
+   centre of right player avatar circle 263.5, 23.5, diameter 27
+   right player name area 250, 37, 27, 5
+   right player cards area 250, 47, 27, 80
+4. Do scaling factor variable as well like you suggested before   

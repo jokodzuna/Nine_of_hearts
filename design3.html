@@ -1,0 +1,2006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nine Hearts - Draw Mechanic</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', sans-serif; touch-action: none; }
+
+        @font-face {
+            font-family: 'NHF-Becker';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('fonts/becker/Becker.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'NHF-Becker-Inline';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('fonts/becker/Becker-Inline.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'NHF-Becker-Shadow';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('fonts/becker/BeckerShadow.ttf') format('truetype');
+        }
+        
+        :root {
+            --other-card-width: 55px; --other-card-height: 77px;
+            --your-card-width: 82px; --your-card-height: 115px;
+            --pile-card-width: 165px; --pile-card-height: 231px;
+            --card-overlap-margin: -35px;
+            --your-overlap-margin: var(--card-overlap-margin);
+            --top-overlap-margin: var(--card-overlap-margin);
+        }
+
+        #tapToStart { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: none; align-items: center; justify-content: center; z-index: 10000; cursor: pointer; }
+        #tapToStart h1 { color: white; font-size: 32px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .game-container { width: 100%; height: 100%; background: radial-gradient(ellipse at center, #1a7a3e 0%, #0d5c2b 50%, #084018 100%); position: relative; display: flex; align-items: center; justify-content: center; }
+        .game-container::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px), repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.02) 2px, rgba(0,0,0,0.02) 4px); pointer-events: none; z-index: 0; }
+
+        .game-table { width: 100%; height: 100%; display: grid; grid-template-rows: 140px 1fr 200px; grid-template-columns: 150px 1fr 150px; gap: 10px; padding: 15px; position: relative; z-index: 1; }
+
+        .player-area { display: flex; align-items: center; justify-content: center; position: relative; }
+        .player-top { grid-row: 1; grid-column: 1 / 4; flex-direction: column; gap: 10px; }
+        .player-bottom { grid-row: 3; grid-column: 1 / 4; flex-direction: column; gap: 10px; }
+        .player-left { grid-row: 2; grid-column: 1; flex-direction: row; align-items: center; justify-content: center; gap: 30px; }
+        .player-right { grid-row: 2; grid-column: 3; flex-direction: row; align-items: center; justify-content: center; gap: 30px; }
+
+        .center-area { grid-row: 2; grid-column: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; position: relative; }
+        .player-info { display: flex; align-items: center; gap: 10px; position: relative; }
+        .player-left .player-info { order: -1; flex-direction: column; }
+        .player-right .player-info { order: 1; flex-direction: column; }
+
+        .bottom-controls { display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .draw-button { background: #3b82f6; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.4); transition: background-color 0.2s, transform 0.2s; }
+        .draw-button:hover { background: #2563eb; transform: translateY(-1px); }
+        .draw-button:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
+
+        .avatar-container { width: 60px; height: 60px; position: relative; }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 3px solid white; transition: box-shadow 0.3s; }
+        .avatar.active { box-shadow: 0 0 20px 5px #F44336; }
+        .avatar-container {
+            --ring-progress: 0;
+            --ring-color: #FFD700;
+            --ring-thickness: 5px;
+            flex: 0 0 auto;
+        }
+        .avatar-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from -90deg, var(--ring-color) calc(var(--ring-progress) * 1turn), rgba(0,0,0,0) 0);
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-thickness)), #000 calc(100% - var(--ring-thickness)));
+            mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-thickness)), #000 calc(100% - var(--ring-thickness)));
+            pointer-events: none;
+            opacity: 0.55;
+            filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.7));
+        }
+        .avatar.active { box-shadow: 0 0 20px 5px #F44336; }
+        .avatar-container.active::before { opacity: 1; }
+
+        .player-name-score { display: flex; flex-direction: column; align-items: center; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); flex: 0 0 auto; }
+        .player-name { font-size: 16px; font-weight: bold; }
+
+        .cards { display: flex; align-items: center; justify-content: center; gap: 0; position: relative; }
+        
+        .card { 
+            --card-w: var(--other-card-width);
+            --card-h: var(--other-card-height);
+            width: var(--card-w); height: var(--card-h); 
+            border-radius: 6px; position: relative; cursor: pointer; 
+            user-select: none; 
+            flex: 0 0 auto;
+            opacity: 0; 
+            transform: translateY(20px) scale(0.95);
+            transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s ease-out, box-shadow 0.2s ease;
+        }
+        .card.dealt { opacity: 1; transform: translateY(0) scale(1); }
+        
+        .player-bottom .card { --card-w: var(--your-card-width); --card-h: var(--your-card-height); width: var(--card-w); height: var(--card-h); }
+
+        .card-front { 
+            width: 100%; height: 100%; background: white; border: 1px solid #ccc; 
+            border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); 
+            position: relative; font-weight: bold; 
+        }
+        .card-front.red { color: #d32f2f; }
+        .card-front.black { color: #000; }
+        
+        .card-front .rank, .card-front .suit, .card-front .face-image {
+            position: absolute; text-align: center; line-height: 1;
+        }
+        .card-front {
+            --card-min: min(var(--card-w), var(--card-h));
+            --corner-inset: calc(var(--card-min) * 0.05);
+            --corner-rank-size: calc(var(--card-min) * 0.16);
+            --corner-suit-size: calc(var(--card-min) * 0.14);
+            --center-size: calc(var(--card-min) * 0.592);
+            --face-size: calc(var(--card-min) * 0.52);
+        }
+
+        .card-front .rank.top-left { top: var(--corner-inset); left: var(--corner-inset); font-size: var(--corner-rank-size); }
+        .card-front .suit.top-left { top: calc(var(--corner-inset) + var(--corner-rank-size)); left: var(--corner-inset); font-size: var(--corner-suit-size); }
+        .card-front .suit.center { font-size: var(--center-size); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .card-front .face-image { font-size: var(--face-size); top: 50%; left: 50%; transform: translate(-50%, -50%); text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .card-front .rank.bottom-right { bottom: var(--corner-inset); right: var(--corner-inset); font-size: var(--corner-rank-size); transform: rotate(180deg); }
+        .card-front .suit.bottom-right { bottom: calc(var(--corner-inset) + var(--corner-rank-size)); right: var(--corner-inset); font-size: var(--corner-suit-size); transform: rotate(180deg); }
+
+        .card-back {
+            width: 100%; height: 100%;
+            background:
+                radial-gradient(circle, rgba(255,215,0,0.15) 0%, rgba(255,215,0,0) 60%),
+                repeating-linear-gradient(45deg, rgba(212,175,55,0.2), rgba(212,175,55,0.2) 2px, transparent 2px, transparent 10px),
+                repeating-linear-gradient(-45deg, rgba(212,175,55,0.2), rgba(212,175,55,0.2) 2px, transparent 2px, transparent 10px),
+                #8B0000;
+            border: 2px solid gold;
+            border-radius: 6px; position: relative; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .card-back::before {
+            content: '⚜'; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); font-size: 40px; color: gold;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        .side-card-wrap { display: contents; }
+
+        .player-bottom .card.dealt:hover { transform: translateY(-15px); z-index: 100; }
+        .card.selected { transform: translateY(-20px) !important; box-shadow: 0 0 20px rgba(76, 175, 80, 0.8); position: relative; z-index: 30000; }
+        
+        .player-bottom .cards { padding-left: 35px; }
+        .player-bottom .card { margin-left: var(--your-overlap-margin); }
+
+        .player-top .cards { padding-left: 30px; }
+        .player-top .card { margin-left: var(--top-overlap-margin); }
+        
+        .player-left .cards, .player-right .cards { flex-direction: column; padding-top: 35px; padding-bottom: 35px; }
+        .player-left .card.dealt { transform: rotate(90deg); }
+        .player-right .card.dealt { transform: rotate(-90deg); }
+        .player-left .card { margin-top: -40px; }
+        .player-right .card { margin-top: -40px; }
+        .player-left .card:first-child, .player-right .card:first-child { margin-top: 0; }
+
+        .pile {
+            position: relative;
+            width: var(--pile-card-width);
+            height: var(--pile-card-height);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px; 
+        }
+        .pile .card {
+            position: absolute;
+            --card-w: var(--pile-card-width);
+            --card-h: var(--pile-card-height);
+            width: var(--pile-card-width);
+            height: var(--pile-card-height);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .pile .card:nth-child(2) { transform: translate(-50%, -50%) rotate(5deg) translate(4px, 4px); }
+        .pile .card:nth-child(3) { transform: translate(-50%, -50%) rotate(-4deg) translate(8px, 8px); }
+
+        .message { background: rgba(0,0,0,0.7); color: white; padding: 15px 30px; border-radius: 8px; font-size: 18px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .card.dragging { opacity: 0.5; pointer-events: none; }
+        .card.drag-preview { position: fixed; z-index: 1000; pointer-events: none; opacity: 0.9; transform: rotate(5deg); }
+        .pile.drop-active { background: rgba(76, 175, 80,.2); border: 3px dashed #4CAF50; }
+
+        .deal-deck { position: absolute; inset: 0; pointer-events: none; }
+        .deal-deck-stack { position: absolute; inset: 0; }
+        .deal-deck-card { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%) scale(var(--deck-scale, 1)); }
+        .deal-fly { position: fixed; z-index: 20000; pointer-events: none; }
+
+        .controls { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.9); padding: 15px; border-radius: 8px; color: white; z-index: 1000; font-size: 12px; }
+        .controls button { background: #4CAF50; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 8px; font-size: 12px; }
+        .controls button:hover { background: #45a049; }
+        .controls.hidden { display: none; }
+        .toggle-controls { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; z-index: 999; font-size: 12px; }
+
+        body.welcome-active #tapToStart {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #welcomeScreen {
+            position: fixed;
+            inset: 0;
+            z-index: 20000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at center, #1b8a44 0%, #0b5a2a 55%, #063617 100%);
+            overflow: hidden;
+        }
+
+        #welcomeScreen::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                repeating-linear-gradient(0deg, rgba(255,255,255,0.03), rgba(255,255,255,0.03) 1px, rgba(0,0,0,0.02) 1px, rgba(0,0,0,0.02) 3px),
+                repeating-linear-gradient(90deg, rgba(0,0,0,0.02), rgba(0,0,0,0.02) 2px, rgba(255,255,255,0.015) 2px, rgba(255,255,255,0.015) 6px);
+            opacity: 0.55;
+            mix-blend-mode: overlay;
+            pointer-events: none;
+        }
+
+        #welcomeScreen .welcome-content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 6vh 6vw;
+            gap: 3.2vh;
+            transform: translateZ(0);
+        }
+
+        #welcomeScreen.playing .welcome-content {
+            animation: welcomeZoomIn 2s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+        }
+
+        @keyframes welcomeZoomIn {
+            0% { transform: scale(1.22); opacity: 0; filter: blur(6px); }
+            18% { opacity: 1; filter: blur(0px); }
+            100% { transform: scale(1); opacity: 1; filter: blur(0px); }
+        }
+
+        #welcomeScreen .welcome-title {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'NHF-Becker', 'NHF-Becker-Shadow', 'NHF-Becker-Inline', 'Arial Black', 'Arial', sans-serif;
+            gap: 2.7vh;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 900;
+            line-height: 0.92;
+            color: #f4f1e6;
+            font-size: clamp(57px, 12vw, 143px);
+            text-shadow:
+                0 -2px 0 rgba(255,255,255,0.16),
+                0 2px 0 rgba(0,0,0,0.35),
+                0 6px 0 rgba(0,0,0,0.30),
+                0 10px 0 rgba(0,0,0,0.26),
+                0 18px 28px rgba(0,0,0,0.58);
+        }
+
+        #welcomeScreen .welcome-of {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.65em;
+            height: 1.5em;
+            position: relative;
+            color: #fff;
+        }
+
+        #welcomeScreen .welcome-of::before {
+            content: '♥';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.65em;
+            color: #e11d48;
+            text-shadow:
+                0 -3px 0 rgba(255,255,255,0.18),
+                0 3px 0 rgba(0,0,0,0.38),
+                0 7px 0 rgba(0,0,0,0.22),
+                0 18px 28px rgba(0,0,0,0.62);
+        }
+
+        #welcomeScreen .welcome-of span {
+            position: relative;
+            z-index: 1;
+            font-size: 0.39em;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            color: #fff;
+            text-shadow:
+                0 2px 0 rgba(0,0,0,0.35),
+                0 8px 18px rgba(0,0,0,0.55);
+            transform: translateY(0.08em);
+        }
+
+        #welcomeScreen .welcome-tagline {
+            font-size: clamp(21px, 4.1vw, 36px);
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #ff4d4d;
+            text-shadow:
+                0 -1px 0 rgba(255,255,255,0.12),
+                0 2px 0 rgba(0,0,0,0.35),
+                0 10px 18px rgba(0,0,0,0.55);
+        }
+
+        #welcomeScreen .text-shards {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        #welcomeScreen .text-shard {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transform: translate3d(0,0,0);
+            will-change: transform, opacity;
+        }
+
+        #welcomeScreen .text-shard .welcome-content {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 6vh 6vw;
+            gap: 3.2vh;
+        }
+
+        #welcomeScreen.shatter .welcome-content {
+            opacity: 0;
+            transform: scale(0.985);
+            transition: opacity 0.25s ease;
+        }
+
+        #welcomeScreen.shatter .text-shard {
+            opacity: 1;
+        }
+
+        #welcomeScreen .text-shard:nth-child(1) { clip-path: polygon(0% 0%, 35% 0%, 22% 42%, 0% 55%); transform-origin: 10% 15%; }
+        #welcomeScreen .text-shard:nth-child(2) { clip-path: polygon(35% 0%, 70% 0%, 58% 38%, 22% 42%); transform-origin: 55% 10%; }
+        #welcomeScreen .text-shard:nth-child(3) { clip-path: polygon(70% 0%, 100% 0%, 100% 55%, 58% 38%); transform-origin: 92% 20%; }
+        #welcomeScreen .text-shard:nth-child(4) { clip-path: polygon(0% 55%, 22% 42%, 45% 60%, 18% 100%, 0% 100%); transform-origin: 15% 75%; }
+        #welcomeScreen .text-shard:nth-child(5) { clip-path: polygon(22% 42%, 58% 38%, 72% 62%, 45% 60%); transform-origin: 50% 55%; }
+        #welcomeScreen .text-shard:nth-child(6) { clip-path: polygon(58% 38%, 100% 55%, 100% 100%, 72% 62%); transform-origin: 85% 70%; }
+        #welcomeScreen .text-shard:nth-child(7) { clip-path: polygon(18% 100%, 45% 60%, 55% 100%); transform-origin: 35% 92%; }
+        #welcomeScreen .text-shard:nth-child(8) { clip-path: polygon(45% 60%, 72% 62%, 55% 100%); transform-origin: 62% 88%; }
+
+        #welcomeScreen.shatter .text-shard:nth-child(1) { animation: shardOut1 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(2) { animation: shardOut2 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(3) { animation: shardOut3 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(4) { animation: shardOut4 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(5) { animation: shardOut5 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(6) { animation: shardOut6 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(7) { animation: shardOut7 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+        #welcomeScreen.shatter .text-shard:nth-child(8) { animation: shardOut8 1.1s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+
+        @keyframes shardOut1 { to { transform: translate3d(-22vw, -18vh, 0) rotate(-12deg); opacity: 0; } }
+        @keyframes shardOut2 { to { transform: translate3d(0vw, -24vh, 0) rotate(10deg); opacity: 0; } }
+        @keyframes shardOut3 { to { transform: translate3d(24vw, -14vh, 0) rotate(14deg); opacity: 0; } }
+        @keyframes shardOut4 { to { transform: translate3d(-26vw, 18vh, 0) rotate(16deg); opacity: 0; } }
+        @keyframes shardOut5 { to { transform: translate3d(2vw, 16vh, 0) rotate(-18deg); opacity: 0; } }
+        @keyframes shardOut6 { to { transform: translate3d(28vw, 22vh, 0) rotate(20deg); opacity: 0; } }
+        @keyframes shardOut7 { to { transform: translate3d(-12vw, 30vh, 0) rotate(-22deg); opacity: 0; } }
+        @keyframes shardOut8 { to { transform: translate3d(18vw, 32vh, 0) rotate(24deg); opacity: 0; } }
+
+        #startButton {
+            position: absolute;
+            left: 50%;
+            top: 72%;
+            transform: translate(-50%, -50%);
+            z-index: 4;
+            border: none;
+            padding: 16px 28px;
+            border-radius: 14px;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-size: clamp(18px, 3.8vw, 28px);
+            color: #fff;
+            background: linear-gradient(180deg, #ff3b3b 0%, #d11b1b 60%, #980f0f 100%);
+            box-shadow:
+                0 10px 26px rgba(0,0,0,0.55),
+                inset 0 2px 0 rgba(255,255,255,0.25);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #welcomeScreen.ready #startButton {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #startButton:active {
+            transform: translate(-50%, -50%) scale(0.98);
+        }
+
+        @media (orientation: portrait) {
+            :root {
+                --layout-scale: 1;
+
+                --sheet-w: 137;
+                --sheet-h: 297;
+                --u0: min(calc(100vw / var(--sheet-w)), calc(100vh / var(--sheet-h)));
+                --u: calc(var(--u0) * var(--layout-scale));
+
+                --offset-x: calc((100vw - (var(--u) * var(--sheet-w))) / 2);
+                --offset-y: calc((100vh - (var(--u) * var(--sheet-h))) / 2);
+
+                --your-card-width: calc(var(--u) * 25);
+                --your-card-height: calc(var(--u) * 35);
+                --other-card-width: calc(var(--u) * 19);
+                --other-card-height: calc(var(--u) * 27);
+                --pile-card-width: calc(var(--u) * 45);
+                --pile-card-height: calc(var(--u) * 64);
+
+                --circle-d: calc(var(--u) * 27);
+                --name-font: calc(var(--u) * 4);
+                --card-overlap-margin: calc(var(--u) * -10);
+                --your-overlap-margin: var(--card-overlap-margin);
+                --top-overlap-margin: var(--card-overlap-margin);
+                --side-card-step: calc(var(--u) * 10.6);
+            }
+
+            .game-table { display: block; width: 100vw; height: 100vh; padding: 0; gap: 0; position: relative; }
+            .player-area { position: static; display: block; }
+            .player-top, .player-left, .player-right, .player-bottom, .center-area { position: static; width: 100%; height: 100%; grid-row: auto; grid-column: auto; gap: 0; }
+
+            #pile {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 46));
+                bottom: calc(var(--offset-y) + (var(--u) * 139));
+                width: calc(var(--u) * 45);
+                height: calc(var(--u) * 64);
+            }
+            #message {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 46));
+                bottom: calc(var(--offset-y) + (var(--u) * 218));
+                width: calc(var(--u) * 45);
+                height: calc(var(--u) * 10);
+                padding: calc(var(--u) * 1) calc(var(--u) * 2);
+                font-size: calc(var(--u) * 3.2);
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+            }
+
+            #yourCards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 1));
+                bottom: calc(var(--offset-y) + (var(--u) * 55));
+                width: calc(var(--u) * 127);
+                height: calc(var(--u) * 35);
+                overflow: visible;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                justify-content: center;
+            }
+
+            #yourCards .card { margin-top: 0; margin-left: var(--your-overlap-margin); }
+            #yourCards .card:first-child { margin-left: 0; }
+
+            #player2Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 5));
+                bottom: calc(var(--offset-y) + (var(--u) * 255));
+                width: calc(var(--u) * 95);
+                height: calc(var(--u) * 27);
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+            }
+
+            #player2Cards .card { margin-left: var(--top-overlap-margin); }
+            #player2Cards .card:first-child { margin-left: 0; }
+
+            #player3Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 5));
+                bottom: calc(var(--offset-y) + (var(--u) * 95));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 112);
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+            }
+
+            #player1Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 105));
+                bottom: calc(var(--offset-y) + (var(--u) * 135));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 107);
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-end;
+            }
+
+            #player3Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 5));
+                bottom: calc(var(--offset-y) + (var(--u) * 212));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 35);
+                display: block;
+            }
+            #player2Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 105));
+                bottom: calc(var(--offset-y) + (var(--u) * 247));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 35);
+                display: block;
+            }
+            #yourInfo {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 55));
+                bottom: calc(var(--offset-y) + (var(--u) * 15));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 35);
+                display: block;
+            }
+            #player1Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 105));
+                bottom: calc(var(--offset-y) + (var(--u) * 95));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 35);
+                display: block;
+            }
+
+            #player3Info .avatar-container { position: absolute; left: 0; bottom: calc(var(--u) * 8); }
+            #player3Info .player-name-score { position: absolute; left: 0; bottom: 0; width: 100%; height: calc(var(--u) * 5); display: flex; align-items: center; justify-content: center; }
+
+            #player2Info .avatar-container { position: absolute; left: 0; bottom: calc(var(--u) * 8); }
+            #player2Info .player-name-score { position: absolute; left: 0; bottom: 0; width: 100%; height: calc(var(--u) * 5); display: flex; align-items: center; justify-content: center; }
+
+            #yourInfo .avatar-container { position: absolute; left: 0; bottom: 0; }
+            #yourInfo .player-name-score { position: absolute; left: 0; bottom: calc(var(--u) * 30); width: 100%; height: calc(var(--u) * 5); display: flex; align-items: center; justify-content: center; }
+
+            #player1Info .avatar-container { position: absolute; left: 0; bottom: 0; }
+            #player1Info .player-name-score { position: absolute; left: 0; bottom: calc(var(--u) * 30); width: 100%; height: calc(var(--u) * 5); display: flex; align-items: center; justify-content: center; }
+
+            .side-card-wrap {
+                display: flex;
+                width: var(--other-card-height);
+                height: var(--other-card-width);
+                align-items: center;
+                justify-content: center;
+                overflow: visible;
+                margin-top: calc(-1 * (var(--other-card-width) - var(--side-card-step)));
+            }
+            .side-card-wrap:first-child { margin-top: 0; }
+
+            #player3Cards .side-card-wrap .card,
+            #player1Cards .side-card-wrap .card { margin-top: 0; }
+            #player3Cards .side-card-wrap .card.dealt { transform: rotate(90deg) translateY(0) scale(1); transform-origin: center center; }
+            #player1Cards .side-card-wrap .card.dealt { transform: rotate(-90deg) translateY(0) scale(1); transform-origin: center center; }
+
+            .player-name { font-size: var(--name-font); }
+
+            .avatar-container { width: var(--circle-d); height: var(--circle-d); --ring-thickness: calc(var(--u) * 5); }
+            .avatar { width: calc(var(--circle-d) - (var(--u) * 2)); height: calc(var(--circle-d) - (var(--u) * 2)); top: calc(var(--u) * 1); left: calc(var(--u) * 1); font-size: calc(var(--u) * 10); }
+
+            #drawButton {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 46));
+                bottom: calc(var(--offset-y) + (var(--u) * 112));
+                width: calc(var(--u) * 45);
+                height: calc(var(--u) * 10);
+                border-radius: 8px;
+                font-size: calc(var(--u) * 4);
+                padding: 0;
+            }
+        }
+
+        @media (orientation: landscape) {
+            :root {
+                --layout-scale: 1;
+
+                --sheet-w: 297;
+                --sheet-h: 137;
+                --u0: min(calc(100vw / var(--sheet-w)), calc(100vh / var(--sheet-h)));
+                --u: calc(var(--u0) * var(--layout-scale));
+
+                --offset-x: calc((100vw - (var(--u) * var(--sheet-w))) / 2);
+                --offset-y: calc((100vh - (var(--u) * var(--sheet-h))) / 2);
+
+                --your-card-width: calc(var(--u) * 19);
+                --your-card-height: calc(var(--u) * 27);
+                --other-card-width: calc(var(--u) * 19);
+                --other-card-height: calc(var(--u) * 27);
+                --pile-card-width: calc(var(--u) * 35);
+                --pile-card-height: calc(var(--u) * 50);
+
+                --circle-d: calc(var(--u) * 27);
+                --name-h: calc(var(--u) * 5);
+                --name-font: calc(var(--u) * 4);
+
+                --card-overlap-margin: calc(var(--u) * -10);
+                --side-card-step: calc(var(--u) * 10.6);
+            }
+
+            html, body { width: 100vw; height: 100vh; overflow: hidden; }
+            .game-container { width: 100vw; height: 100vh; overflow: hidden; }
+
+            .game-table {
+                display: block;
+                width: 100vw;
+                height: 100vh;
+                padding: 0;
+                gap: 0;
+                position: relative;
+                transform: none;
+            }
+
+            .player-area { position: static; display: block; }
+            .player-top, .player-left, .player-right, .player-bottom, .center-area {
+                position: static;
+                width: 100%;
+                height: 100%;
+                grid-row: auto;
+                grid-column: auto;
+                gap: 0;
+            }
+
+            .player-left .cards, .player-right .cards { padding-top: 0; padding-bottom: 0; }
+
+            .side-card-wrap {
+                display: flex;
+                width: var(--other-card-height);
+                height: var(--other-card-width);
+                align-items: center;
+                justify-content: center;
+                overflow: visible;
+                margin-top: calc(-1 * (var(--other-card-width) - var(--side-card-step)));
+            }
+            .side-card-wrap:first-child { margin-top: 0; }
+
+            #player3Cards .side-card-wrap .card,
+            #player1Cards .side-card-wrap .card {
+                margin-top: 0;
+            }
+            #player3Cards .side-card-wrap .card.dealt {
+                transform: rotate(90deg) translateY(0) scale(1);
+                transform-origin: center center;
+            }
+            #player1Cards .side-card-wrap .card.dealt {
+                transform: rotate(-90deg) translateY(0) scale(1);
+                transform-origin: center center;
+            }
+
+            .player-bottom .cards { padding-left: 0; }
+
+            #pile {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 131));
+                bottom: calc(var(--offset-y) + (var(--u) * 43.5));
+                width: calc(var(--u) * 35);
+                height: calc(var(--u) * 50);
+            }
+            #message {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 175));
+                bottom: calc(var(--offset-y) + (var(--u) * 63.5));
+                width: calc(var(--u) * 50);
+                height: calc(var(--u) * 10);
+                padding: calc(var(--u) * 1) calc(var(--u) * 2);
+                font-size: calc(var(--u) * 3.2);
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin: 0;
+            }
+
+            #yourCards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 100));
+                bottom: calc(var(--offset-y) + (var(--u) * 10));
+                width: calc(var(--u) * 135);
+                height: calc(var(--u) * 27);
+                overflow: visible;
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+            }
+
+            #player3Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 20));
+                bottom: calc(var(--offset-y) + (var(--u) * 10));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 80);
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+            }
+            #player1Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 250));
+                bottom: calc(var(--offset-y) + (var(--u) * 47));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 80);
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-end;
+            }
+            #player2Cards {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 67));
+                bottom: calc(var(--offset-y) + (var(--u) * 100));
+                width: calc(var(--u) * 126);
+                height: calc(var(--u) * 27);
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                flex-direction: row;
+            }
+
+            #yourCards .card:first-child,
+            #player2Cards .card:first-child {
+                margin-left: 0;
+            }
+
+            #player3Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 20));
+                bottom: calc(var(--offset-y) + (var(--u) * 93));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 34);
+                display: block;
+            }
+            #player2Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 203));
+                bottom: calc(var(--offset-y) + (var(--u) * 93));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 34);
+                display: block;
+            }
+            #player1Info {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 250));
+                bottom: calc(var(--offset-y) + (var(--u) * 10));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 34);
+                display: block;
+            }
+            #yourInfo {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 67));
+                bottom: calc(var(--offset-y) + (var(--u) * 10));
+                width: calc(var(--u) * 27);
+                height: calc(var(--u) * 34);
+                display: block;
+            }
+
+
+            #player3Info .avatar-container,
+            #player2Info .avatar-container {
+                position: absolute;
+                left: 0;
+                bottom: calc(var(--u) * 7);
+            }
+            #player1Info .avatar-container,
+            #yourInfo .avatar-container {
+                position: absolute;
+                left: 0;
+                bottom: 0;
+            }
+
+            #player3Info .player-name-score,
+            #player2Info .player-name-score {
+                position: absolute;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                height: calc(var(--u) * 5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            #player1Info .player-name-score,
+            #yourInfo .player-name-score {
+                position: absolute;
+                left: 0;
+                bottom: calc(var(--u) * 29);
+                width: 100%;
+                height: calc(var(--u) * 5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .player-info { gap: 0; }
+            .player-name { font-size: var(--name-font); }
+
+            .avatar-container { width: var(--circle-d); height: var(--circle-d); --ring-thickness: calc(var(--u) * 5); }
+            .avatar { width: calc(var(--circle-d) - (var(--u) * 2)); height: calc(var(--circle-d) - (var(--u) * 2)); top: calc(var(--u) * 1); left: calc(var(--u) * 1); font-size: calc(var(--u) * 10); }
+
+            .bottom-controls { position: static; }
+            #drawButton {
+                position: absolute;
+                left: calc(var(--offset-x) + (var(--u) * 67));
+                bottom: calc(var(--offset-y) + (var(--u) * 55));
+                width: var(--circle-d);
+                height: var(--circle-d);
+                border-radius: 999px;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: calc(var(--u) * 5);
+                line-height: 1;
+            }
+
+            .player-top .cards { padding-left: 0; }
+            .player-top .card { margin-left: var(--top-overlap-margin); }
+        }
+    </style>
+</head>
+<body>
+    <div id="welcomeScreen" aria-hidden="true">
+        <div class="text-shards" aria-hidden="true"></div>
+        <div class="welcome-content">
+            <div class="welcome-title">
+                <div>NINE</div>
+                <div class="welcome-of"><span>OF</span></div>
+                <div>HEARTS</div>
+            </div>
+            <div class="welcome-tagline">DON'T BE A LOSER!</div>
+        </div>
+        <button id="startButton" type="button">START</button>
+    </div>
+    <div id="tapToStart"><h1>👆 Tap to Start</h1></div>
+    <button class="toggle-controls" onclick="toggleControls()">⚙️</button>
+    <div class="controls hidden" id="controls">
+        <h3>🎨 Test Controls</h3>
+        <button onclick="addCardToYourHand()">➕ Add Card</button>
+        <button onclick="removeCardFromYourHand()">➖ Remove Card</button>
+        <button onclick="updateTimer()">⏱️ Test Timer</button>
+        <button onclick="downloadHtml()">💾 Download HTML</button>
+    </div>
+
+    <div class="game-container">
+        <div class="game-table">
+            <div class="player-area player-top">
+                <div class="player-info" id="player2Info"><div class="avatar-container"><div class="avatar">👨</div></div><div class="player-name-score"><div class="player-name">John</div></div></div>
+                <div class="cards" id="player2Cards"></div>
+            </div>
+
+            <div class="player-area player-left">
+                <div class="player-info" id="player3Info"><div class="avatar-container"><div class="avatar">👩</div></div><div class="player-name-score"><div class="player-name">Carol</div></div></div>
+                <div class="cards" id="player3Cards"></div>
+            </div>
+
+            <div class="center-area">
+                <div class="pile" id="pile"></div>
+                <div class="message" id="message"></div>
+            </div>
+
+            <div class="player-area player-right">
+                <div class="cards" id="player1Cards"></div>
+                 <div class="player-info" id="player1Info"><div class="avatar-container"><div class="avatar">👧</div></div><div class="player-name-score"><div class="player-name">Lisa</div></div></div>
+            </div>
+
+            <div class="player-area player-bottom">
+                <div class="cards" id="yourCards"></div>
+                <div class="bottom-controls">
+                    <button class="draw-button" id="drawButton" onclick="drawFromPile()">Draw 3</button>
+                    <div class="player-info" id="yourInfo"><div class="avatar-container"><div class="avatar">🧑</div></div><div class="player-name-score"><div class="player-name">You</div></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const suits = ['♠', '♥', '♦', '♣'];
+        const ranks = ['9', '10', 'J', 'Q', 'K', 'A'];
+        const playerOrder = ['yourCards', 'player1Cards', 'player2Cards', 'player3Cards'];
+        const playerNames = { yourCards: 'You', player1Cards: 'Lisa', player2Cards: 'John', player3Cards: 'Carol' };
+
+        const rankOrderIndex = Object.fromEntries(ranks.map((r, i) => [r, i]));
+        const suitOrderIndex = Object.fromEntries(suits.map((s, i) => [s, i]));
+
+        let selectedCards = [];
+        let draggedCards = [];
+        let dragPreview = null;
+        let gameState = {};
+
+        let lastTap = { time: 0, card: null };
+        let touchTap = { time: 0, card: null, moved: false, startX: 0, startY: 0 };
+        let mouseTap = { card: null, moved: false, startX: 0, startY: 0 };
+        let isDragInProgress = false;
+
+        const TURN_DURATION_MS = 15000;
+        let turnTimer = { rafId: null, endTime: 0, isYours: false, lastTickRemaining: null, container: null };
+
+        let audioCtx = null;
+        function initAudio() {
+            if (audioCtx) return;
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            audioCtx = new Ctx();
+        }
+
+        let welcomeSoundPending = false;
+        function playWelcomeSound() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+
+            const now = audioCtx.currentTime;
+            const dur = 0.42;
+
+            const bufferSize = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                const t = i / bufferSize;
+                const env = Math.sin(Math.PI * t);
+                data[i] = (Math.random() * 2 - 1) * env;
+            }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(500, now);
+            filter.frequency.exponentialRampToValueAtTime(2200, now + dur);
+            filter.Q.setValueAtTime(0.6, now);
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.07, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            noise.start(now);
+            noise.stop(now + dur);
+
+            const osc = audioCtx.createOscillator();
+            const og = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now + 0.06);
+            osc.frequency.exponentialRampToValueAtTime(1320, now + 0.24);
+            og.gain.setValueAtTime(0.0001, now + 0.06);
+            og.gain.exponentialRampToValueAtTime(0.035, now + 0.09);
+            og.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+            osc.connect(og);
+            og.connect(audioCtx.destination);
+            osc.start(now + 0.06);
+            osc.stop(now + 0.35);
+        }
+
+        function startWelcomeSequence() {
+            const welcome = document.getElementById('welcomeScreen');
+            if (!welcome) return;
+
+            document.body.classList.add('welcome-active');
+            welcome.classList.add('playing');
+
+            try {
+                initAudio();
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume().then(() => {
+                        playWelcomeSound();
+                    }).catch(() => {
+                        welcomeSoundPending = true;
+                    });
+                } else {
+                    playWelcomeSound();
+                }
+            } catch (e) {
+                welcomeSoundPending = true;
+            }
+
+            const INTRO_MS = 2000;
+            const HOLD_MS = 4000;
+            const SHATTER_MS = 1100;
+
+            setTimeout(() => {
+                welcome.classList.add('shatter');
+                try {
+                    const shardsHost = welcome.querySelector('.text-shards');
+                    const src = welcome.querySelector('.welcome-content');
+                    if (shardsHost && src) {
+                        shardsHost.innerHTML = '';
+                        for (let i = 0; i < 8; i++) {
+                            const shard = document.createElement('div');
+                            shard.className = 'text-shard';
+                            shard.appendChild(src.cloneNode(true));
+                            shardsHost.appendChild(shard);
+                        }
+                    }
+                } catch (e) {}
+                setTimeout(() => {
+                    welcome.classList.add('ready');
+                    document.body.classList.remove('welcome-active');
+                }, SHATTER_MS + 80);
+            }, INTRO_MS + HOLD_MS);
+        }
+
+        function playTickSound() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1200, now);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + 0.14);
+        }
+
+        let lastDealSoundAt = 0;
+        function playDealRustleSound() {
+            if (!audioCtx) return;
+            const nowMs = performance.now();
+            if (nowMs - lastDealSoundAt < 90) return;
+            lastDealSoundAt = nowMs;
+
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+
+            const now = audioCtx.currentTime;
+            const duration = 0.09;
+
+            const bufferSize = Math.max(1, Math.floor(audioCtx.sampleRate * duration));
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+            }
+
+            const src = audioCtx.createBufferSource();
+            src.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(900, now);
+            filter.Q.setValueAtTime(0.7, now);
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.05, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+            src.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            src.start(now);
+            src.stop(now + duration);
+        }
+
+        function sortYourHand() {
+            if (!gameState?.hands?.yourCards) return;
+            gameState.hands.yourCards.sort((a, b) => {
+                const ra = rankOrderIndex[a.rank] ?? 999;
+                const rb = rankOrderIndex[b.rank] ?? 999;
+                if (ra !== rb) return ra - rb;
+                const sa = suitOrderIndex[a.suit] ?? 999;
+                const sb = suitOrderIndex[b.suit] ?? 999;
+                return sa - sb;
+            });
+        }
+
+        function renderYourHand() {
+            const container = document.getElementById('yourCards');
+            if (!container) return;
+            container.innerHTML = '';
+            gameState.hands.yourCards.forEach((card, index) => {
+                const el = createCard(card, index, false, 'yourCards');
+                el.classList.add('dealt');
+                container.appendChild(el);
+            });
+            selectedCards = [];
+            requestAnimationFrame(() => {
+                requestAnimationFrame(updateHandLayout);
+                requestAnimationFrame(updateTopHandLayout);
+            });
+        }
+
+        function stopTurnTimer() {
+            if (turnTimer.rafId) cancelAnimationFrame(turnTimer.rafId);
+            turnTimer = { rafId: null, endTime: 0, isYours: false, lastTickRemaining: null, container: null };
+        }
+
+        function startTurnTimer(container, isYours) {
+            stopTurnTimer();
+            if (!container) return;
+            turnTimer.container = container;
+            turnTimer.isYours = isYours;
+            turnTimer.endTime = performance.now() + TURN_DURATION_MS;
+            turnTimer.lastTickRemaining = null;
+
+            const tick = () => {
+                const now = performance.now();
+                const remainingMs = Math.max(0, turnTimer.endTime - now);
+                const progress = remainingMs / TURN_DURATION_MS;
+
+                if (turnTimer.container) {
+                    turnTimer.container.style.setProperty('--ring-progress', String(progress));
+                }
+
+                if (turnTimer.isYours) {
+                    const remainingWhole = Math.ceil(remainingMs / 1000);
+                    if (remainingWhole <= 5 && remainingWhole >= 1) {
+                        if (turnTimer.lastTickRemaining !== remainingWhole) {
+                            turnTimer.lastTickRemaining = remainingWhole;
+                            playTickSound();
+                        }
+                    }
+                }
+
+                if (remainingMs > 0) {
+                    turnTimer.rafId = requestAnimationFrame(tick);
+                }
+            };
+
+            turnTimer.rafId = requestAnimationFrame(tick);
+        }
+
+        startWelcomeSequence();
+
+        function startGameFromLauncher() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+            else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+            initAudio();
+            if (welcomeSoundPending) {
+                welcomeSoundPending = false;
+                playWelcomeSound();
+            }
+            const welcome = document.getElementById('welcomeScreen');
+            if (welcome) welcome.remove();
+            const tap = document.getElementById('tapToStart');
+            if (tap) tap.remove();
+            dealCards();
+        }
+
+        const startBtn = document.getElementById('startButton');
+        if (startBtn) {
+            startBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                startGameFromLauncher();
+            });
+        }
+
+        const legacyTap = document.getElementById('tapToStart');
+        if (legacyTap) {
+            legacyTap.addEventListener('click', function() {
+                startGameFromLauncher();
+            });
+        }
+
+        function updateHandLayout() {
+            const hand = document.getElementById('yourCards');
+            if (!hand) return;
+            const cards = hand.querySelectorAll('.card');
+            const cardCount = cards.length;
+            const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+
+            let overlapPx;
+            const first = cards[0];
+            const cardW = first ? first.getBoundingClientRect().width : 0;
+            const areaW = hand.clientWidth;
+            const totalNoOverlap = cardW * cardCount;
+
+            if (cardCount <= 1 || cardW <= 0 || areaW <= 0) {
+                overlapPx = 0;
+            } else {
+                if (totalNoOverlap <= areaW) {
+                    overlapPx = 0;
+                } else {
+                    const requiredOverlap = (totalNoOverlap - areaW) / (cardCount - 1);
+                    overlapPx = Math.max(0, Math.min(cardW - 1, requiredOverlap));
+                }
+            }
+
+            document.documentElement.style.setProperty('--your-overlap-margin', `-${overlapPx || 0}px`);
+
+            if (!isLandscape && hand) {
+                const nearFill = areaW > 0 ? (totalNoOverlap / areaW) >= 0.85 : false;
+                const shouldLeftAlign = ((overlapPx && overlapPx > 0) || nearFill);
+                hand.style.justifyContent = shouldLeftAlign ? 'flex-start' : 'center';
+                const nudgePx = cardW > 0 ? Math.min(10, Math.round(cardW * 0.08)) : 0;
+                hand.style.transform = shouldLeftAlign ? `translateX(-${nudgePx}px)` : 'translateX(0px)';
+            } else if (hand) {
+                hand.style.transform = 'translateX(0px)';
+            }
+
+            requestAnimationFrame(() => {
+                const overflow = hand.scrollWidth - hand.clientWidth;
+                if (overflow > 0 && cardCount > 1) {
+                    const extra = overflow / (cardCount - 1);
+                    const adjusted = Math.max(0, Math.min(cardW - 1, (overlapPx || 0) + extra + 1));
+                    document.documentElement.style.setProperty('--your-overlap-margin', `-${adjusted}px`);
+                    if (!isLandscape) {
+                        hand.style.justifyContent = 'flex-start';
+                    }
+                }
+            });
+        }
+
+        function updateTopHandLayout() {
+            const hand = document.getElementById('player2Cards');
+            if (!hand) return;
+            const cards = hand.querySelectorAll('.card');
+            const cardCount = cards.length;
+
+            const first = cards[0];
+            const cardW = first ? first.getBoundingClientRect().width : 0;
+            const areaW = hand.clientWidth;
+
+            let overlapPx;
+            if (cardCount <= 1 || cardW <= 0 || areaW <= 0) {
+                overlapPx = 0;
+            } else {
+                const totalNoOverlap = cardW * cardCount;
+                if (totalNoOverlap <= areaW) {
+                    overlapPx = 0;
+                } else {
+                    const requiredOverlap = (totalNoOverlap - areaW) / (cardCount - 1);
+                    overlapPx = Math.max(0, Math.min(cardW - 1, requiredOverlap));
+                }
+            }
+
+            document.documentElement.style.setProperty('--top-overlap-margin', `-${overlapPx || 0}px`);
+        }
+        
+        function createCardBack() {
+            const card = document.createElement('div');
+            card.className = 'card';
+            const cardBack = document.createElement('div');
+            cardBack.className = 'card-back';
+            card.appendChild(cardBack);
+            return card;
+        }
+
+        function createDeckStack() {
+            const deck = document.createElement('div');
+            deck.className = 'deal-deck';
+            const stack = document.createElement('div');
+            stack.className = 'deal-deck-stack';
+            for (let i = 0; i < 4; i++) {
+                const c = document.createElement('div');
+                c.className = 'deal-deck-card card dealt';
+                c.style.width = '100%';
+                c.style.height = '100%';
+                c.style.setProperty('--deck-scale', String(1 - i * 0.015));
+                const back = document.createElement('div');
+                back.className = 'card-back';
+                c.appendChild(back);
+                stack.appendChild(c);
+            }
+            deck.appendChild(stack);
+            return deck;
+        }
+
+        function getTargetPoint(container, index, total, cardW, cardH, axis) {
+            const rect = container.getBoundingClientRect();
+            if (axis === 'y') {
+                if (total <= 1) return { x: rect.left + rect.width / 2, y: rect.top + cardH / 2 };
+                const step = (rect.height - cardH) / (total - 1);
+                return { x: rect.left + rect.width / 2, y: rect.top + cardH / 2 + step * index };
+            }
+            if (total <= 1) return { x: rect.left + cardW / 2, y: rect.top + rect.height / 2 };
+            const step = (rect.width - cardW) / (total - 1);
+            return { x: rect.left + cardW / 2 + step * index, y: rect.top + rect.height / 2 };
+        }
+
+        function getSizeForVar(wVar, hVar) {
+            const probe = document.createElement('div');
+            probe.style.position = 'fixed';
+            probe.style.left = '-9999px';
+            probe.style.top = '-9999px';
+            probe.style.width = wVar;
+            probe.style.height = hVar;
+            document.body.appendChild(probe);
+            const rect = probe.getBoundingClientRect();
+            probe.remove();
+            return { w: rect.width, h: rect.height };
+        }
+
+        function createSideWrapWithCard(cardEl) {
+            const wrap = document.createElement('div');
+            wrap.className = 'side-card-wrap';
+            wrap.appendChild(cardEl);
+            return wrap;
+        }
+
+        async function animateDealing(hands) {
+            const dealOrder = ['yourCards', 'player3Cards', 'player2Cards', 'player1Cards'];
+            const counts = {
+                yourCards: hands.yourCards.length,
+                player3Cards: hands.player3Cards.length,
+                player2Cards: hands.player2Cards.length,
+                player1Cards: hands.player1Cards.length
+            };
+
+            const perRound = dealOrder.length;
+            const rounds = Math.max(...Object.values(counts));
+            const totalDeals = rounds * perRound;
+            const totalMs = 3000;
+            const startStep = totalMs / totalDeals;
+            const flyDuration = 220;
+
+            const pileEl = document.getElementById('pile');
+            const deckEl = createDeckStack();
+            pileEl.appendChild(deckEl);
+            const originRect = pileEl.getBoundingClientRect();
+            const origin = { x: originRect.left + originRect.width / 2, y: originRect.top + originRect.height / 2 };
+
+            const sizeYour = getSizeForVar('var(--your-card-width)', 'var(--your-card-height)');
+            const sizeOther = getSizeForVar('var(--other-card-width)', 'var(--other-card-height)');
+            const sizeSideWrap = getSizeForVar('var(--other-card-height)', 'var(--other-card-width)');
+
+            const promises = [];
+            let dealIndex = 0;
+            for (let r = 0; r < rounds; r++) {
+                for (const targetId of dealOrder) {
+                    const handArr = hands[targetId];
+                    if (!handArr || r >= handArr.length) {
+                        dealIndex++;
+                        continue;
+                    }
+
+                    const container = document.getElementById(targetId);
+                    const isYou = targetId === 'yourCards';
+                    const isTop = targetId === 'player2Cards';
+                    const isSide = targetId === 'player1Cards' || targetId === 'player3Cards';
+
+                    const cardData = handArr[r];
+
+                    const cardW = isYou ? sizeYour.w : sizeOther.w;
+                    const cardH = isYou ? sizeYour.h : sizeOther.h;
+
+                    const axis = (isYou || isTop) ? 'x' : 'y';
+                    const targetSize = isSide ? { w: sizeSideWrap.w, h: sizeSideWrap.h } : { w: cardW, h: cardH };
+                    const point = getTargetPoint(container, r, counts[targetId], targetSize.w, targetSize.h, axis);
+
+                    const withinRoundIndex = dealIndex % perRound;
+                    const roundIndex = Math.floor(dealIndex / perRound);
+                    const roundPause = 40;
+                    const withinRoundEase = withinRoundIndex * 10;
+                    const startAt = (dealIndex * startStep) + (roundIndex * roundPause) + withinRoundEase;
+                    const p = new Promise(resolve => {
+                        setTimeout(() => {
+                            playDealRustleSound();
+
+                            const fly = document.createElement('div');
+                            fly.className = 'deal-fly';
+                            fly.style.width = `${cardW}px`;
+                            fly.style.height = `${cardH}px`;
+                            fly.style.left = `${origin.x - cardW / 2}px`;
+                            fly.style.top = `${origin.y - cardH / 2}px`;
+                            const flyCard = document.createElement('div');
+                            flyCard.className = 'card dealt';
+                            flyCard.style.width = '100%';
+                            flyCard.style.height = '100%';
+                            const back = document.createElement('div');
+                            back.className = 'card-back';
+                            flyCard.appendChild(back);
+                            fly.appendChild(flyCard);
+                            document.body.appendChild(fly);
+
+                            const keyframes = [
+                                { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+                                { transform: `translate(${point.x - origin.x}px, ${point.y - origin.y}px) scale(1)`, opacity: 1 }
+                            ];
+                            const anim = fly.animate(keyframes, { duration: flyDuration, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' });
+                            anim.onfinish = () => {
+                                fly.remove();
+
+                                let finalCard;
+                                if (isYou) {
+                                    finalCard = createCard(cardData, Date.now(), false, targetId);
+                                } else {
+                                    finalCard = createCardBack();
+                                }
+                                finalCard.classList.add('dealt');
+
+                                if (isSide && (window.matchMedia('(orientation: landscape)').matches || window.matchMedia('(orientation: portrait)').matches)) {
+                                    const wrap = createSideWrapWithCard(finalCard);
+                                    if (targetId === 'player1Cards') {
+                                        container.insertBefore(wrap, container.firstChild);
+                                    } else {
+                                        container.appendChild(wrap);
+                                    }
+                                } else {
+                                    container.appendChild(finalCard);
+                                }
+
+                                if (isYou) {
+                                    requestAnimationFrame(() => {
+                                        requestAnimationFrame(updateHandLayout);
+                                    });
+                                }
+
+                                if (isTop) {
+                                    requestAnimationFrame(() => {
+                                        requestAnimationFrame(updateTopHandLayout);
+                                    });
+                                }
+                                resolve();
+                            };
+                        }, startAt);
+                    });
+                    promises.push(p);
+                    dealIndex++;
+                }
+            }
+
+            await Promise.all(promises);
+            deckEl.remove();
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(updateHandLayout);
+                requestAnimationFrame(updateTopHandLayout);
+            });
+        }
+
+
+        function dealCards() {
+            const deck = [];
+            for (const suit of suits) { for (const rank of ranks) { deck.push({ rank, suit }); } }
+            for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+
+            const hands = { yourCards: [], player1Cards: [], player2Cards: [], player3Cards: [] };
+            deck.forEach((card, index) => { hands[playerOrder[index % 4]].push(card); });
+
+            gameState = { isFirstTurn: true, hands: hands, pile: [], currentPlayer: null, playerOrder: playerOrder, playerNames: playerNames };
+
+            playerOrder.forEach(playerId => {
+                const container = document.getElementById(playerId);
+                container.innerHTML = '';
+            });
+            document.getElementById('pile').innerHTML = '';
+
+            animateDealing(hands).then(() => {
+                sortYourHand();
+                renderYourHand();
+                updateHandLayout();
+                updateTopHandLayout();
+                handleCurrentTurn();
+            });
+            
+            for (const playerId of playerOrder) {
+                if (hands[playerId].find(c => c.rank === '9' && c.suit === '♥')) {
+                    gameState.currentPlayer = playerId;
+                    break;
+                }
+            }
+            
+            
+        }
+
+        function handleCurrentTurn() {
+            const messageEl = document.getElementById('message');
+            const currentPlayerId = gameState.currentPlayer;
+            const currentPlayerName = gameState.playerNames[currentPlayerId];
+
+            document.querySelectorAll('.avatar.active').forEach(avatar => avatar.classList.remove('active'));
+            document.querySelectorAll('.avatar-container.active').forEach(c => {
+                c.classList.remove('active');
+                c.style.setProperty('--ring-progress', '0');
+            });
+            stopTurnTimer();
+            const infoId = currentPlayerId.replace('Cards', 'Info');
+            const avatarEl = document.querySelector(`#${infoId} .avatar`);
+            if (avatarEl) {
+                avatarEl.classList.add('active');
+                const container = avatarEl.closest('.avatar-container');
+                if (container) {
+                    container.classList.add('active');
+                    startTurnTimer(container, currentPlayerId === 'yourCards');
+                }
+            }
+
+            document.getElementById('drawButton').disabled = currentPlayerId !== 'yourCards' || gameState.pile.length === 0;
+
+            if (currentPlayerId === 'yourCards') {
+                messageEl.textContent = gameState.isFirstTurn ? "You have the 9♥. It's your turn to start!" : "It's your turn!";
+            } else {
+                messageEl.textContent = `${currentPlayerName} is thinking...`;
+                setTimeout(playAiTurn, 1500 + Math.random() * 500);
+            }
+        }
+
+        function advanceTurn() {
+            const currentPlayerIndex = gameState.playerOrder.indexOf(gameState.currentPlayer);
+            const nextPlayerIndex = (currentPlayerIndex + 1) % gameState.playerOrder.length;
+            gameState.currentPlayer = gameState.playerOrder[nextPlayerIndex];
+            handleCurrentTurn();
+        }
+
+        function playAiTurn() {
+            const aiPlayerId = gameState.currentPlayer;
+            const aiHand = gameState.hands[aiPlayerId];
+
+            if (aiHand.length === 0) {
+                advanceTurn();
+                return;
+            }
+
+            let cardIndex;
+            if (gameState.isFirstTurn) {
+                cardIndex = aiHand.findIndex(c => c.rank === '9' && c.suit === '♥');
+                if (cardIndex === -1) cardIndex = 0;
+            } else {
+                cardIndex = 0; // Simple AI: play the first available card
+            }
+            const cardToPlay = aiHand[cardIndex];
+
+            if (cardToPlay) {
+                const cardElement = createCard(cardToPlay, Date.now(), true);
+                cardElement.classList.add('dealt');
+                document.getElementById('pile').appendChild(cardElement);
+                gameState.pile.push(cardToPlay);
+
+                aiHand.splice(cardIndex, 1);
+                
+                const cardContainer = document.getElementById(aiPlayerId);
+                if (cardContainer.children.length > 0) {
+                    cardContainer.children[0].remove();
+                }
+                
+                gameState.isFirstTurn = false;
+            }
+            setTimeout(advanceTurn, 1200);
+        }
+
+        function createCard(cardData, index, isPileCard = false, playerId = null) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.index = index; card.dataset.rank = cardData.rank; card.dataset.suit = cardData.suit;
+            const isRed = cardData.suit === '♥' || cardData.suit === '♦';
+            
+            const cardFront = document.createElement('div');
+            cardFront.className = `card-front ${isRed ? 'red' : 'black'}`;
+
+            let centerContent;
+            if (['J', 'Q', 'K'].includes(cardData.rank)) {
+                let faceImage;
+                if (cardData.rank === 'J') faceImage = '👦';
+                if (cardData.rank === 'Q') faceImage = '👸';
+                if (cardData.rank === 'K') faceImage = '🤴';
+                centerContent = `<div class="face-image">${faceImage}</div>`;
+            } else {
+                centerContent = `<div class="suit center">${cardData.suit}</div>`;
+            }
+
+            cardFront.innerHTML = `
+                <div class="rank top-left">${cardData.rank}</div>
+                <div class="suit top-left">${cardData.suit}</div>
+                ${centerContent}
+                <div class="rank bottom-right">${cardData.rank}</div>
+                <div class="suit bottom-right">${cardData.suit}</div>
+            `;
+            card.appendChild(cardFront);
+            
+            if (!isPileCard && playerId === 'yourCards') {
+              card.addEventListener('click', e => {
+                e.stopPropagation();
+                if (e.detail !== 1) return;
+                toggleCardSelection(card);
+              });
+              card.addEventListener('mousedown', onCardMouseDown);
+              card.addEventListener('touchstart', onCardTouchStart, { passive: false });
+              card.addEventListener('touchmove', onCardTouchMove, { passive: false });
+              card.addEventListener('touchend', onCardTouchEnd);
+            }
+            return card;
+        }
+
+        function toggleCardSelection(card) {
+            const hand = document.getElementById('yourCards');
+            if (!hand) return;
+
+            const currentSelected = Array.from(hand.querySelectorAll('.card.selected'));
+            const currentRank = currentSelected.length > 0 ? currentSelected[0].dataset.rank : null;
+            const targetRank = card.dataset.rank;
+
+            if (currentRank && targetRank !== currentRank) {
+                currentSelected.forEach(c => c.classList.remove('selected'));
+            }
+
+            card.classList.toggle('selected');
+            selectedCards = Array.from(hand.querySelectorAll('.card.selected'));
+        }
+
+        function selectFourOfAKind(card) {
+            const rank = card?.dataset?.rank;
+            if (!rank) return;
+            const hand = document.getElementById('yourCards');
+            if (!hand) return;
+            const sameRank = Array.from(hand.querySelectorAll('.card')).filter(c => c.dataset.rank === rank);
+            if (sameRank.length < 4) return;
+            Array.from(hand.querySelectorAll('.card.selected')).forEach(c => c.classList.remove('selected'));
+            const picked = sameRank.slice(0, 4);
+            picked.forEach(c => c.classList.add('selected'));
+            selectedCards = picked;
+        }
+
+        function onCardTouchStart(e) {
+            e.preventDefault();
+            const card = e.currentTarget;
+            const t = e.touches[0];
+            touchTap = { time: Date.now(), card, moved: false, startX: t.clientX, startY: t.clientY };
+        }
+
+        function onCardTouchMove(e) {
+            if (!touchTap.card) return;
+            const t = e.touches[0];
+            const dx = t.clientX - touchTap.startX;
+            const dy = t.clientY - touchTap.startY;
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+                touchTap.moved = true;
+                const card = touchTap.card;
+                touchTap.card = null;
+                beginDrag(card, t.clientX, t.clientY, true);
+            }
+        }
+
+        function onCardTouchEnd(e) {
+            const card = e.currentTarget;
+            if (isDragInProgress) return;
+            const now = Date.now();
+            const isDoubleTap = lastTap.card === card && (now - lastTap.time) < 320;
+            lastTap = { time: now, card };
+
+            if (isDoubleTap) {
+                selectFourOfAKind(card);
+                return;
+            }
+            toggleCardSelection(card);
+        }
+
+        function onCardMouseDown(e) {
+            if (e.button !== 0) return;
+            mouseTap = { card: e.currentTarget, moved: false, startX: e.clientX, startY: e.clientY };
+            document.addEventListener('mousemove', onCardMouseMove);
+            document.addEventListener('mouseup', onCardMouseUp);
+        }
+
+        function onCardMouseMove(e) {
+            if (!mouseTap.card) return;
+            const dx = e.clientX - mouseTap.startX;
+            const dy = e.clientY - mouseTap.startY;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                mouseTap.moved = true;
+                const card = mouseTap.card;
+                mouseTap.card = null;
+                e.preventDefault();
+                beginDrag(card, e.clientX, e.clientY, false);
+            }
+        }
+
+        function onCardMouseUp() {
+            document.removeEventListener('mousemove', onCardMouseMove);
+            document.removeEventListener('mouseup', onCardMouseUp);
+            mouseTap.card = null;
+        }
+
+        function beginDrag(card, clientX, clientY, isTouch) {
+            if (gameState.currentPlayer !== 'yourCards') return;
+            isDragInProgress = true;
+            if (!card.classList.contains('selected')) { selectedCards.forEach(c => c.classList.remove('selected')); selectedCards = [card]; card.classList.add('selected'); }
+            draggedCards = [...selectedCards];
+            createDragPreview(clientX, clientY);
+            document.addEventListener('mousemove', onDragMove);
+            document.addEventListener('touchmove', onDragMove, { passive: false });
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+            draggedCards.forEach(c => c.classList.add('dragging'));
+        }
+
+        function startDrag(e) {
+            e.preventDefault();
+            const card = e.currentTarget;
+            if (e.type.includes('touch')) {
+                const t = e.touches[0];
+                beginDrag(card, t.clientX, t.clientY, true);
+                return;
+            }
+            beginDrag(card, e.clientX, e.clientY, false);
+        }
+
+        function setDragPreviewPosition(clientX, clientY) {
+            if (!dragPreview) return;
+            const rect = dragPreview.getBoundingClientRect();
+            dragPreview.style.left = clientX - rect.width / 2 + 'px';
+            dragPreview.style.top = clientY - rect.height / 2 + 'px';
+        }
+
+        function createDragPreview(clientX, clientY) {
+            dragPreview = document.createElement('div');
+            dragPreview.className = 'card drag-preview';
+            dragPreview.style.width = 'var(--your-card-width)'; dragPreview.style.height = 'var(--your-card-height)';
+            dragPreview.innerHTML = draggedCards[0].querySelector('.card-front').outerHTML;
+            if (draggedCards.length > 1) { const badge = document.createElement('div'); Object.assign(badge.style, { position: 'absolute', top: '-10px', right: '-10px', background: '#4CAF50', color: 'white', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }); badge.textContent = draggedCards.length; dragPreview.appendChild(badge); }
+            document.body.appendChild(dragPreview);
+            setDragPreviewPosition(clientX, clientY);
+        }
+
+        function onDragMove(e) {
+            if (!dragPreview) return;
+            e.preventDefault();
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            setDragPreviewPosition(clientX, clientY);
+            const pile = document.getElementById('pile');
+            const rect = pile.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) { pile.classList.add('drop-active'); } else { pile.classList.remove('drop-active'); }
+        }
+
+        function endDrag(e) {
+            if (!dragPreview) return;
+            const clientX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.changedTouches[0].clientY : e.clientY;
+            const pile = document.getElementById('pile');
+            const rect = pile.getBoundingClientRect();
+            if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) { playCards(); }
+            draggedCards.forEach(c => c.classList.remove('dragging'));
+            pile.classList.remove('drop-active');
+            if (dragPreview) { dragPreview.remove(); dragPreview = null; }
+            draggedCards = [];
+            isDragInProgress = false;
+            document.removeEventListener('mousemove', onDragMove); document.removeEventListener('touchmove', onDragMove); document.removeEventListener('mouseup', endDrag); document.removeEventListener('touchend', endDrag);
+        }
+
+        function playCards() {
+            const messageEl = document.getElementById('message');
+            if (selectedCards.length === 0) return;
+
+            const rank0 = selectedCards[0]?.dataset?.rank;
+            if (!rank0 || !selectedCards.every(c => c.dataset.rank === rank0)) {
+                messageEl.textContent = "You can only play cards of the same rank.";
+                selectedCards.forEach(c => c.classList.remove('selected'));
+                selectedCards = [];
+                return;
+            }
+
+            if (selectedCards.length > 1 && selectedCards.length !== 4) {
+                messageEl.textContent = "Only 4 of a kind can be played as a group.";
+                selectedCards.forEach(c => c.classList.remove('selected'));
+                selectedCards = [];
+                return;
+            }
+
+            if (gameState.currentPlayer !== 'yourCards') {
+                messageEl.textContent = "It's not your turn!";
+                selectedCards.forEach(c => c.classList.remove('selected'));
+                selectedCards = [];
+                return;
+            }
+
+            if (gameState.isFirstTurn) {
+                const isNineOfHearts = selectedCards.length === 1 && selectedCards[0].dataset.rank === '9' && selectedCards[0].dataset.suit === '♥';
+                if (!isNineOfHearts) {
+                    messageEl.textContent = "You must play the 9♥ to start the game.";
+                    selectedCards.forEach(c => c.classList.remove('selected'));
+                    selectedCards = [];
+                    return;
+                }
+            }
+
+            const playedCardData = [];
+            selectedCards.forEach(cardEl => {
+                const rank = cardEl.dataset.rank;
+                const suit = cardEl.dataset.suit;
+                const cardIndex = gameState.hands.yourCards.findIndex(c => c.rank === rank && c.suit === suit);
+                if (cardIndex > -1) {
+                    playedCardData.push(gameState.hands.yourCards.splice(cardIndex, 1)[0]);
+                }
+            });
+
+            gameState.pile.push(...playedCardData);
+
+            const pile = document.getElementById('pile');
+            selectedCards.forEach((cardEl, index) => {
+                setTimeout(() => {
+                    const pileCard = createCard(playedCardData[index], Date.now(), true);
+                    pileCard.classList.add('dealt');
+                    pile.appendChild(pileCard);
+                    cardEl.remove();
+                }, index * 100);
+            });
+            
+            setTimeout(() => { 
+                selectedCards = []; 
+                sortYourHand();
+                renderYourHand();
+                gameState.isFirstTurn = false;
+                advanceTurn();
+            }, selectedCards.length * 100 + 200);
+        }
+
+        function drawFromPile() {
+            const messageEl = document.getElementById('message');
+            if (gameState.currentPlayer !== 'yourCards') {
+                messageEl.textContent = "It's not your turn!";
+                return;
+            }
+
+            const pileEl = document.getElementById('pile');
+            if (gameState.pile.length === 0) {
+                messageEl.textContent = "The pile is empty!";
+                return;
+            }
+
+            const numToDraw = Math.min(3, gameState.pile.length);
+            const yourHandEl = document.getElementById('yourCards');
+
+            for (let i = 0; i < numToDraw; i++) {
+                const cardData = gameState.pile.pop();
+                if (pileEl.children.length > 0) {
+                    pileEl.children[pileEl.children.length - 1].remove();
+                }
+                gameState.hands.yourCards.push(cardData);
+            }
+
+            sortYourHand();
+            renderYourHand();
+            advanceTurn();
+        }
+
+        function addCardToYourHand() {
+            const suit = suits[Math.floor(Math.random() * suits.length)];
+            const rank = ranks[Math.floor(Math.random() * ranks.length)];
+            gameState.hands.yourCards.push({ rank, suit });
+            sortYourHand();
+            renderYourHand();
+        }
+        function removeCardFromYourHand() {
+            if (!gameState?.hands?.yourCards || gameState.hands.yourCards.length === 0) return;
+            gameState.hands.yourCards.pop();
+            renderYourHand();
+        }
+        function updateTimer() {
+            const container = document.querySelector('.avatar-container.active') || document.querySelector('.avatar-container');
+            const ring = container.querySelector('.timer-ring');
+            ring.style.strokeDashoffset = 440 - (440 * timerProgress);
+        }
+        function toggleControls() { document.getElementById('controls').classList.toggle('hidden'); }
+        
+        async function downloadHtml() {
+            const html = document.documentElement.outerHTML;
+            try {
+                await navigator.clipboard.writeText(html);
+                alert('Page HTML copied to clipboard!');
+            } catch (err) {
+                console.error('Failed to copy: ', err);
+                window.prompt('Could not copy automatically. Please press Ctrl+C or Cmd+C to copy the HTML:', html);
+            }
+        }
+
+        function isLayoutDebugEnabled() {
+            return location.search.includes('debug=1') || /#debug\b/i.test(location.hash);
+        }
+
+        function ensureLayoutDebug() {
+            if (!isLayoutDebugEnabled()) return null;
+            let el = document.getElementById('layoutDebug');
+            if (el) return el;
+            el = document.createElement('div');
+            el.id = 'layoutDebug';
+            el.style.position = 'fixed';
+            el.style.left = '8px';
+            el.style.top = '8px';
+            el.style.zIndex = '99999';
+            el.style.padding = '6px 8px';
+            el.style.background = 'rgba(0,0,0,0.75)';
+            el.style.color = '#fff';
+            el.style.font = '12px/1.25 Arial, sans-serif';
+            el.style.borderRadius = '6px';
+            el.style.pointerEvents = 'none';
+            document.body.appendChild(el);
+            return el;
+        }
+
+        function updateLayoutDebug() {
+            const el = ensureLayoutDebug();
+            if (!el) return;
+            const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+            const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+            const your = document.getElementById('yourCards');
+            const left = document.getElementById('player3Cards');
+            const yourLeft = your ? Math.round(your.getBoundingClientRect().left) : 'n/a';
+            const leftLeft = left ? Math.round(left.getBoundingClientRect().left) : 'n/a';
+
+            const yourChildCount = your ? your.childElementCount : 0;
+            const leftChildCount = left ? left.childElementCount : 0;
+            const yourFirstChild = your ? your.firstElementChild : null;
+            const leftFirstChild = left ? left.firstElementChild : null;
+            const yourFirstTag = yourFirstChild ? yourFirstChild.tagName.toLowerCase() : 'n/a';
+            const leftFirstTag = leftFirstChild ? leftFirstChild.tagName.toLowerCase() : 'n/a';
+            const yourFirstClass = yourFirstChild ? (yourFirstChild.className || 'n/a') : 'n/a';
+            const leftFirstClass = leftFirstChild ? (leftFirstChild.className || 'n/a') : 'n/a';
+
+            const yourCards = your ? Array.from(your.querySelectorAll('.card')) : [];
+            const leftCards = left ? Array.from(left.querySelectorAll('.card')) : [];
+            const yourCardLeft = yourCards.length ? Math.round(Math.min(...yourCards.map(c => c.getBoundingClientRect().left))) : 'n/a';
+            const leftCardLeft = leftCards.length ? Math.round(Math.min(...leftCards.map(c => c.getBoundingClientRect().left))) : 'n/a';
+            const yourCount = yourCards.length;
+            const leftCount = leftCards.length;
+
+            const allCards = Array.from(document.querySelectorAll('.card'));
+            const allCardCount = allCards.length;
+            const allDealFlyCount = document.querySelectorAll('.deal-fly').length;
+            const sampleCard = allCards[0] || null;
+            const sampleParent = sampleCard ? sampleCard.parentElement : null;
+            const sampleParentId = sampleParent?.id ? sampleParent.id : 'n/a';
+            const sampleParentClass = sampleParent?.className ? sampleParent.className : 'n/a';
+
+            const u = getComputedStyle(document.documentElement).getPropertyValue('--u').trim();
+            const ox = getComputedStyle(document.documentElement).getPropertyValue('--offset-x').trim();
+            el.textContent = `portrait:${isPortrait} landscape:${isLandscape}  yourLeft:${yourLeft}px leftLeft:${leftLeft}px  yourChildren:${yourChildCount} leftChildren:${leftChildCount}  yourFirst:${yourFirstTag}(${yourFirstClass}) leftFirst:${leftFirstTag}(${leftFirstClass})  yourCards:${yourCount} leftCards:${leftCount}  yourCardLeft:${yourCardLeft}px leftCardLeft:${leftCardLeft}px  allCards:${allCardCount} dealFly:${allDealFlyCount} sampleParent:${sampleParentId}(${sampleParentClass})  u:${u} ox:${ox}`;
+        }
+
+        window.addEventListener('resize', () => {
+            updateHandLayout();
+            updateTopHandLayout();
+            updateLayoutDebug();
+        });
+        window.addEventListener('orientationchange', () => {
+            requestAnimationFrame(() => {
+                updateHandLayout();
+                updateTopHandLayout();
+                updateLayoutDebug();
+            });
+        });
+
+        updateLayoutDebug();
+
+        if (isLayoutDebugEnabled()) {
+            setInterval(updateLayoutDebug, 250);
+        }
+    </script>
+</body>
+</html>

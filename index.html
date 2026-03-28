@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nine of Hearts</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="welcomeScreen" aria-hidden="true">
+        <div class="text-shards" aria-hidden="true"></div>
+        <div class="welcome-content">
+            <div class="welcome-title">
+                <div>NINE</div>
+                <div class="welcome-of"><span>OF</span></div>
+                <div>HEARTS</div>
+            </div>
+            <div class="welcome-tagline">DON'T BE A LOSER!</div>
+        </div>
+        <button id="startButton" type="button">START</button>
+    </div>
+
+    <div id="tapToStart"><h1>&#128070; Tap to Start</h1></div>
+
+    <button class="toggle-controls">&#9881;&#65039;</button>
+    <div class="controls hidden" id="controls">
+        <h3>&#127912; Test Controls</h3>
+        <button id="addCardBtn">&#10133; Add Card</button>
+        <button id="removeCardBtn">&#10134; Remove Card</button>
+        <button id="testTimerBtn">&#9203;&#65039; Test Timer</button>
+        <button id="downloadHtmlBtn">&#128190; Download HTML</button>
+    </div>
+
+    <div class="game-container">
+        <div class="game-table">
+            <div class="player-area player-top">
+                <div class="player-info" id="player2Info">
+                    <div class="avatar-container"><div class="avatar">&#128104;</div></div>
+                    <div class="player-name-score"><div class="player-name">John</div></div>
+                </div>
+                <div class="cards" id="player2Cards"></div>
+            </div>
+
+            <div class="player-area player-left">
+                <div class="player-info" id="player3Info">
+                    <div class="avatar-container"><div class="avatar">&#128105;</div></div>
+                    <div class="player-name-score"><div class="player-name">Carol</div></div>
+                </div>
+                <div class="cards" id="player3Cards"></div>
+            </div>
+
+            <div class="center-area">
+                <div class="pile" id="pile"></div>
+                <div class="message" id="message"></div>
+            </div>
+
+            <div class="player-area player-right">
+                <div class="cards" id="player1Cards"></div>
+                <div class="player-info" id="player1Info">
+                    <div class="avatar-container"><div class="avatar">&#128103;</div></div>
+                    <div class="player-name-score"><div class="player-name">Lisa</div></div>
+                </div>
+            </div>
+
+            <div class="player-area player-bottom">
+                <div class="cards" id="yourCards"></div>
+                <div class="bottom-controls">
+                    <button class="draw-button" id="drawButton">Draw 3</button>
+                    <div class="player-info" id="yourInfo">
+                        <div class="avatar-container"><div class="avatar">&#129489;</div></div>
+                        <div class="player-name-score"><div class="player-name">You</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="ui-manager.js"></script>
+</body>
+</html>

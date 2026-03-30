@@ -116,6 +116,9 @@ function _startGame() {
     _turboMode      = false;
     _turboTurnsLeft = 0;
 
+    // Reset card knowledge in all AI engines for the new game
+    for (const engine of Object.values(_engines)) engine.resetKnowledge();
+
     const ds    = decodeState(_state);
 
     // Build the hands map for the deal animation
@@ -182,9 +185,11 @@ function _aiTurn(playerIdx) {
 
     const engine = _engines[playerIdx];
     const move   = engine.chooseMove(_state);
-    engine.cleanup();
 
+    // Apply first — advanceTree inside _applyAndAdvance saves the subtree
+    // before cleanup() would discard _root
     _applyAndAdvance(move);
+    engine.cleanup();
 }
 
 function _humanPlayCards(cards) {
@@ -213,6 +218,12 @@ function _humanDraw() {
 
 function _applyAndAdvance(move) {
     if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+
+    // Notify all AI engines of this move (before state changes so pile is intact)
+    for (const engine of Object.values(_engines)) {
+        engine.observeMove(_state, move);
+        engine.advanceTree(move);
+    }
     Update('STOP_TIMER');
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });

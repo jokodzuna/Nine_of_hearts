@@ -87,6 +87,12 @@ function _shuffle(len) {
 const _elimRank = new Int8Array(8);
 
 /**
+ * Per-player forced card bitmasks reused during knowledge-refined determinization.
+ * Avoids heap allocation inside the hot _determinize loop.
+ */
+const _forced = new Int32Array(8);
+
+/**
  * Rank masks — mirrors game-logic.js RANK_MASK (avoids extra import).
  *   index 0 = 9s (bits 0-3) … index 5 = As (bits 20-23)
  */
@@ -95,36 +101,74 @@ const _RANK_MASK = new Int32Array([
 ]);
 
 /**
+ * Compute the draw-move bonus weight from actual pile card quality and hand state.
+ *
+ * Base quality: average rank index of the top min(3, pileSize-1) drawable pile
+ * cards, scaled to [0.5, 3.0].  Multiplied by 2.0 when defenseless or clogged.
+ *
+ * @param {object} state  Current game state (pile intact, pre-move).
+ * @param {number} hand   Current player's hand bitmask.
+ * @returns {number}  Weight to assign to the draw move.
+ */
+function _pileDrawBonus(state, hand) {
+    const topRankIdx    = state.topRankIdx;
+    const aceCount      = _popcount(hand & _RANK_MASK[5]);
+    const totalCards    = _popcount(hand);
+    let clogCnt = 0;
+    for (let r = 0; r < topRankIdx; r++) clogCnt += _popcount(hand & _RANK_MASK[r]);
+    const isDefenseless = aceCount === 0;
+    const isClogged     = clogCnt >= Math.max(2, totalCards >> 1);
+
+    const drawable = Math.min(3, state.pileSize - 1);
+    let base;
+    if (drawable === 0) {
+        base = 0.1;  // nothing to draw — strongly discourage
+    } else {
+        let rankSum = 0;
+        for (let i = 0; i < drawable; i++) {
+            rankSum += (state.pile[state.pileSize - 1 - i] >> 2);  // rankIdx 0–5
+        }
+        base = 0.5 + (rankSum / drawable / 5) * 2.5;  // [0.5 (all 9s) … 3.0 (all As)]
+    }
+    return (isDefenseless || isClogged) ? base * 2.0 : base;
+}
+
+/**
  * Expert Survival weighted move selector.
  *
  * Base weight: max(1, 6 − dist) where dist = card rank − topRankIdx.
  * Modifiers applied on top:
  *
- *   Ace Scarcity   — last Ace in hand with 4+ cards left  → weight × 0.05
- *   King Scarcity  — last King when no Aces, 4+ cards left → weight × 0.05
+ *   Ace Scarcity   — last Ace in hand with 3+ cards left  → weight × 0.05
+ *   King Scarcity  — last King when no Aces, 3+ cards left → weight × 0.05
  *                    (cascade: if no Aces, King becomes the power card)
- *   Draw Bonus     — if Defenseless (no Aces) or Clogged (≥50% clog cards)
- *                    the draw move gets weight 4 instead of 1, teaching
- *                    the AI to fish for power cards rather than burn them.
+ *   Draw Bonus     — caller-supplied weight derived from _pileDrawBonus(),
+ *                    reflecting actual quality of the top drawable pile cards.
  *
  * @param {number[]} pool        legal moves from getPossibleMoves
  * @param {number}   topRankIdx  state.topRankIdx (0–5)
- * @param {number}   hand        current player’s hand bitmask
+ * @param {number}   hand        current player's hand bitmask
+ * @param {boolean}  twoAcesOnTop  true when top 2 pile cards are both Aces
+ * @param {number}   drawBonus   draw-move weight from _pileDrawBonus()
  */
-function _pickQualityMove(pool, topRankIdx, hand) {
+function _pickQualityMove(pool, topRankIdx, hand, twoAcesOnTop = false, drawBonus = 1.0) {
     const totalCards  = _popcount(hand);
     const aceCount    = _popcount(hand & _RANK_MASK[5]);
     const kingCount   = _popcount(hand & _RANK_MASK[4]);
 
-    let clogCnt = 0;
-    for (let r = 0; r < topRankIdx; r++) clogCnt += _popcount(hand & _RANK_MASK[r]);
-    const isDefenseless = aceCount === 0;
-    const isClogged     = clogCnt >= Math.max(2, totalCards >> 1);
-    const drawBonus     = (isDefenseless || isClogged) ? 4.0 : 1.0;
-
-    // Inline weight computation (called twice — avoids closure allocation)
-    // Returns the weight for move m
-    // (draw handled separately via drawBonus)
+    // Compute weight for a single play move (inlined in both passes)
+    // twoAcesOnTop: top 2 pile cards are Aces → suppress a 3rd Ace heavily
+    // Burning threshold: 3+ cards (was 4)
+    const _w = (bits, rankIdx) => {
+        const dist = rankIdx - topRankIdx;
+        let w = Math.max(1, 6 - dist);
+        if (totalCards >= 3) {
+            if      (rankIdx === 5 && aceCount  === 1) w *= 0.05;
+            else if (rankIdx === 4 && aceCount  === 0 && kingCount === 1) w *= 0.05;
+        }
+        if (twoAcesOnTop && rankIdx === 5 && totalCards > 2) w *= 0.01;
+        return w;
+    };
 
     // Pass 1: sum weights, detect whether any play move exists
     let totalWeight = 0, hasPlay = false;
@@ -135,13 +179,7 @@ function _pickQualityMove(pool, topRankIdx, hand) {
         } else {
             const bits    = m & 0xFFFFFF;
             const rankIdx = (31 - Math.clz32(bits & (-bits))) >> 2;
-            const dist    = rankIdx - topRankIdx;
-            let w         = Math.max(1, 6 - dist);
-            if (totalCards >= 4) {
-                if      (rankIdx === 5 && aceCount  === 1) w *= 0.05;
-                else if (rankIdx === 4 && aceCount  === 0 && kingCount === 1) w *= 0.05;
-            }
-            totalWeight += w;
+            totalWeight  += _w(bits, rankIdx);
             hasPlay = true;
         }
     }
@@ -161,13 +199,7 @@ function _pickQualityMove(pool, topRankIdx, hand) {
         } else {
             const bits    = m & 0xFFFFFF;
             const rankIdx = (31 - Math.clz32(bits & (-bits))) >> 2;
-            const dist    = rankIdx - topRankIdx;
-            let w         = Math.max(1, 6 - dist);
-            if (totalCards >= 4) {
-                if      (rankIdx === 5 && aceCount  === 1) w *= 0.05;
-                else if (rankIdx === 4 && aceCount  === 0 && kingCount === 1) w *= 0.05;
-            }
-            r -= w;
+            r -= _w(bits, rankIdx);
         }
         if (r <= 0) return m;
     }
@@ -240,10 +272,13 @@ export class ISMCTSEngine {
         shark: {
             name:             'The Shark',
             difficulty:       'Expert',
-            maxIterations:    2000,
+            maxIterations:    3000,
             explorationParam: 0.7,    // low → exploits known good moves
-            weightStale:      -0.8,   // heavy penalty for inconclusive games
+            weightStale:      -0.8,   // retained for reference
             maxTime:          500,    // ms hard ceiling
+            maxTurns:         250,    // playout turn limit before heuristic fallback
+            useCardTracking:  true,   // Short-Term Memory: track observed drawn cards
+            useTreeReuse:     true,   // persist subtree between turns
         },
 
         gambler: {
@@ -253,6 +288,7 @@ export class ISMCTSEngine {
             explorationParam: 2.0,    // high → explores unusual lines
             weightStale:      -0.5,
             maxTime:          500,
+            maxTurns:         100,
         },
 
         newbie: {
@@ -262,6 +298,7 @@ export class ISMCTSEngine {
             explorationParam: 1.41,   // √2 — standard UCB default
             weightStale:      -0.3,
             maxTime:          500,
+            maxTurns:         100,
         },
     };
 
@@ -278,12 +315,86 @@ export class ISMCTSEngine {
         this.profile = typeof profile === 'string'
             ? ISMCTSEngine.PROFILES[profile]
             : profile;
-        this._root = null;
+        this._root          = null;
+        this._pendingRoot   = null;  // subtree saved for reuse (Shark only)
+        this._cardKnowledge = null;  // Int32Array(numPlayers) — Shark only
     }
 
     // ----------------------------------------------------------
     // Public API
     // ----------------------------------------------------------
+
+    // ----------------------------------------------------------
+    // Card Tracking  (Short-Term Memory — Shark only)
+    // ----------------------------------------------------------
+
+    /**
+     * Observe a move BEFORE it is applied to update card knowledge.
+     *
+     * Draw move  — the top-N pile cards become known to be in currentPlayer's hand.
+     * Play move  — remove the played cards from that player's knowledge entry.
+     * No-op when useCardTracking is false (e.g. Gambler, Newbie profiles).
+     *
+     * @param {object} state  Pre-move game state (pile intact).
+     * @param {number} move   Move integer from getPossibleMoves.
+     */
+    observeMove(state, move) {
+        if (!this.profile.useCardTracking) return;
+
+        if (this._cardKnowledge === null) {
+            this._cardKnowledge = new Int32Array(state.numPlayers);
+        }
+
+        const p = state.currentPlayer;
+
+        if (move & DRAW_FLAG) {
+            // Public information: the top-N pile cards move to this player's hand
+            const count = (move & 3) + 1;
+            for (let i = 0; i < count; i++) {
+                const bitIdx = state.pile[state.pileSize - 1 - i];
+                this._cardKnowledge[p] |= (1 << bitIdx);
+            }
+        } else {
+            // Player played cards — remove them from our knowledge of their hand
+            this._cardKnowledge[p] &= ~(move & 0xFFFFFF);
+        }
+    }
+
+    /**
+     * Clear all card knowledge.
+     * Call when a new game starts or when this engine's player is reset.
+     */
+    resetKnowledge() {
+        this._cardKnowledge = null;
+        this._pendingRoot   = null;
+    }
+
+    /**
+     * Advance the saved search tree through a move that was actually played.
+     * Call for EVERY move (by any player) immediately before the state is updated.
+     *
+     * - If the move was explored in the tree, the matching child becomes the new
+     *   pending root for the next chooseMove call (warm-start).
+     * - If the move was never explored, the pending root is discarded (cold start).
+     * - No-op for profiles without useTreeReuse.
+     *
+     * @param {number} move  Move integer that was just chosen.
+     */
+    advanceTree(move) {
+        if (!this.profile.useTreeReuse) return;
+
+        const root = this._root ?? this._pendingRoot;
+        if (root === null) { this._root = null; return; }
+
+        const child = root.children.get(move);
+        if (child) {
+            child.parent     = null;   // sever to allow GC of the rest of the tree
+            this._pendingRoot = child;
+        } else {
+            this._pendingRoot = null;  // unexplored move → fresh root next time
+        }
+        this._root = null;
+    }
 
     /**
      * Run ISMCTS and return the best move integer for the current player.
@@ -299,11 +410,13 @@ export class ISMCTSEngine {
                 : profileOverride)
             : this.profile;
 
-        const { maxIterations, explorationParam, weightStale, maxTime } = prof;
+        const { maxIterations, explorationParam, maxTime, maxTurns = 100 } = prof;
         const rootPlayer = state.currentPlayer;
         const deadline   = performance.now() + maxTime;
 
-        this._root = new ISMCTSNode();
+        // Warm-start: reuse subtree from previous turn if available (Shark only)
+        this._root         = this._pendingRoot ?? new ISMCTSNode();
+        this._pendingRoot  = null;
 
         for (let i = 0; i < maxIterations; i++) {
             if (performance.now() > deadline) break;
@@ -314,8 +427,8 @@ export class ISMCTSEngine {
             // 2. Selection + Expansion
             const { node, simState } = this._selectExpand(this._root, det, explorationParam);
 
-            // 3. Random playout
-            const score = this._simulate(simState, rootPlayer, weightStale);
+            // 3. Quality playout with per-profile turn limit
+            const score = this._simulate(simState, rootPlayer, maxTurns);
 
             // 4. Backpropagate
             this._backprop(node, score);
@@ -328,6 +441,38 @@ export class ISMCTSEngine {
             const moves = getPossibleMoves(state);
             const plays = moves.filter(m => !(m & DRAW_FLAG));
             return (plays.length > 0 ? plays : moves)[0] ?? 0;
+        }
+
+        // Double Ace hard veto: if the top TWO pile cards are both Aces, the AI
+        // must not play a third Ace unless it has ≤2 cards left (true last resort).
+        const myCount      = _popcount(state.hands[rootPlayer]);
+        const twoAcesOnTop = state.topRankIdx === 5
+            && state.pileSize >= 2
+            && (state.pile[state.pileSize - 2] >> 2) === 5;
+
+        if (twoAcesOnTop && myCount > 2 && !(best & DRAW_FLAG)) {
+            const bestRank = (31 - Math.clz32((best & 0xFFFFFF) & (-(best & 0xFFFFFF)))) >> 2;
+            if (bestRank === 5) {
+                // Override: pick next-best non-Ace move by visit count, fall back to draw
+                let altMove = null, altVisits = -1;
+                for (const [move, child] of this._root.children) {
+                    if (move & DRAW_FLAG) continue;
+                    const rank = (31 - Math.clz32((move & 0xFFFFFF) & (-(move & 0xFFFFFF)))) >> 2;
+                    if (rank !== 5 && child.visits > altVisits) {
+                        altVisits = child.visits;
+                        altMove   = move;
+                    }
+                }
+                if (altMove === null) {
+                    for (const [move, child] of this._root.children) {
+                        if ((move & DRAW_FLAG) && child.visits > altVisits) {
+                            altVisits = child.visits;
+                            altMove   = move;
+                        }
+                    }
+                }
+                if (altMove !== null) return altMove;
+            }
         }
 
         return best;
@@ -348,26 +493,66 @@ export class ISMCTSEngine {
     /**
      * Determinization:
      *   Keep rootPlayer's hand and the pile exactly as-is.
-     *   Randomly redistribute every other card among opponents
+     *   If card tracking is active (Shark), force known opponent cards into the
+     *   correct hands first, then randomly redistribute the remaining pool
      *   while preserving each opponent's exact hand SIZE.
      */
     _determinize(state, rootPlayer) {
         const det = copyState(state);
+        const N   = state.numPlayers;
 
-        // Cards visible to rootPlayer
+        // Cards visible to rootPlayer: own hand + full pile
         let known = state.hands[rootPlayer];
         for (let i = 0; i < state.pileSize; i++) known |= (1 << state.pile[i]);
 
-        // Unknown cards = full 24-bit universe minus visible cards
-        const n = _bitsToArray((~known) & 0xFFFFFF);
+        const unknown = (~known) & 0xFFFFFF;
+
+        // Build forced sets from card knowledge (Shark only)
+        let forcedUnion = 0;
+        _forced.fill(0, 0, N);
+
+        if (this._cardKnowledge !== null) {
+            for (let p = 0; p < N; p++) {
+                if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
+
+                // Cards we know p holds that are still in the unknown pool
+                const candidate = this._cardKnowledge[p] & unknown & ~forcedUnion;
+                const sz        = _popcount(state.hands[p]);
+                const cnt       = _popcount(candidate);
+
+                if (cnt <= sz) {
+                    _forced[p]   = candidate;
+                    forcedUnion |= candidate;
+                } else {
+                    // Stale tracking: trim to the player's current hand size
+                    let bits = candidate, trimmed = 0;
+                    for (let i = 0; i < sz && bits; i++) {
+                        const lb = bits & (-bits);
+                        trimmed |= lb;
+                        bits    &= ~lb;
+                    }
+                    _forced[p]   = trimmed;
+                    forcedUnion |= trimmed;
+                }
+            }
+        }
+
+        // Shuffle the remaining unknown cards (excluding forced ones)
+        const n = _bitsToArray(unknown & ~forcedUnion);
         _shuffle(n);
 
         let ptr = 0;
-        for (let p = 0; p < state.numPlayers; p++) {
+        for (let p = 0; p < N; p++) {
             if (p === rootPlayer) continue;
-            const sz = _popcount(state.hands[p]);
-            det.hands[p] = 0;
-            for (let c = 0; c < sz && ptr < n; c++) {
+            if (state.eliminated & (1 << p)) { det.hands[p] = 0; continue; }
+
+            const sz        = _popcount(state.hands[p]);
+            const forcedCnt = _popcount(_forced[p]);
+            det.hands[p]    = _forced[p];
+
+            // Fill remaining slots from the random pool
+            const need = sz - forcedCnt;
+            for (let c = 0; c < need && ptr < n; c++) {
                 det.hands[p] |= (1 << _buf[ptr++]);
             }
         }
@@ -447,7 +632,7 @@ export class ISMCTSEngine {
      *   Loser    : -1.0
      *   Stale (>100 turns): profile.weightStale
      */
-    _simulate(state, rootPlayer, weightStale) {
+    _simulate(state, rootPlayer, maxTurns) {
         let s = state, turns = 0;
         const N = s.numPlayers;
 
@@ -461,13 +646,17 @@ export class ISMCTSEngine {
         }
 
         while (!isGameOver(s)) {
-            if (++turns > 100) return _progressScore(s, rootPlayer);
+            if (++turns > maxTurns) return _progressScore(s, rootPlayer);
 
             const moves = getPossibleMoves(s);
             if (moves.length === 0) break;
 
-            const prevElim = s.eliminated;
-            s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer]));
+            const prevElim    = s.eliminated;
+            const twoAcesOnTop = s.topRankIdx === 5
+                && s.pileSize >= 2
+                && (s.pile[s.pileSize - 2] >> 2) === 5;
+            const drawBonus    = _pileDrawBonus(s, s.hands[s.currentPlayer]);
+            s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
 
             // Record any newly safe players in finish order
             let newlyElim = s.eliminated & ~prevElim;

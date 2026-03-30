@@ -367,6 +367,14 @@ function _setDrawEnabled(enabled) {
 // Card DOM Helpers
 // ============================================================
 
+// Maps game rank/suit tokens to image filename segments
+const _RANK_IMG = { '9':'9', '10':'10', 'J':'Jack', 'Q':'Queen', 'K':'King', 'A':'Ace' };
+const _SUIT_IMG = { '\u2660':'Spades', '\u2665':'Hearts', '\u2666':'Diamonds', '\u2663':'Clubs' };
+
+function _cardImageSrc(rank, suit) {
+    return `Images/Cards/${_RANK_IMG[rank]}_${_SUIT_IMG[suit]}.png`;
+}
+
 function _createCardBack() {
     const card = document.createElement('div');
     card.className = 'card';
@@ -403,33 +411,24 @@ function _createSideWrap(cardEl) {
 }
 
 /**
- * Creates a face-up card element.
+ * Creates a face-up card element using the card image from Images/Cards/.
  * @param {{rank:string, suit:string}} cardData
  * @param {boolean} interactive  — if true, wires up click/drag for the human player
  */
 function _createFaceUpCard(cardData, interactive = false) {
-    const isRed = cardData.suit === '\u2665' || cardData.suit === '\u2666';
-    const card  = document.createElement('div');
+    const card = document.createElement('div');
     card.className = 'card';
     card.dataset.rank = cardData.rank;
     card.dataset.suit = cardData.suit;
 
     const front = document.createElement('div');
-    front.className = `card-front ${isRed ? 'red' : 'black'}`;
+    front.className = 'card-front';
 
-    let center;
-    if (cardData.rank === 'J') center = `<div class="face-image">\uD83D\uDC66</div>`;
-    else if (cardData.rank === 'Q') center = `<div class="face-image">\uD83D\uDC78</div>`;
-    else if (cardData.rank === 'K') center = `<div class="face-image">\uD83E\uDD34</div>`;
-    else center = `<div class="suit center">${cardData.suit}</div>`;
-
-    front.innerHTML = `
-        <div class="rank top-left">${cardData.rank}</div>
-        <div class="suit top-left">${cardData.suit}</div>
-        ${center}
-        <div class="rank bottom-right">${cardData.rank}</div>
-        <div class="suit bottom-right">${cardData.suit}</div>
-    `;
+    const img = document.createElement('img');
+    img.src       = _cardImageSrc(cardData.rank, cardData.suit);
+    img.alt       = `${cardData.rank}${cardData.suit}`;
+    img.draggable = false;
+    front.appendChild(img);
     card.appendChild(front);
 
     if (interactive) {

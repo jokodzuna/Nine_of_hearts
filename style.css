@@ -104,31 +104,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 .player-bottom .card { --card-w: var(--your-card-width); --card-h: var(--your-card-height); width: var(--card-w); height: var(--card-h); }
 
 .card-front {
-    width: 100%; height: 100%; background: white; border: 1px solid #ccc;
-    border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    position: relative; font-weight: bold;
+    width: 100%; height: 100%;
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
-.card-front.red { color: #d32f2f; }
-.card-front.black { color: #000; }
-
-.card-front .rank, .card-front .suit, .card-front .face-image {
-    position: absolute; text-align: center; line-height: 1;
+.card-front img {
+    width: 100%; height: 100%;
+    object-fit: fill; display: block;
+    border-radius: 6px;
+    user-select: none; pointer-events: none;
 }
-.card-front {
-    --card-min: min(var(--card-w), var(--card-h));
-    --corner-inset: calc(var(--card-min) * 0.05);
-    --corner-rank-size: calc(var(--card-min) * 0.16);
-    --corner-suit-size: calc(var(--card-min) * 0.14);
-    --center-size: calc(var(--card-min) * 0.592);
-    --face-size: calc(var(--card-min) * 0.52);
-}
-
-.card-front .rank.top-left { top: var(--corner-inset); left: var(--corner-inset); font-size: var(--corner-rank-size); }
-.card-front .suit.top-left { top: calc(var(--corner-inset) + var(--corner-rank-size)); left: var(--corner-inset); font-size: var(--corner-suit-size); }
-.card-front .suit.center { font-size: var(--center-size); top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.card-front .face-image { font-size: var(--face-size); top: 50%; left: 50%; transform: translate(-50%, -50%); text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-.card-front .rank.bottom-right { bottom: var(--corner-inset); right: var(--corner-inset); font-size: var(--corner-rank-size); transform: rotate(180deg); }
-.card-front .suit.bottom-right { bottom: calc(var(--corner-inset) + var(--corner-rank-size)); right: var(--corner-inset); font-size: var(--corner-suit-size); transform: rotate(180deg); }
 
 .card-back {
     width: 100%; height: 100%;

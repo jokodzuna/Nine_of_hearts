@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nine of Hearts — Logic Test</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background: #0d1117;
+        color: #c9d1d9;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 14px;
+        padding: 24px;
+        min-height: 100vh;
+    }
+    h1 { color: #e6edf3; font-size: 18px; margin-bottom: 6px; }
+    p  { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+    #runBtn {
+        background: #238636; color: #fff; border: none;
+        padding: 9px 22px; border-radius: 6px; font-size: 14px;
+        cursor: pointer; margin-bottom: 24px; font-family: inherit;
+    }
+    #runBtn:hover    { background: #2ea043; }
+    #runBtn:disabled { background: #21262d; color: #484f58; cursor: default; }
+    #output { white-space: pre-wrap; line-height: 1.65; }
+    .log   { color: #c9d1d9; }
+    .warn  { color: #d29922; }
+    .error { color: #f85149; }
+    .pass  { color: #3fb950; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Nine of Hearts — Bitmask Stress Test</h1>
+<p>Self-contained — double-click to open in any browser, no server needed.</p>
+<button id="runBtn">&#9654;  Run 100-Game Simulation</button>
+<div id="output"></div>
+
+<script>
+// ============================================================
+// Inlined game-logic.js (core engine)
+// ============================================================
+
+const NINE_HEARTS_BIT = 2;
+const DRAW_FLAG       = 1 << 24;
+
+const RANK_MASK = new Int32Array([
+    0x00000F, 0x0000F0, 0x000F00, 0x00F000, 0x0F0000, 0xF00000,
+]);
+const RANK_VALUES = new Int32Array([9, 10, 11, 12, 13, 14]);
+const RANK_NAMES  = ['9', '10', 'J', 'Q', 'K', 'A'];
+const SUIT_NAMES  = ['\u2660', '\u2665', '\u2666', '\u2663'];
+const CARDS_PER_PLAYER = { 2: 12, 3: 8, 4: 6 };
+
+function popcount(x) {
+    x = (x | 0);
+    x = x - ((x >>> 1) & 0x555555);
+    x = (x & 0x333333) + ((x >>> 2) & 0x333333);
+    x = (x + (x >>> 4)) & 0x0F0F0F;
+    return (Math.imul(x, 0x010101) >>> 16) & 0xFF;
+}
+function lowestBit(x)     { return x & (-x); }
+function bitIdx(b)         { return 31 - Math.clz32(b); }
+function rankIdxFromBit(b) { return b >> 2; }
+
+function createState(n) {
+    return {
+        hands: new Int32Array(n), pile: new Uint8Array(24),
+        pileSize: 0, topRankIdx: 0, currentPlayer: 0,
+        eliminated: 0, numPlayers: n,
+    };
+}
+function copyState(s) {
+    return {
+        hands: new Int32Array(s.hands), pile: new Uint8Array(s.pile),
+        pileSize: s.pileSize, topRankIdx: s.topRankIdx,
+        currentPlayer: s.currentPlayer, eliminated: s.eliminated,
+        numPlayers: s.numPlayers,
+    };
+}
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = (Math.random() * (i + 1)) | 0;
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+}
+function createInitialState(numPlayers) {
+    const cardsEach = CARDS_PER_PLAYER[numPlayers];
+    const deck = new Uint8Array(24);
+    for (let i = 0; i < 24; i++) deck[i] = i;
+    shuffle(deck);
+    const state = createState(numPlayers);
+    let ptr = 0;
+    for (let p = 0; p < numPlayers; p++)
+        for (let c = 0; c < cardsEach; c++)
+            state.hands[p] |= (1 << deck[ptr++]);
+    let starterPlayer = -1;
+    for (let p = 0; p < numPlayers; p++) {
+        if (state.hands[p] & NINE_HEARTS_BIT) {
+            state.hands[p] &= ~NINE_HEARTS_BIT;
+            starterPlayer = p;
+            break;
+        }
+    }
+    state.pile[0] = 1; state.pileSize = 1; state.topRankIdx = 0;
+    state.currentPlayer = (starterPlayer + 1) % numPlayers;
+    return state;
+}
+function getPossibleMoves(state) {
+    const moves = [];
+    const hand  = state.hands[state.currentPlayer];
+    const top   = state.topRankIdx;
+    const topV  = RANK_VALUES[top];
+    for (let r = 0; r < 6; r++) {
+        if (RANK_VALUES[r] < topV) continue;
+        const group = (hand & RANK_MASK[r]) | 0;
+        if (!group) continue;
+        const cnt = popcount(group);
+        moves.push(lowestBit(group));
+        if (cnt === 4) moves.push(group);
+        if (r === 0 && cnt === 3 && top === 0) moves.push(group);
+    }
+    const drawable = state.pileSize - 1;
+    if (drawable > 0) {
+        const count = drawable < 3 ? drawable : 3;
+        moves.push(DRAW_FLAG | (count - 1));
+    }
+    return moves;
+}
+function applyMove(state, move) {
+    const next = copyState(state);
+    if (move & DRAW_FLAG) {
+        const count = (move & 3) + 1;
+        for (let i = 0; i < count; i++) {
+            const topB = next.pile[--next.pileSize];
+            next.hands[next.currentPlayer] |= (1 << topB);
+        }
+        next.topRankIdx = rankIdxFromBit(next.pile[next.pileSize - 1]);
+    } else {
+        const cardMask = (move & 0xFFFFFF) | 0;
+        next.hands[next.currentPlayer] = (next.hands[next.currentPlayer] & ~cardMask) | 0;
+        let rem = cardMask;
+        while (rem) {
+            const lb = lowestBit(rem);
+            next.pile[next.pileSize++] = bitIdx(lb);
+            rem &= ~lb;
+        }
+        next.topRankIdx = rankIdxFromBit(next.pile[next.pileSize - 1]);
+        if (next.hands[next.currentPlayer] === 0)
+            next.eliminated |= (1 << next.currentPlayer);
+    }
+    let p = next.currentPlayer;
+    for (let i = 0; i < next.numPlayers; i++) {
+        p = (p + 1) % next.numPlayers;
+        if (!(next.eliminated & (1 << p))) break;
+    }
+    next.currentPlayer = p;
+    return next;
+}
+function isGameOver(state) {
+    return popcount(((1 << state.numPlayers) - 1) & ~state.eliminated) === 1;
+}
+function decodeState(state) {
+    const hands = [], pile = [], eliminated = [];
+    for (let p = 0; p < state.numPlayers; p++) {
+        const cards = [];
+        let m = (state.hands[p] & 0xFFFFFF) | 0;
+        while (m) {
+            const lb = lowestBit(m), b = bitIdx(lb);
+            cards.push({ rank: RANK_NAMES[b >> 2], suit: SUIT_NAMES[b & 3] });
+            m &= ~lb;
+        }
+        hands.push(cards);
+        eliminated.push(!!(state.eliminated & (1 << p)));
+    }
+    for (let i = 0; i < state.pileSize; i++) {
+        const b = state.pile[i];
+        pile.push({ rank: RANK_NAMES[b >> 2], suit: SUIT_NAMES[b & 3] });
+    }
+    const tb = state.pile[state.pileSize - 1];
+    return {
+        hands, pile,
+        topCard: { rank: RANK_NAMES[tb >> 2], suit: SUIT_NAMES[tb & 3] },
+        currentPlayer: state.currentPlayer, eliminated, numPlayers: state.numPlayers,
+    };
+}
+
+// ============================================================
+// Stress Test
+// ============================================================
+
+const NUM_GAMES   = 100;
+const MAX_TURNS   = 100;
+const NUM_PLAYERS = 4;
+const ALL_24_BITS = 0xFFFFFF;
+
+function getPileMask(state) {
+    let mask = 0;
+    for (let i = 0; i < state.pileSize; i++) mask |= (1 << state.pile[i]);
+    return mask;
+}
+
+function checkIntegrity(state, gameNum, turn) {
+    const pileMask = getPileMask(state);
+    let combined   = pileMask;
+    let totalCount = popcount(pileMask);
+    for (let p = 0; p < state.numPlayers; p++) {
+        combined   |= state.hands[p];
+        totalCount += popcount(state.hands[p]);
+    }
+    if (combined !== ALL_24_BITS) {
+        console.error(
+            '[G' + gameNum + ' T' + turn + '] INTEGRITY FAIL \u2014 bitmask 0x' +
+            combined.toString(16).padStart(6, '0') + ' \u2260 0xffffff \u2014 card missing!'
+        );
+        return false;
+    }
+    if (totalCount !== 24) {
+        console.error(
+            '[G' + gameNum + ' T' + turn + '] INTEGRITY FAIL \u2014 card count ' +
+            totalCount + ' \u2260 24 \u2014 duplicate or ghost card!'
+        );
+        return false;
+    }
+    return true;
+}
+
+function logStaleState(state, gameNum, turn) {
+    console.warn('\n[G' + gameNum + '] STALE after ' + turn + ' turns:');
+    const ds = decodeState(state);
+    for (let p = 0; p < ds.numPlayers; p++) {
+        const status = ds.eliminated[p] ? 'SAFE ' : 'PLAYS';
+        const hand   = ds.hands[p].map(function(c) { return c.rank + c.suit; }).join(' ') || '(empty)';
+        const arrow  = p === ds.currentPlayer ? ' <- current' : '';
+        console.warn('  P' + p + ' [' + status + ']: ' + hand + arrow);
+    }
+    console.warn('  Top: ' + ds.topCard.rank + ds.topCard.suit + '  |  Pile size: ' + state.pileSize);
+}
+
+function runSimulation() {
+    var passed = 0, failedInteg = 0, staleCount = 0, noMoveCount = 0, totalTurns = 0;
+    var loserDist = new Array(NUM_PLAYERS).fill(0);
+    var moveTypes = { play: 0, draw: 0 };
+
+    var t0 = performance.now();
+
+    for (var g = 1; g <= NUM_GAMES; g++) {
+        var state  = createInitialState(NUM_PLAYERS);
+        var turn   = 0;
+        var gameOk = true;
+
+        while (!isGameOver(state)) {
+            turn++;
+
+            if (!checkIntegrity(state, g, turn)) {
+                failedInteg++;
+                gameOk = false;
+                break;
+            }
+
+            if (turn > MAX_TURNS) {
+                logStaleState(state, g, turn);
+                staleCount++;
+                gameOk = false;
+                break;
+            }
+
+            var moves = getPossibleMoves(state);
+            if (moves.length === 0) {
+                console.error('[G' + g + ' T' + turn + '] NO MOVES for P' + state.currentPlayer +
+                    ' \u2014 top rank idx: ' + state.topRankIdx);
+                noMoveCount++;
+                gameOk = false;
+                break;
+            }
+
+            var playMoves = moves.filter(function(m) { return !(m & DRAW_FLAG); });
+            var pool = playMoves.length > 0 ? playMoves : moves;
+            var move = pool[(Math.random() * pool.length) | 0];
+            if (move & DRAW_FLAG) { moveTypes.draw++; } else { moveTypes.play++; }
+            state = applyMove(state, move);
+        }
+
+        totalTurns += turn;
+        if (gameOk) {
+            for (var p = 0; p < NUM_PLAYERS; p++) {
+                if (!(state.eliminated & (1 << p))) { loserDist[p]++; break; }
+            }
+            passed++;
+        }
+    }
+
+    var elapsed   = performance.now() - t0;
+    var avgTurns  = (totalTurns / NUM_GAMES).toFixed(1);
+    var totalMov  = moveTypes.play + moveTypes.draw;
+    var drawPct   = ((moveTypes.draw / totalMov) * 100).toFixed(1);
+    var D         = '\u2500'.repeat(46);
+
+    console.log('\n' + D);
+    console.log('  Nine of Hearts \u2014 Bitmask Stress Test');
+    console.log(D);
+    console.log('  Config         : ' + NUM_PLAYERS + ' players, ' + NUM_GAMES + ' games, stale limit = ' + MAX_TURNS + ' turns');
+    console.log(D);
+    console.log('  \u2705 Games passed          : ' + passed + ' / ' + NUM_GAMES);
+    console.log('  \u274C Integrity failures    : ' + failedInteg);
+    console.log('  \u26A0\uFE0F  Stale games (>' + MAX_TURNS + 't)  : ' + staleCount);
+    console.log('  \uD83D\uDEAB No-move errors        : ' + noMoveCount);
+    console.log(D);
+    console.log('  Avg turns / game         : ' + avgTurns);
+    console.log('  Moves \u2014 play : draw      : ' + moveTypes.play + ' : ' + moveTypes.draw + '  (' + drawPct + '% draws)');
+    console.log(D);
+    console.log('  Loser distribution (who held last card):');
+    for (var lp = 0; lp < NUM_PLAYERS; lp++) {
+        var c   = loserDist[lp];
+        var pct = ((c / NUM_GAMES) * 100).toFixed(1);
+        var bar = '\u2588'.repeat(Math.round(c / NUM_GAMES * 30));
+        console.log('    Player ' + lp + ': ' + String(c).padStart(3) + ' games (' + pct.padStart(5) + '%)  ' + bar);
+    }
+    console.log(D);
+    console.log('  \u23F1  Total  : ' + elapsed.toFixed(2) + ' ms');
+    console.log('  \u23F1  Per game: ' + (elapsed / NUM_GAMES).toFixed(3) + ' ms');
+    console.log(D);
+
+    if (failedInteg === 0 && staleCount === 0 && noMoveCount === 0 && passed === NUM_GAMES) {
+        console.log('  \uD83C\uDF89 ALL CHECKS PASSED \u2014 24-bit card math is correct.\n');
+    } else {
+        console.log('  \u26A0\uFE0F  Some checks failed \u2014 see errors above.\n');
+    }
+}
+
+// ============================================================
+// UI wiring
+// ============================================================
+
+var output = document.getElementById('output');
+
+function appendLine(text, cls) {
+    var el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text + '\n';
+    output.appendChild(el);
+}
+
+document.getElementById('runBtn').addEventListener('click', function() {
+    var btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    output.innerHTML = '';
+
+    var _log   = console.log.bind(console);
+    var _warn  = console.warn.bind(console);
+    var _error = console.error.bind(console);
+
+    console.log = function() {
+        var txt = Array.prototype.join.call(arguments, ' ');
+        _log.apply(console, arguments);
+        appendLine(txt, txt.indexOf('ALL CHECKS PASSED') !== -1 ? 'pass' : 'log');
+    };
+    console.warn = function() {
+        var txt = Array.prototype.join.call(arguments, ' ');
+        _warn.apply(console, arguments);
+        appendLine(txt, 'warn');
+    };
+    console.error = function() {
+        var txt = Array.prototype.join.call(arguments, ' ');
+        _error.apply(console, arguments);
+        appendLine(txt, 'error');
+    };
+
+    setTimeout(function() {
+        runSimulation();
+        console.log   = _log;
+        console.warn  = _warn;
+        console.error = _error;
+        btn.disabled  = false;
+    }, 20);
+});
+</script>
+</body>
+</html>

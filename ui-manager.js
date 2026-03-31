@@ -452,6 +452,9 @@ function _createFaceUpCard(cardData, interactive = false) {
 function _renderHand(playerId, cards, count) {
     const container = document.getElementById(playerId);
     if (!container) return;
+
+    // Suppress card entrance transitions during re-renders (prevents blink)
+    container.classList.add('no-anim');
     container.innerHTML = '';
     _deselectAll();
 
@@ -466,6 +469,7 @@ function _renderHand(playerId, cards, count) {
             container.appendChild(el);
         });
         requestAnimationFrame(() => {
+            container.classList.remove('no-anim');
             requestAnimationFrame(_updateHandLayout);
             requestAnimationFrame(_updateTopHandLayout);
         });
@@ -475,9 +479,15 @@ function _renderHand(playerId, cards, count) {
             el.classList.add('dealt');
             container.appendChild(isSide ? _createSideWrap(el) : el);
         }
-        if (playerId === 'player2Cards') {
-            requestAnimationFrame(() => requestAnimationFrame(_updateTopHandLayout));
-        }
+        requestAnimationFrame(() => {
+            container.classList.remove('no-anim');
+            if (playerId === 'player2Cards') {
+                requestAnimationFrame(_updateTopHandLayout);
+            }
+            if (isSide) {
+                requestAnimationFrame(() => _updateSideHandLayout(playerId));
+            }
+        });
     }
 }
 
@@ -741,6 +751,37 @@ function _updateTopHandLayout() {
         if (total > areaW) overlap = Math.max(0, Math.min(cardW - 1, (total - areaW) / (n - 1)));
     }
     document.documentElement.style.setProperty('--top-overlap-margin', `-${overlap}px`);
+}
+
+/**
+ * Dynamically compute the vertical card step for left/right side players so
+ * their cards never overflow the container bounds regardless of hand size.
+ *
+ * Each .side-card-wrap has height = other-card-width (the card's physical width,
+ * since it is rotated 90°).  The step controls how far apart adjacent cards sit.
+ * The CSS default ratio is ~55.8 % (10.6u / 19u).  When there are too many cards
+ * to fit at that ratio the step is compressed to fill the container exactly.
+ *
+ * @param {string} playerId  'player1Cards' or 'player3Cards'
+ */
+function _updateSideHandLayout(playerId) {
+    const container = document.getElementById(playerId);
+    if (!container) return;
+    const wraps = Array.from(container.querySelectorAll('.side-card-wrap'));
+    const n = wraps.length;
+    if (n < 2) { wraps.forEach(w => { w.style.marginTop = ''; }); return; }
+
+    const wrapH = wraps[0].getBoundingClientRect().height;  // other-card-width in px
+    const areaH = container.clientHeight;                   // available height in px
+    if (wrapH <= 0 || areaH <= 0) return;
+
+    const maxStep = (areaH - wrapH) / (n - 1);  // step that exactly fills container
+    const defStep = wrapH * 0.558;               // CSS default ratio (10.6u / 19u)
+    const step    = Math.min(defStep, Math.max(4, maxStep));
+    const neg     = -(wrapH - step);
+
+    wraps[0].style.marginTop = '0';
+    for (let i = 1; i < n; i++) wraps[i].style.marginTop = `${neg}px`;
 }
 
 // ============================================================

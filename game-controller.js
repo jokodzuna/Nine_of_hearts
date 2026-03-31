@@ -229,10 +229,19 @@ function _applyAndAdvance(move) {
     Update('ENABLE_DRAW', { enabled: false });
     Update('DESELECT_ALL');
 
-    // Sync pile visuals before applying state change
-    const dm = decodeMove(move);
+    // Sync visuals: for AI plays, remove card from hand first then add to pile
+    const dm  = decodeMove(move);
+    const _cp = _state.currentPlayer;
     if (dm.type === 'draw') {
         Update('REMOVE_FROM_PILE', { count: dm.count });
+    } else if (_cp !== HUMAN) {
+        // Show AI hand with card already gone before it lands on the pile
+        Update('RENDER_HAND', {
+            playerId: PLAYER_IDS[_cp],
+            count: Math.max(0, _popcount(_state.hands[_cp]) - dm.cards.length),
+        });
+        const _played = dm.cards;
+        setTimeout(() => { for (const card of _played) Update('ADD_TO_PILE', { card }); }, 150);
     } else {
         for (const card of dm.cards) {
             Update('ADD_TO_PILE', { card });
@@ -359,7 +368,12 @@ function _findForcedLoser() {
 function _renderHands(ds) {
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (p === HUMAN) {
-            Update('RENDER_HAND', { playerId: PLAYER_IDS[p], cards: ds.hands[p] });
+            // Skip re-render if hand is unchanged — prevents portrait-mode blink
+            // when another player acts and the human hand stays the same
+            const el = document.getElementById(PLAYER_IDS[p]);
+            if (!el || el.querySelectorAll('.card').length !== ds.hands[p].length) {
+                Update('RENDER_HAND', { playerId: PLAYER_IDS[p], cards: ds.hands[p] });
+            }
         } else {
             Update('RENDER_HAND', { playerId: PLAYER_IDS[p], count: ds.hands[p].length });
         }

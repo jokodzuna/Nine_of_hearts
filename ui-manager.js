@@ -895,25 +895,6 @@ async function _animateDealing(hands) {
     });
 }
 
-// ============================================================
-// Debug / Dev Helpers
-// ============================================================
-
-function _toggleControls() {
-    const el = document.getElementById('controls');
-    if (el) el.classList.toggle('hidden');
-}
-
-async function _downloadHtml() {
-    const html = document.documentElement.outerHTML;
-    try {
-        await navigator.clipboard.writeText(html);
-        alert('Page HTML copied to clipboard!');
-    } catch {
-        window.prompt('Copy HTML manually:', html);
-    }
-}
-
 function _updateLayoutDebug() {
     if (!location.search.includes('debug=1') && !/#debug\b/i.test(location.hash)) return;
     let el = document.getElementById('layoutDebug');
@@ -964,23 +945,8 @@ function _setupListeners() {
         });
     }
 
-    document.querySelector('.toggle-controls')
-        ?.addEventListener('click', _toggleControls);
-
     document.getElementById('drawButton')
         ?.addEventListener('click', () => { if (_cbDrawRequested) _cbDrawRequested(); });
-
-    document.getElementById('downloadHtmlBtn')
-        ?.addEventListener('click', _downloadHtml);
-
-    document.getElementById('testTimerBtn')
-        ?.addEventListener('click', () => _startTimer(HUMAN_ID, true));
-
-    document.getElementById('addCardBtn')
-        ?.addEventListener('click', () => console.log('[ui-manager] addCardBtn: connect via controller'));
-
-    document.getElementById('removeCardBtn')
-        ?.addEventListener('click', () => console.log('[ui-manager] removeCardBtn: connect via controller'));
 
     const pile = document.getElementById('pile');
     if (pile) {

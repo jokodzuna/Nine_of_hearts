@@ -498,7 +498,7 @@ body.welcome-active #tapToStart {
     height: 80px;
     border-radius: 50%;
     background-image: url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg');
-    background-size: 300% 300%;
+    background-size: 450% 450%;   /* 1.5× zoom — crops whitespace around faces */
     background-repeat: no-repeat;
     cursor: pointer;
     border: 3px solid transparent;
@@ -511,15 +511,18 @@ body.welcome-active #tapToStart {
     box-shadow: 0 0 0 3px #e11d48;
     transform: scale(1.05);
 }
-.avatar-pos-0 { background-position:   0%   0%; }
-.avatar-pos-1 { background-position:  50%   0%; }
-.avatar-pos-2 { background-position: 100%   0%; }
-.avatar-pos-3 { background-position:   0%  50%; }
-.avatar-pos-4 { background-position:  50%  50%; }
-.avatar-pos-5 { background-position: 100%  50%; }
-.avatar-pos-6 { background-position:   0% 100%; }
-.avatar-pos-7 { background-position:  50% 100%; }
-.avatar-pos-8 { background-position: 100% 100%; }
+/* Positions recalculated for 450% size (1.5× zoom).
+   Formula: p = (c+0.5)×S/N - 0.5) / (S-1), S=4.5, N=3
+   → edge ≈ 7.14 %, centre = 50 %, far-edge ≈ 92.86 % */
+.avatar-pos-0 { background-position:  7.14%  7.14%; }
+.avatar-pos-1 { background-position: 50.00%  7.14%; }
+.avatar-pos-2 { background-position: 92.86%  7.14%; }
+.avatar-pos-3 { background-position:  7.14% 50.00%; }
+.avatar-pos-4 { background-position: 50.00% 50.00%; }
+.avatar-pos-5 { background-position: 92.86% 50.00%; }
+.avatar-pos-6 { background-position:  7.14% 92.86%; }
+.avatar-pos-7 { background-position: 50.00% 92.86%; }
+.avatar-pos-8 { background-position: 92.86% 92.86%; }
 
 /* ---- Welcome Overlay ---- */
 .welcome-overlay {

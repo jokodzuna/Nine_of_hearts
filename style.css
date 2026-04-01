@@ -358,54 +358,135 @@ body.welcome-active #tapToStart {
 }
 
 /* ---- Lift Doors ---- */
+
+/* Each door is exactly half the viewport, overflow:hidden clips its half. */
 .lift-door {
     position: absolute;
     top: 0;
     width: 50%;
     height: 100%;
+    overflow: hidden;
     z-index: 5;
     will-change: transform;
-    transition: transform 1.15s cubic-bezier(0.77, 0, 0.18, 1);
-    background:
-        repeating-linear-gradient(
-            90deg,
-            transparent 0px,
-            transparent 3px,
-            rgba(255,255,255,0.016) 3px,
-            rgba(255,255,255,0.016) 6px
-        ),
-        linear-gradient(175deg,
-            #484848 0%,
-            #2e2e2e 18%,
-            #1c1c1c 42%,
-            #101010 65%,
-            #1e1e1e 82%,
-            #2c2c2c 100%
-        );
-    box-shadow: inset 0 0 80px rgba(0,0,0,0.55);
+    transition: transform 1.2s cubic-bezier(0.77, 0, 0.18, 1);
 }
 
-.lift-door-left  { left: 0;  border-right: 1px solid rgba(255,255,255,0.055); }
-.lift-door-right { right: 0; border-left:  1px solid rgba(255,255,255,0.055); }
+.lift-door-left  { left: 0; }
+.lift-door-right { right: 0; }
 
-/* Specular seam highlight on inner edges */
-.lift-door-left::after, .lift-door-right::after {
-    content: '';
+/* Inner panel is full-viewport-width (200 % of 50 % parent) so the
+   centred title aligns perfectly across both halves. */
+.door-inner {
     position: absolute;
     top: 0;
-    width: 4px;
+    width: 200%;
     height: 100%;
-    background: linear-gradient(180deg,
-        transparent 0%,
-        rgba(255,255,255,0.10) 25%,
-        rgba(255,255,255,0.22) 50%,
-        rgba(255,255,255,0.10) 75%,
-        transparent 100%
-    );
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 38%, #1d9449 0%, #0c6030 52%, #063617 100%);
 }
 
-.lift-door-left::after  { right: 0; }
-.lift-door-right::after { left: 0; }
+.door-inner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 1px, rgba(0,0,0,0.02) 1px, rgba(0,0,0,0.02) 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.015), rgba(0,0,0,0.015) 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 6px);
+    pointer-events: none;
+}
+
+/* Left door: inner starts flush with the viewport left edge */
+.lift-door-left  .door-inner { left: 0; }
+/* Right door: inner is shifted left by 100 % of the door (= 50 vw),
+   so its centre aligns with the viewport centre */
+.lift-door-right .door-inner { left: -100%; }
+
+/* ---- Title on the doors ---- */
+.door-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3.2vh;
+    text-align: center;
+}
+
+.door-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'NHF-Becker', 'Arial Black', 'Arial', sans-serif;
+    font-size: clamp(57px, 12vw, 143px);
+    font-weight: 900;
+    color: #f4f1e6;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 0.92;
+    gap: 2.7vh;
+    text-shadow:
+        0 -2px 0 rgba(255,255,255,0.16),
+        0 2px 0 rgba(0,0,0,0.35),
+        0 6px 0 rgba(0,0,0,0.30),
+        0 10px 0 rgba(0,0,0,0.26),
+        0 18px 28px rgba(0,0,0,0.58);
+    user-select: none;
+}
+
+.door-of {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65em;
+    height: 1.5em;
+    position: relative;
+    color: #fff;
+}
+
+.door-of::before {
+    content: '♥';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.65em;
+    color: #e11d48;
+    text-shadow:
+        0 -3px 0 rgba(255,255,255,0.18),
+        0 3px 0 rgba(0,0,0,0.38),
+        0 7px 0 rgba(0,0,0,0.22),
+        0 18px 28px rgba(0,0,0,0.62);
+}
+
+.door-of span {
+    position: relative;
+    z-index: 1;
+    font-size: 0.39em;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    color: #fff;
+    text-shadow:
+        0 2px 0 rgba(0,0,0,0.35),
+        0 8px 18px rgba(0,0,0,0.55);
+    transform: translateY(0.08em);
+}
+
+.door-tagline {
+    font-size: clamp(21px, 4.1vw, 36px);
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #ff4d4d;
+    text-shadow:
+        0 -1px 0 rgba(255,255,255,0.12),
+        0 2px 0 rgba(0,0,0,0.35),
+        0 10px 18px rgba(0,0,0,0.55);
+    user-select: none;
+}
 
 /* Doors slide open */
 #welcomeScreen.doors-open .lift-door-left  { transform: translateX(-100%); }

@@ -258,11 +258,11 @@ function _startWelcomeSequence() {
         }
     } catch (e) { _welcomeSoundPending = true; }
 
-    // Open the lift doors to reveal the menu
+    // Title screen shows for 2 s, then doors slide open to reveal the menu
     setTimeout(() => {
         ws.classList.add('doors-open');
         document.body.classList.remove('welcome-active');
-    }, 500);
+    }, 2000);
 }
 
 // ============================================================

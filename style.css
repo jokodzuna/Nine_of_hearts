@@ -513,15 +513,15 @@ body.welcome-active #tapToStart {
 }
 /* Faces in the sprite are offset inward toward the sheet centre,
    so outer positions are shifted toward 50% to compensate.          */
-.avatar-pos-0 { background-position: 14% 11%; }
-.avatar-pos-1 { background-position: 50% 11%; }
-.avatar-pos-2 { background-position: 86% 11%; }
+.avatar-pos-0 { background-position: 14% 15%; }
+.avatar-pos-1 { background-position: 50% 15%; }
+.avatar-pos-2 { background-position: 86% 15%; }
 .avatar-pos-3 { background-position: 14% 50%; }
 .avatar-pos-4 { background-position: 50% 50%; }
 .avatar-pos-5 { background-position: 86% 50%; }
-.avatar-pos-6 { background-position: 14% 89%; }
-.avatar-pos-7 { background-position: 50% 89%; }
-.avatar-pos-8 { background-position: 86% 89%; }
+.avatar-pos-6 { background-position: 14% 85%; }
+.avatar-pos-7 { background-position: 50% 85%; }
+.avatar-pos-8 { background-position: 86% 85%; }
 
 /* ---- Welcome Overlay ---- */
 .welcome-overlay {

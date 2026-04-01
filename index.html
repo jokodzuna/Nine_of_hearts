@@ -7,17 +7,29 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="welcomeScreen" aria-hidden="true">
-        <div class="text-shards" aria-hidden="true"></div>
-        <div class="welcome-content">
-            <div class="welcome-title">
-                <div>NINE</div>
-                <div class="welcome-of"><span>OF</span></div>
-                <div>HEARTS</div>
+    <div id="welcomeScreen">
+        <!-- Lift doors slide apart to reveal the menu -->
+        <div class="lift-door lift-door-left"></div>
+        <div class="lift-door lift-door-right"></div>
+
+        <!-- Green menu revealed behind the doors -->
+        <div class="welcome-menu">
+            <div class="menu-title">
+                <span class="menu-title-text">Nine</span>
+                <span class="menu-title-heart">&#9829;</span>
+                <span class="menu-title-text">of Hearts</span>
             </div>
-            <div class="welcome-tagline">DON'T BE A LOSER!</div>
+            <div class="menu-main-buttons">
+                <button class="menu-btn" id="howToPlayBtn">How to Play</button>
+                <button class="menu-btn" id="nicknameBtn">Nickname</button>
+                <button class="menu-btn" id="avatarBtn">Avatar</button>
+                <button class="menu-btn" id="playersBtn">Players</button>
+                <button class="menu-btn" id="difficultyBtn">Difficulty</button>
+                <button class="menu-btn" id="gameModeBtn">Game Mode</button>
+            </div>
+            <button class="menu-btn menu-btn-start" id="startButton" type="button">&#9654; START</button>
+            <button class="menu-btn menu-btn-exit" id="exitButton" type="button">EXIT</button>
         </div>
-        <button id="startButton" type="button">START</button>
     </div>
 
     <div id="tapToStart"><h1>&#128070; Tap to Start</h1></div>

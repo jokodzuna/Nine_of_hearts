@@ -248,7 +248,6 @@ function _startWelcomeSequence() {
     const ws = document.getElementById('welcomeScreen');
     if (!ws) return;
     document.body.classList.add('welcome-active');
-    ws.classList.add('playing');
 
     try {
         _initAudio();
@@ -259,26 +258,11 @@ function _startWelcomeSequence() {
         }
     } catch (e) { _welcomeSoundPending = true; }
 
+    // Open the lift doors to reveal the menu
     setTimeout(() => {
-        ws.classList.add('shatter');
-        try {
-            const host = ws.querySelector('.text-shards');
-            const src  = ws.querySelector('.welcome-content');
-            if (host && src) {
-                host.innerHTML = '';
-                for (let i = 0; i < 8; i++) {
-                    const s = document.createElement('div');
-                    s.className = 'text-shard';
-                    s.appendChild(src.cloneNode(true));
-                    host.appendChild(s);
-                }
-            }
-        } catch (e) {}
-        setTimeout(() => {
-            ws.classList.add('ready');
-            document.body.classList.remove('welcome-active');
-        }, 1100 + 80);
-    }, 2000 + 4000);
+        ws.classList.add('doors-open');
+        document.body.classList.remove('welcome-active');
+    }, 500);
 }
 
 // ============================================================

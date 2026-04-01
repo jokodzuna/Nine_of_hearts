@@ -38,6 +38,13 @@ let _dragPreview      = null;
 let _isDragInProgress = false;
 let _humanCanPlay     = false;
 
+// ---- Welcome menu config ----
+let _playerName     = 'Player';
+let _selectedAvatar = 0;
+let _numPlayers     = 4;
+let _difficulty     = 'easy';
+let _gameMode       = 'bots';
+
 let _lastTap  = { time: 0, card: null };
 let _touchTap = { time: 0, card: null, startX: 0, startY: 0 };
 let _mouseTap = { card: null, startX: 0, startY: 0 };
@@ -66,6 +73,17 @@ export function onGameStart(fn)     { _cbGameStart     = fn; }
 
 /** Fires once the deal animation has fully completed. */
 export function onDealComplete(fn)  { _cbDealComplete  = fn; }
+
+/** Returns the current welcome-screen configuration chosen by the player. */
+export function getPlayerConfig() {
+    return {
+        playerName:  _playerName,
+        avatarIndex: _selectedAvatar,
+        numPlayers:  _numPlayers,
+        difficulty:  _difficulty,
+        gameMode:    _gameMode,
+    };
+}
 
 // ============================================================
 // Bridge — Incoming Commands  (Update)
@@ -879,6 +897,162 @@ async function _animateDealing(hands) {
     });
 }
 
+// ============================================================
+// Welcome Menu — Overlay Panels
+// ============================================================
+
+const _RULES_TEXT = [
+    'Matching Rank: You must play a card (or a four-of-a-kind) that is of equal or higher rank than the card currently on top of the pile.',
+    'Suits: Suits do not matter; only the rank (number/face) is important.',
+    'The Triple-9 Opening: If you hold all three remaining 9s (Spades, Diamonds, and Clubs), you may play them all at once directly onto the 9 of Hearts.',
+    'Drawing Cards: If you cannot play a legal card\u2014or if you strategically choose not to\u2014you must DRAW.',
+    'You pick up the top 3 cards from the pile. If there are only 1 or 2 cards available above the 9 of Hearts, you pick up all of them.',
+    'Remember: The 9 of Hearts stays on the table!',
+].join('\n\n');
+
+function _makePanelBase(id, titleText) {
+    const panel = document.createElement('div');
+    panel.id = `welcomePanel-${id}`;
+    panel.className = 'welcome-panel hidden';
+    const h = document.createElement('div');
+    h.className = 'panel-title';
+    h.textContent = titleText;
+    panel.appendChild(h);
+    return panel;
+}
+
+function _makePanelCloseBtn(label = 'Close') {
+    const btn = document.createElement('button');
+    btn.className = 'menu-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', _closeWelcomePanel);
+    return btn;
+}
+
+function _buildWelcomeOverlay() {
+    const ws = document.getElementById('welcomeScreen');
+    if (!ws || document.getElementById('welcomeOverlay')) return;
+
+    const ov = document.createElement('div');
+    ov.id = 'welcomeOverlay';
+    ov.className = 'welcome-overlay hidden';
+    ov.addEventListener('click', e => { if (e.target === ov) _closeWelcomePanel(); });
+
+    // ---- How to Play ----
+    const howPanel = _makePanelBase('how-to-play', 'How to Play');
+    const body = document.createElement('div');
+    body.className = 'panel-body';
+    body.innerHTML = _RULES_TEXT.split('\n\n').map(p => `<p>${p}</p>`).join('');
+    howPanel.appendChild(body);
+    howPanel.appendChild(_makePanelCloseBtn('Close'));
+
+    // ---- Nickname ----
+    const nickPanel = _makePanelBase('nickname', 'Your Nickname');
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.id = 'nicknameInput'; inp.className = 'nickname-input';
+    inp.maxLength = 20; inp.placeholder = 'Enter nickname\u2026'; inp.value = _playerName;
+    inp.addEventListener('input', () => { _playerName = inp.value.trim() || 'Player'; _updateMenuBtnLabels(); });
+    nickPanel.appendChild(inp);
+    nickPanel.appendChild(_makePanelCloseBtn('Save'));
+
+    // ---- Avatar ----
+    const avPanel = _makePanelBase('avatar', 'Choose Avatar');
+    const grid = document.createElement('div');
+    grid.className = 'avatar-grid';
+    for (let i = 0; i < 9; i++) {
+        const av = document.createElement('div');
+        av.className = `avatar-preview avatar-pos-${i}${i === _selectedAvatar ? ' selected' : ''}`;
+        av.addEventListener('click', () => {
+            _selectedAvatar = i;
+            grid.querySelectorAll('.avatar-preview').forEach((el, idx) => el.classList.toggle('selected', idx === i));
+        });
+        grid.appendChild(av);
+    }
+    avPanel.appendChild(grid);
+    avPanel.appendChild(_makePanelCloseBtn('Done'));
+
+    // ---- Number of Players ----
+    const playersPanel = _buildOptionPanel('players', 'Number of Players',
+        [['2','2 Players'],['3','3 Players'],['4','4 Players']],
+        () => String(_numPlayers),
+        v => { _numPlayers = Number(v); _updateMenuBtnLabels(); }
+    );
+
+    // ---- Difficulty ----
+    const diffPanel = _buildOptionPanel('difficulty', 'Difficulty',
+        [['easy','Easy'],['medium','Medium'],['hard','Hard']],
+        () => _difficulty,
+        v => { _difficulty = v; _updateMenuBtnLabels(); }
+    );
+
+    // ---- Game Mode ----
+    const modePanel = _buildOptionPanel('gameMode', 'Game Mode',
+        [['bots','Land of Bots'],['multi','Multiplayer']],
+        () => _gameMode,
+        v => { _gameMode = v; _updateMenuBtnLabels(); }
+    );
+
+    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, modePanel);
+    ws.appendChild(ov);
+    _updateMenuBtnLabels();
+}
+
+function _buildOptionPanel(id, title, options, getCurrent, onChange) {
+    const panel = _makePanelBase(id, title);
+    const list  = document.createElement('div');
+    list.className = 'option-list';
+    for (const [value, label] of options) {
+        const btn = document.createElement('button');
+        btn.className = `option-btn${value === getCurrent() ? ' selected' : ''}`;
+        btn.textContent = label;
+        btn.dataset.value = value;
+        btn.addEventListener('click', () => {
+            list.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            onChange(value);
+        });
+        list.appendChild(btn);
+    }
+    panel.appendChild(list);
+    panel.appendChild(_makePanelCloseBtn('Done'));
+    return panel;
+}
+
+function _openWelcomePanel(id) {
+    const ov = document.getElementById('welcomeOverlay');
+    if (!ov) return;
+    ov.querySelectorAll('.welcome-panel').forEach(p => p.classList.add('hidden'));
+    const panel = document.getElementById(`welcomePanel-${id}`);
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    ov.classList.remove('hidden');
+    if (id === 'nickname') {
+        const inp = panel.querySelector('.nickname-input');
+        if (inp) { inp.value = _playerName; requestAnimationFrame(() => { inp.focus(); inp.select(); }); }
+    }
+}
+
+function _closeWelcomePanel() {
+    const ov = document.getElementById('welcomeOverlay');
+    if (!ov) return;
+    ov.classList.add('hidden');
+    ov.querySelectorAll('.welcome-panel').forEach(p => p.classList.add('hidden'));
+    _updateMenuBtnLabels();
+}
+
+function _updateMenuBtnLabels() {
+    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+    const modeLabel = { bots: 'Land of Bots', multi: 'Multiplayer' };
+    const nb = document.getElementById('nicknameBtn');
+    if (nb) nb.textContent = `Nickname: ${_playerName}`;
+    const pb = document.getElementById('playersBtn');
+    if (pb) pb.textContent = `Players: ${_numPlayers}`;
+    const db = document.getElementById('difficultyBtn');
+    if (db) db.textContent = `Difficulty: ${diffLabel[_difficulty] ?? _difficulty}`;
+    const mb = document.getElementById('gameModeBtn');
+    if (mb) mb.textContent = `Game Mode: ${modeLabel[_gameMode] ?? _gameMode}`;
+}
+
 function _updateLayoutDebug() {
     if (!location.search.includes('debug=1') && !/#debug\b/i.test(location.hash)) return;
     let el = document.getElementById('layoutDebug');
@@ -904,6 +1078,16 @@ function _updateLayoutDebug() {
 // ============================================================
 
 function _setupListeners() {
+    _buildWelcomeOverlay();
+
+    document.getElementById('howToPlayBtn') ?.addEventListener('click', () => _openWelcomePanel('how-to-play'));
+    document.getElementById('nicknameBtn')  ?.addEventListener('click', () => _openWelcomePanel('nickname'));
+    document.getElementById('avatarBtn')    ?.addEventListener('click', () => _openWelcomePanel('avatar'));
+    document.getElementById('playersBtn')   ?.addEventListener('click', () => _openWelcomePanel('players'));
+    document.getElementById('difficultyBtn')?.addEventListener('click', () => _openWelcomePanel('difficulty'));
+    document.getElementById('gameModeBtn')  ?.addEventListener('click', () => _openWelcomePanel('gameMode'));
+    document.getElementById('exitButton')   ?.addEventListener('click', () => { if (confirm('Exit the game?')) window.close(); });
+
     const startBtn = document.getElementById('startButton');
     if (startBtn) {
         startBtn.addEventListener('click', e => {

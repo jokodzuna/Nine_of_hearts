@@ -34,13 +34,14 @@ import {
     onDealComplete,
     onCardPlayed,
     onDrawRequested,
+    getPlayerConfig,
 } from './ui-manager.js';
 
 // ============================================================
 // Config
 // ============================================================
 
-const NUM_PLAYERS   = 4;
+let   NUM_PLAYERS   = 4;   // updated from welcome config each game
 const HUMAN         = 0;
 const POST_MOVE_MS  = 350;    // pause after each move before next turn
 const TURBO_AI_MS   = 300;    // AI delay during turbo mode
@@ -111,6 +112,16 @@ onDrawRequested(_humanDraw);
 // ============================================================
 
 function _startGame() {
+    const cfg   = getPlayerConfig();
+    NUM_PLAYERS = cfg.numPlayers;
+
+    // Recreate AI engines with the chosen difficulty profile
+    const profileMap = { easy: 'newbie', medium: 'gambler', hard: 'shark' };
+    const profile    = profileMap[cfg.difficulty] ?? 'shark';
+    for (let p = 1; p < 4; p++) {
+        _engines[p] = new ISMCTSEngine(profile);
+    }
+
     _state          = createInitialState(NUM_PLAYERS);
     _gameActive     = true;
     _turboMode      = false;

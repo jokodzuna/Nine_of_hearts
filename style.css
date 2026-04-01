@@ -492,6 +492,128 @@ body.welcome-active #tapToStart {
 #welcomeScreen.doors-open .lift-door-left  { transform: translateX(-100%); }
 #welcomeScreen.doors-open .lift-door-right { transform: translateX(100%); }
 
+/* ---- Avatar Sprite Sheet (3×3 grid in 155153-OUMT5G-397.jpg) ---- */
+.avatar-preview {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-image: url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg');
+    background-size: 300% 300%;
+    background-repeat: no-repeat;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+}
+.avatar-preview:hover   { transform: scale(1.08); }
+.avatar-preview.selected {
+    border-color: #f4f1e6;
+    box-shadow: 0 0 0 3px #e11d48;
+    transform: scale(1.05);
+}
+.avatar-pos-0 { background-position:   0%   0%; }
+.avatar-pos-1 { background-position:  50%   0%; }
+.avatar-pos-2 { background-position: 100%   0%; }
+.avatar-pos-3 { background-position:   0%  50%; }
+.avatar-pos-4 { background-position:  50%  50%; }
+.avatar-pos-5 { background-position: 100%  50%; }
+.avatar-pos-6 { background-position:   0% 100%; }
+.avatar-pos-7 { background-position:  50% 100%; }
+.avatar-pos-8 { background-position: 100% 100%; }
+
+/* ---- Welcome Overlay ---- */
+.welcome-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0,0,0,0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.welcome-overlay.hidden { display: none; }
+
+.welcome-panel {
+    background: radial-gradient(ellipse at 50% 25%, #1d9449 0%, #0c6030 60%, #063617 100%);
+    border-radius: 16px;
+    padding: clamp(20px, 3vh, 30px) clamp(18px, 4vw, 28px) clamp(16px, 2.5vh, 24px);
+    width: min(460px, 88vw);
+    max-height: 82vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.72), inset 0 1px 0 rgba(255,255,255,0.10);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 1.8vh, 20px);
+}
+.welcome-panel.hidden { display: none; }
+
+.panel-title {
+    font-family: 'NHF-Becker', 'Arial Black', 'Arial', sans-serif;
+    font-size: clamp(17px, 3.5vw, 24px);
+    font-weight: 900;
+    color: #f4f1e6;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    text-align: center;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.4), 0 6px 14px rgba(0,0,0,0.4);
+    user-select: none;
+}
+.panel-body {
+    color: rgba(255,255,255,0.88);
+    font-size: clamp(13px, 2vw, 15px);
+    line-height: 1.65;
+}
+.panel-body p { margin: 0 0 10px; }
+.panel-body p:last-child { margin-bottom: 0; }
+
+.avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 80px);
+    gap: clamp(10px, 2vw, 18px);
+    justify-content: center;
+}
+.nickname-input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 2px solid rgba(255,255,255,0.20);
+    background: rgba(0,0,0,0.30);
+    color: #fff;
+    font-size: clamp(15px, 2.5vw, 18px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    outline: none;
+    text-align: center;
+    box-sizing: border-box;
+}
+.nickname-input:focus       { border-color: rgba(255,255,255,0.50); background: rgba(0,0,0,0.40); }
+.nickname-input::placeholder { color: rgba(255,255,255,0.38); }
+
+.option-list { display: flex; flex-direction: column; gap: clamp(7px, 1.1vh, 12px); }
+.option-btn {
+    padding: clamp(10px, 1.5vh, 14px) 18px;
+    border: 2px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.24);
+    color: rgba(255,255,255,0.78);
+    font-size: clamp(13px, 2vw, 16px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 80ms, border-color 80ms, color 80ms;
+    -webkit-tap-highlight-color: transparent;
+}
+.option-btn:hover { background: rgba(255,255,255,0.11); color: #fff; }
+.option-btn.selected {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.48);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
 @media (orientation: portrait) {
     :root {
         --layout-scale: 1;

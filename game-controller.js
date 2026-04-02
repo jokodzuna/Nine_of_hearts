@@ -123,25 +123,9 @@ function _startGame() {
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = new ISMCTSEngine(profiles[p]);
 
-    // ---- Deal (4-player layout always; inactive players pre-eliminated) ----
-    _state = createInitialState(4);
-
-    // ---- ELIMINATED_MASK: mark inactive players safe from the start ----
-    const ELIM_MASKS = { 2: 0b1100, 3: 0b1000, 4: 0 };
-    const elimMask   = ELIM_MASKS[cfg.numPlayers] ?? 0;
-    if (elimMask) {
-        _state.eliminated = elimMask;
-        for (let p = 0; p < 4; p++) {
-            if (elimMask & (1 << p)) _state.hands[p] = 0;
-        }
-        // Advance currentPlayer past any pre-eliminated starters
-        let cp = _state.currentPlayer;
-        for (let i = 0; i < 4; i++) {
-            if (!(_state.eliminated & (1 << cp))) break;
-            cp = (cp + 1) % 4;
-        }
-        _state.currentPlayer = cp;
-    }
+    // ---- Deal with correct card distribution ----
+    NUM_PLAYERS = cfg.numPlayers;
+    _state      = createInitialState(NUM_PLAYERS);
 
     // ---- Nickname ----
     PLAYER_NAMES[0] = cfg.playerName || 'Player';

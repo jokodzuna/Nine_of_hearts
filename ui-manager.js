@@ -1141,6 +1141,8 @@ function _setupListeners() {
             ws.classList.remove('doors-open');         // close lift doors (1.2 s)
             setTimeout(() => {
                 if (_cbGameStart) _cbGameStart();      // init game behind closed doors
+                // Blank out menu so doors reveal the game board, not the welcome screen
+                ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
                 setTimeout(() => {
                     ws.classList.add('doors-open');    // re-open to reveal game board
                     setTimeout(() => ws.remove(), 1300);

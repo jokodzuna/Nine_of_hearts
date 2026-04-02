@@ -1128,6 +1128,7 @@ function _setupListeners() {
     if (startBtn) {
         startBtn.addEventListener('click', e => {
             e.stopPropagation();
+            startBtn.blur();                           // kill focus highlight
             _initAudio();
             if (_welcomeSoundPending) { _welcomeSoundPending = false; _playWelcomeSound(); }
             const root = document.documentElement;
@@ -1138,15 +1139,18 @@ function _setupListeners() {
             const ws = document.getElementById('welcomeScreen');
             if (!ws) { if (_cbGameStart) _cbGameStart(); return; }
 
+            // Raise above deal-fly (z:20000) so card-backs never flash over the doors
+            ws.style.zIndex = '21000';
             ws.classList.remove('doors-open');         // close lift doors (1.2 s)
             setTimeout(() => {
-                if (_cbGameStart) _cbGameStart();      // init game behind closed doors
-                // Blank out menu so doors reveal the game board, not the welcome screen
+                // Blank out menu so re-opening doors reveal the game board
                 ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
+                ws.classList.add('doors-open');        // re-open (1.2 s)
+                // Start deal 500 ms into the door-open so cards appear as the game is revealed
                 setTimeout(() => {
-                    ws.classList.add('doors-open');    // re-open to reveal game board
+                    if (_cbGameStart) _cbGameStart();
                     setTimeout(() => ws.remove(), 1300);
-                }, 200);
+                }, 500);
             }, 1300);
         });
     }

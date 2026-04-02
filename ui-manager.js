@@ -45,6 +45,12 @@ let _numPlayers     = 4;
 let _difficulty     = 'easy';
 let _gameMode       = 'bots';
 
+const _AVATAR_BG_POS = [
+    '14% 15%', '50% 15%', '86% 15%',
+    '14% 50%', '50% 50%', '86% 50%',
+    '14% 85%', '50% 85%', '86% 85%',
+];
+
 let _lastTap  = { time: 0, card: null };
 let _touchTap = { time: 0, card: null, startX: 0, startY: 0 };
 let _mouseTap = { card: null, startX: 0, startY: 0 };
@@ -161,9 +167,34 @@ export function Update(command, payload = {}) {
         case 'DESELECT_ALL':
             _deselectAll();
             break;
+        case 'SETUP_PLAYERS':
+            _setupPlayers(payload.numPlayers ?? 4, payload.playerName ?? 'Player', payload.avatarIndex ?? 0);
+            break;
         default:
             console.warn(`[ui-manager] Unknown command: "${command}"`);
     }
+}
+
+function _setupPlayers(numPlayers, playerName, avatarIndex) {
+    const nameEl = document.querySelector('#yourInfo .player-name');
+    if (nameEl) nameEl.textContent = playerName;
+
+    const avatarEl = document.querySelector('#yourInfo .avatar');
+    if (avatarEl) {
+        avatarEl.textContent = '';
+        const pos = _AVATAR_BG_POS[avatarIndex] ?? _AVATAR_BG_POS[0];
+        Object.assign(avatarEl.style, {
+            backgroundImage:    "url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg')",
+            backgroundSize:     '435% 435%',
+            backgroundPosition: pos,
+            backgroundRepeat:   'no-repeat',
+        });
+    }
+
+    const topArea  = document.querySelector('.player-area.player-top');
+    const leftArea = document.querySelector('.player-area.player-left');
+    if (topArea)  topArea.style.display  = numPlayers >= 3 ? '' : 'none';
+    if (leftArea) leftArea.style.display = numPlayers >= 4 ? '' : 'none';
 }
 
 // ============================================================
@@ -987,9 +1018,10 @@ function _buildWelcomeOverlay() {
 
     // ---- Game Mode ----
     const modePanel = _buildOptionPanel('gameMode', 'Game Mode',
-        [['bots','Land of Bots'],['multi','Multiplayer']],
+        [['bots', 'Land of Bots'], ['multi', 'Multiplayer (coming soon)']],
         () => _gameMode,
-        v => { _gameMode = v; _updateMenuBtnLabels(); }
+        v => { _gameMode = v; _updateMenuBtnLabels(); },
+        new Set(['multi'])
     );
 
     ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, modePanel);
@@ -997,20 +1029,24 @@ function _buildWelcomeOverlay() {
     _updateMenuBtnLabels();
 }
 
-function _buildOptionPanel(id, title, options, getCurrent, onChange) {
+function _buildOptionPanel(id, title, options, getCurrent, onChange, disabledValues = new Set()) {
     const panel = _makePanelBase(id, title);
     const list  = document.createElement('div');
     list.className = 'option-list';
     for (const [value, label] of options) {
         const btn = document.createElement('button');
-        btn.className = `option-btn${value === getCurrent() ? ' selected' : ''}`;
+        const disabled = disabledValues.has(value);
+        btn.className = `option-btn${value === getCurrent() ? ' selected' : ''}${disabled ? ' coming-soon' : ''}`;
         btn.textContent = label;
         btn.dataset.value = value;
-        btn.addEventListener('click', () => {
-            list.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            onChange(value);
-        });
+        btn.disabled = disabled;
+        if (!disabled) {
+            btn.addEventListener('click', () => {
+                list.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                onChange(value);
+            });
+        }
         list.appendChild(btn);
     }
     panel.appendChild(list);
@@ -1086,7 +1122,7 @@ function _setupListeners() {
     document.getElementById('playersBtn')   ?.addEventListener('click', () => _openWelcomePanel('players'));
     document.getElementById('difficultyBtn')?.addEventListener('click', () => _openWelcomePanel('difficulty'));
     document.getElementById('gameModeBtn')  ?.addEventListener('click', () => _openWelcomePanel('gameMode'));
-    document.getElementById('exitButton')   ?.addEventListener('click', () => { if (confirm('Exit the game?')) window.close(); });
+    document.getElementById('exitButton')   ?.addEventListener('click', () => { /* no-op on web */ });
 
     const startBtn = document.getElementById('startButton');
     if (startBtn) {
@@ -1097,9 +1133,19 @@ function _setupListeners() {
             const root = document.documentElement;
             if (root.requestFullscreen)            root.requestFullscreen().catch(() => {});
             else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
-            document.getElementById('welcomeScreen')?.remove();
             document.getElementById('tapToStart')?.remove();
-            if (_cbGameStart) _cbGameStart();
+
+            const ws = document.getElementById('welcomeScreen');
+            if (!ws) { if (_cbGameStart) _cbGameStart(); return; }
+
+            ws.classList.remove('doors-open');         // close lift doors (1.2 s)
+            setTimeout(() => {
+                if (_cbGameStart) _cbGameStart();      // init game behind closed doors
+                setTimeout(() => {
+                    ws.classList.add('doors-open');    // re-open to reveal game board
+                    setTimeout(() => ws.remove(), 1300);
+                }, 200);
+            }, 1300);
         });
     }
 

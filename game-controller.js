@@ -57,7 +57,7 @@ const PLAYER_IDS = [
     'player3Cards', // 3 — Carol  (left)
 ];
 
-const PLAYER_NAMES = ['You', 'Lisa', 'John', 'Carol'];
+let PLAYER_NAMES = ['You', 'Lisa', 'John', 'Carol'];
 
 const AI_PROFILE_KEYS = {
     1: 'shark',     // Lisa  — Shark
@@ -112,33 +112,59 @@ onDrawRequested(_humanDraw);
 // ============================================================
 
 function _startGame() {
-    const cfg   = getPlayerConfig();
-    NUM_PLAYERS = cfg.numPlayers;
+    const cfg = getPlayerConfig();
 
-    // Recreate AI engines with the chosen difficulty profile
-    const profileMap = { easy: 'newbie', medium: 'gambler', hard: 'shark' };
-    const profile    = profileMap[cfg.difficulty] ?? 'shark';
-    for (let p = 1; p < 4; p++) {
-        _engines[p] = new ISMCTSEngine(profile);
+    // ---- Difficulty: one 'strong' bot leads, others fill ----
+    const DIFF_PROFILES = {
+        easy:   [null, 'gambler', 'newbie',  'newbie' ],
+        medium: [null, 'shark',  'gambler', 'gambler'],
+        hard:   [null, 'shark',  'shark',   'shark'  ],
+    };
+    const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
+    for (let p = 1; p < 4; p++) _engines[p] = new ISMCTSEngine(profiles[p]);
+
+    // ---- Deal (4-player layout always; inactive players pre-eliminated) ----
+    _state = createInitialState(4);
+
+    // ---- ELIMINATED_MASK: mark inactive players safe from the start ----
+    const ELIM_MASKS = { 2: 0b1100, 3: 0b1000, 4: 0 };
+    const elimMask   = ELIM_MASKS[cfg.numPlayers] ?? 0;
+    if (elimMask) {
+        _state.eliminated = elimMask;
+        for (let p = 0; p < 4; p++) {
+            if (elimMask & (1 << p)) _state.hands[p] = 0;
+        }
+        // Advance currentPlayer past any pre-eliminated starters
+        let cp = _state.currentPlayer;
+        for (let i = 0; i < 4; i++) {
+            if (!(_state.eliminated & (1 << cp))) break;
+            cp = (cp + 1) % 4;
+        }
+        _state.currentPlayer = cp;
     }
 
-    _state          = createInitialState(NUM_PLAYERS);
+    // ---- Nickname ----
+    PLAYER_NAMES[0] = cfg.playerName || 'Player';
+
     _gameActive     = true;
     _turboMode      = false;
     _turboTurnsLeft = 0;
 
-    // Reset card knowledge in all AI engines for the new game
     for (const engine of Object.values(_engines)) engine.resetKnowledge();
 
-    const ds    = decodeState(_state);
+    const ds = decodeState(_state);
 
-    // Build the hands map for the deal animation
+    Update('SETUP_PLAYERS', {
+        numPlayers:  cfg.numPlayers,
+        playerName:  PLAYER_NAMES[0],
+        avatarIndex: cfg.avatarIndex,
+    });
+
     const hands = {};
     for (let p = 0; p < NUM_PLAYERS; p++) {
         hands[PLAYER_IDS[p]] = ds.hands[p];
     }
 
-    // Place 9♥ in the pile, then animate the deal
     Update('CLEAR_PILE');
     Update('ADD_TO_PILE', { card: ds.pile[0] });
     Update('ANIMATE_DEAL', { hands });

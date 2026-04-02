@@ -609,6 +609,7 @@ body.welcome-active #tapToStart {
     -webkit-tap-highlight-color: transparent;
 }
 .option-btn:hover { background: rgba(255,255,255,0.11); color: #fff; }
+.option-btn.coming-soon { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
 .option-btn.selected {
     background: rgba(255,255,255,0.18);
     border-color: rgba(255,255,255,0.48);

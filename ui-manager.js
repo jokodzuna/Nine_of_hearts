@@ -1152,12 +1152,20 @@ function _setupListeners() {
                 }, 1300);
             };
 
-            // Enter fullscreen first so the viewport is stable before any animation
+            // Enter fullscreen first; wait for the viewport to fully settle before animating
             const root = document.documentElement;
-            const fsPromise = root.requestFullscreen
-                ? root.requestFullscreen().catch(() => {})
-                : (root.webkitRequestFullscreen ? new Promise(r => { root.webkitRequestFullscreen(); r(); }) : Promise.resolve());
-            fsPromise.then(_startDoorSequence);
+            if (root.requestFullscreen) {
+                document.addEventListener('fullscreenchange', _startDoorSequence, { once: true });
+                root.requestFullscreen().catch(() => {
+                    document.removeEventListener('fullscreenchange', _startDoorSequence);
+                    _startDoorSequence();
+                });
+            } else if (root.webkitRequestFullscreen) {
+                document.addEventListener('webkitfullscreenchange', _startDoorSequence, { once: true });
+                root.webkitRequestFullscreen();
+            } else {
+                _startDoorSequence();
+            }
         });
     }
 

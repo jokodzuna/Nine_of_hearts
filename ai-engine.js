@@ -81,12 +81,6 @@ function _shuffle(len) {
 }
 
 /**
- * Module-level reusable elimination-rank buffer (supports up to 8 players).
- * Index p holds the finish position of player p (0 = 1st safe, N-1 = loser).
- */
-const _elimRank = new Int8Array(8);
-
-/**
  * Per-player forced card bitmasks reused during knowledge-refined determinization.
  * Avoids heap allocation inside the hot _determinize loop.
  */
@@ -210,51 +204,51 @@ function _pickQualityMove(pool, topRankIdx, hand, twoAcesOnTop = false, drawBonu
     return pool[0];
 }
 
+// ============================================================
+// RHV — Relative Hand Value
+// ============================================================
+
+/** Point values indexed by rank (0=9 … 5=A). */
+const _RHV_VALS = new Int16Array([-20, -5, 5, 12, 17, 25]);
+
+/** Divisor for normalising a single-hand RHV to [-1, 1]. */
+const _RHV_NORM = 25.0;
+
+/** Divisor for normalising a 2-player RHV differential to [-1, 1]. */
+const _RHV_DIFF_NORM = 50.0;
+
 /**
- * Heuristic evaluation for inconclusive (stale) simulations.
+ * Compute the Relative Hand Value for a 24-bit hand bitmask.
  *
- * Returns a value in [−1, 1] reflecting rootPlayer’s position:
+ *   Empty hand               → +50  (Safe Bonus)
+ *   Three 9s  (group)        → -20 total, counts as 1 card
+ *   Four 10s  (group)        → -5  total, counts as 1 card
+ *   Four J/Q/K/A (quad)      → +5 added to total  (Quad Bonus)
+ *   All other cards          → _RHV_VALS[rank] each, count 1 each
  *
- *   Hand size   — fewer cards → higher score       (weight 0.50)
- *   Card quality — clog cards (rank < top) penalised;
- *                  power cards (K, A) rewarded        (weight 0.20)
- *   Relative pos — fraction of opponents with more
- *                  cards = ahead of me                (weight 0.30)
+ *   RHV = (sum + quadBonus) / effectiveCardCount
  *
- * Calibration: a player at mean state scores ≈ −0.1 (slightly
- * pessimistic for a stale game), rising toward +0.7 when clearly
- * leading and falling toward −0.7 when loaded with clog cards.
+ * @param {number} hand  24-bit bitmask
+ * @returns {number}
  */
-function _progressScore(state, rootPlayer) {
-    const N    = state.numPlayers;
-    const hand = state.hands[rootPlayer];
-    const top  = state.topRankIdx;
-    const size = _popcount(hand);
-
-    // 1. Hand size score (worst realistic case ≈ 10 cards)
-    const sizeScore = Math.max(0.0, 1.0 - size / 10.0);
-
-    // 2. Card quality: clog = rank < top (permanently unplayable),
-    //                  power = K or A   (always legally playable)
-    let clogCnt = 0;
-    for (let r = 0; r < top; r++) clogCnt += _popcount(hand & _RANK_MASK[r]);
-    const powerCnt   = _popcount(hand & (_RANK_MASK[4] | _RANK_MASK[5]));
-    const qualityAdj = size > 0
-        ? (powerCnt * 0.08 - clogCnt * 0.15) / size
-        : 0.0;
-
-    // 3. Relative position among remaining players
-    let activeCount = 0, aheadCount = 0;
-    for (let p = 0; p < N; p++) {
-        if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
-        activeCount++;
-        if (_popcount(state.hands[p]) > size) aheadCount++;
+function _computeRHV(hand) {
+    if (!hand) return 50.0;
+    let sum = 0, effCount = 0, quadBonus = 0;
+    for (let r = 0; r < 6; r++) {
+        const group = hand & _RANK_MASK[r];
+        if (!group) continue;
+        const cnt = _popcount(group);
+        if (r === 0 && cnt === 3) {            // Three 9s — special group
+            sum -= 20; effCount += 1;
+        } else if (r === 1 && cnt === 4) {     // Four 10s — special group
+            sum -= 5;  effCount += 1;
+        } else {
+            sum += _RHV_VALS[r] * cnt;
+            effCount += cnt;
+            if (cnt === 4 && r >= 2) quadBonus = 5;  // Quad J/Q/K/A
+        }
     }
-    const relPos = activeCount > 0 ? aheadCount / activeCount : 0.5;
-
-    // Combine and map raw [0,1] range to [−1, 1]
-    const raw = 0.5 * sizeScore + 0.2 * qualityAdj + 0.3 * relPos;
-    return Math.max(-1.0, Math.min(1.0, raw * 2.0 - 0.8));
+    return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
 }
 
 // ============================================================
@@ -318,6 +312,7 @@ export class ISMCTSEngine {
         this._root          = null;
         this._pendingRoot   = null;  // subtree saved for reuse (Shark only)
         this._cardKnowledge = null;  // Int32Array(numPlayers) — Shark only
+        this._pileSeenMask  = 0;     // bitmask of all cards ever played to pile — Shark only
     }
 
     // ----------------------------------------------------------
@@ -355,8 +350,10 @@ export class ISMCTSEngine {
                 this._cardKnowledge[p] |= (1 << bitIdx);
             }
         } else {
-            // Player played cards — remove them from our knowledge of their hand
-            this._cardKnowledge[p] &= ~(move & 0xFFFFFF);
+            // Cards played to pile are now publicly seen; remove from hand knowledge
+            const played = (move & 0xFFFFFF);
+            this._pileSeenMask |= played;
+            this._cardKnowledge[p] &= ~played;
         }
     }
 
@@ -367,6 +364,7 @@ export class ISMCTSEngine {
     resetKnowledge() {
         this._cardKnowledge = null;
         this._pendingRoot   = null;
+        this._pileSeenMask  = 0;
     }
 
     /**
@@ -501,9 +499,11 @@ export class ISMCTSEngine {
         const det = copyState(state);
         const N   = state.numPlayers;
 
-        // Cards visible to rootPlayer: own hand + full pile
+        // Cards visible to rootPlayer: own hand + current pile + all cards ever
+        // played to the pile (Shark pile memory — publicly-seen history)
         let known = state.hands[rootPlayer];
         for (let i = 0; i < state.pileSize; i++) known |= (1 << state.pile[i]);
+        if (this._pileSeenMask) known |= this._pileSeenMask;
 
         const unknown = (~known) & 0xFFFFFF;
 
@@ -620,60 +620,41 @@ export class ISMCTSEngine {
     }
 
     /**
-     * Quality-biased playout from a leaf state.
+     * RHV-based quality playout from a leaf state.
      *
-     * Move selection: weighted random favouring low-rank cards
-     * (dump 9s first, hold Aces) — balances Hand Size with Rank Quality.
+     * Depth: numPlayers × 8 turns (16 / 24 / 32 for 2 / 3 / 4 players).
      *
-     * Scoring (from rootPlayer's perspective) — ranked finish:
-     *   1st safe : +1.0
-     *   2nd safe : +0.5
-     *   3rd safe : +0.2
-     *   Loser    : -1.0
-     *   Stale (>100 turns): profile.weightStale
+     * Scoring at playout end (hit depth or game over):
+     *   2 players : normalised (AI_RHV − Opponent_RHV) / 50   → [-1, 1]
+     *   3-4 players: normalised AI_RHV / 25                   → [-1, 1]
+     *   Empty hand (safe) returns RHV = +50 → clamped to +1.
      */
-    _simulate(state, rootPlayer, maxTurns) {
+    _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
-        const N = s.numPlayers;
-
-        // Initialise elimination-rank tracker
-        _elimRank.fill(-1, 0, N);
-        let nextRank = 0;
-
-        // Pre-populate players already eliminated before this simulation starts
-        for (let p = 0; p < N; p++) {
-            if (s.eliminated & (1 << p)) _elimRank[p] = nextRank++;
-        }
+        const N          = s.numPlayers;
+        const depthLimit = N * 8;  // 16 / 24 / 32
 
         while (!isGameOver(s)) {
-            if (++turns > maxTurns) return _progressScore(s, rootPlayer);
+            if (++turns > depthLimit) break;
 
             const moves = getPossibleMoves(s);
             if (moves.length === 0) break;
 
-            const prevElim    = s.eliminated;
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2
                 && (s.pile[s.pileSize - 2] >> 2) === 5;
-            const drawBonus    = _pileDrawBonus(s, s.hands[s.currentPlayer]);
+            const drawBonus = _pileDrawBonus(s, s.hands[s.currentPlayer]);
             s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
-
-            // Record any newly safe players in finish order
-            let newlyElim = s.eliminated & ~prevElim;
-            while (newlyElim) {
-                const lb = newlyElim & (-newlyElim);
-                _elimRank[31 - Math.clz32(lb)] = nextRank++;
-                newlyElim &= ~lb;
-            }
         }
 
-        // Remaining (non-eliminated) player is the loser
-        for (let p = 0; p < N; p++) {
-            if (_elimRank[p] === -1) _elimRank[p] = nextRank;
+        // RHV scoring
+        const myRHV = _computeRHV(s.hands[rootPlayer]);
+        if (N === 2) {
+            const opp    = 1 - rootPlayer;
+            const oppRHV = _computeRHV(s.hands[opp]);
+            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / _RHV_DIFF_NORM));
         }
-
-        const RANK_SCORES = [1.0, 0.5, 0.2, -1.0];
-        return RANK_SCORES[Math.min(_elimRank[rootPlayer], RANK_SCORES.length - 1)] ?? -1.0;
+        return Math.max(-1.0, Math.min(1.0, myRHV / _RHV_NORM));
     }
 
     /** Backpropagate score from leaf to root. */

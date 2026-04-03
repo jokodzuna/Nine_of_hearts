@@ -307,6 +307,15 @@ function _startWelcomeSequence() {
         }
     } catch (e) { _welcomeSoundPending = true; }
 
+    // Go fullscreen on the very first user interaction — happens on the static
+    // title card before any animation, so any viewport shake is imperceptible
+    const _tryFullscreen = () => {
+        const r = document.documentElement;
+        if (r.requestFullscreen)            r.requestFullscreen().catch(() => {});
+        else if (r.webkitRequestFullscreen) r.webkitRequestFullscreen();
+    };
+    document.addEventListener('pointerdown', _tryFullscreen, { once: true });
+
     // Title screen shows for 2 s, then doors slide open to reveal the menu
     setTimeout(() => {
         ws.classList.add('doors-open');
@@ -1139,42 +1148,13 @@ function _setupListeners() {
             // Raise above deal-fly (z:20000) so card-backs never flash over the doors
             ws.style.zIndex = '21000';
             ws.classList.remove('doors-open');             // close lift doors (1.2 s)
-
-            // Wait until doors are fully closed, then request fullscreen.
-            // A solid mask covers any viewport-resize shake during the transition.
             setTimeout(() => {
-                const _openDoors = () => {
-                    mask.remove();
-                    ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
-                    ws.classList.add('doors-open');        // re-open (1.2 s)
-                    setTimeout(() => {
-                        if (_cbGameStart) _cbGameStart();
-                        setTimeout(() => ws.remove(), 1300);
-                    }, 500);
-                };
-
-                // Cover everything with a solid colour — hides any shake during resize
-                const mask = document.createElement('div');
-                mask.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#084018;pointer-events:none;';
-                document.body.appendChild(mask);
-
-                // Wait 2 rAF frames so the mask is physically painted before
-                // requestFullscreen reshapes the viewport
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                    const root = document.documentElement;
-                    if (root.requestFullscreen) {
-                        document.addEventListener('fullscreenchange', _openDoors, { once: true });
-                        root.requestFullscreen().catch(() => {
-                            document.removeEventListener('fullscreenchange', _openDoors);
-                            _openDoors();
-                        });
-                    } else if (root.webkitRequestFullscreen) {
-                        document.addEventListener('webkitfullscreenchange', _openDoors, { once: true });
-                        root.webkitRequestFullscreen();
-                    } else {
-                        _openDoors();
-                    }
-                }));
+                ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
+                ws.classList.add('doors-open');            // re-open (1.2 s)
+                setTimeout(() => {
+                    if (_cbGameStart) _cbGameStart();
+                    setTimeout(() => ws.remove(), 1300);
+                }, 500);
             }, 1300);
         });
     }

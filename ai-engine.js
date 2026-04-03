@@ -251,6 +251,47 @@ function _computeRHV(hand) {
     return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
 }
 
+/**
+ * RHV Guard — disqualifies play moves whose resulting-hand RHV would drop
+ * by more than 5 points vs the current hand.  Draw moves are always kept.
+ *
+ * Safety fallback: if every play move is disqualified AND no draw is
+ * available, the single least-bad play move is retained so the AI never
+ * deadlocks on a forced play.
+ *
+ * @param {number[]} moves  Legal moves from getPossibleMoves
+ * @param {number}   hand   Current player's 24-bit hand bitmask
+ * @returns {number[]}      Filtered move list
+ */
+function _applyRHVGuard(moves, hand) {
+    const curRHV = _computeRHV(hand);
+    const out    = [];
+    let   hasDraw = false, hasPlay = false;
+    let   fallbackMove = 0, fallbackRHV = -Infinity;
+
+    for (let i = 0; i < moves.length; i++) {
+        const m = moves[i];
+        if (m & DRAW_FLAG) {
+            out.push(m);
+            hasDraw = true;
+        } else {
+            const newHand = (hand & ~(m & 0xFFFFFF)) | 0;
+            const newRHV  = _computeRHV(newHand);
+            if (curRHV - newRHV <= 5) {
+                out.push(m);
+                hasPlay = true;
+            } else if (newRHV > fallbackRHV) {
+                fallbackRHV  = newRHV;
+                fallbackMove = m;
+            }
+        }
+    }
+
+    // Keep at least one move to avoid deadlock
+    if (!hasPlay && !hasDraw && fallbackMove !== 0) out.push(fallbackMove);
+    return out.length > 0 ? out : moves;
+}
+
 // ============================================================
 // ISMCTSEngine
 // ============================================================
@@ -573,8 +614,9 @@ export class ISMCTSEngine {
         let s    = state;
 
         while (!isGameOver(s)) {
-            const legal = getPossibleMoves(s);
-            if (legal.length === 0) break;
+            const raw   = getPossibleMoves(s);
+            if (raw.length === 0) break;
+            const legal = _applyRHVGuard(raw, s.hands[s.currentPlayer]);
 
             // Increment avails for every child that is legal in this determinization
             for (let i = 0; i < legal.length; i++) {
@@ -632,13 +674,14 @@ export class ISMCTSEngine {
     _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
         const N          = s.numPlayers;
-        const depthLimit = N * 8;  // 16 / 24 / 32
+        const depthLimit = N * 3;  // 6 / 9 / 12 — 3 rounds per player
 
         while (!isGameOver(s)) {
             if (++turns > depthLimit) break;
 
-            const moves = getPossibleMoves(s);
-            if (moves.length === 0) break;
+            const raw    = getPossibleMoves(s);
+            if (raw.length === 0) break;
+            const moves  = _applyRHVGuard(raw, s.hands[s.currentPlayer]);
 
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2

@@ -1140,21 +1140,31 @@ function _setupListeners() {
             ws.style.zIndex = '21000';
             ws.classList.remove('doors-open');             // close lift doors (1.2 s)
 
-            // Request fullscreen NOW — closed door panels cover any viewport jump,
-            // so by the time they re-open the layout is already stable
-            const root = document.documentElement;
-            if (root.requestFullscreen)            root.requestFullscreen().catch(() => {});
-            else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
-
+            // Wait until doors are fully closed, THEN request fullscreen so the
+            // viewport resize is completely hidden behind the closed panels
             setTimeout(() => {
-                // Blank out menu so re-opening doors reveal the game board
-                ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
-                ws.classList.add('doors-open');            // re-open (1.2 s)
-                // Start deal 500 ms into the door-open so cards appear as game is revealed
-                setTimeout(() => {
-                    if (_cbGameStart) _cbGameStart();
-                    setTimeout(() => ws.remove(), 1300);
-                }, 500);
+                const _openDoors = () => {
+                    ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
+                    ws.classList.add('doors-open');        // re-open (1.2 s)
+                    setTimeout(() => {
+                        if (_cbGameStart) _cbGameStart();
+                        setTimeout(() => ws.remove(), 1300);
+                    }, 500);
+                };
+
+                const root = document.documentElement;
+                if (root.requestFullscreen) {
+                    document.addEventListener('fullscreenchange', _openDoors, { once: true });
+                    root.requestFullscreen().catch(() => {
+                        document.removeEventListener('fullscreenchange', _openDoors);
+                        _openDoors();
+                    });
+                } else if (root.webkitRequestFullscreen) {
+                    document.addEventListener('webkitfullscreenchange', _openDoors, { once: true });
+                    root.webkitRequestFullscreen();
+                } else {
+                    _openDoors();
+                }
             }, 1300);
         });
     }

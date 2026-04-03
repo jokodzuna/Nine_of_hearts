@@ -1140,10 +1140,11 @@ function _setupListeners() {
             ws.style.zIndex = '21000';
             ws.classList.remove('doors-open');             // close lift doors (1.2 s)
 
-            // Wait until doors are fully closed, THEN request fullscreen so the
-            // viewport resize is completely hidden behind the closed panels
+            // Wait until doors are fully closed, then request fullscreen.
+            // A solid mask covers any viewport-resize shake during the transition.
             setTimeout(() => {
                 const _openDoors = () => {
+                    mask.remove();
                     ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
                     ws.classList.add('doors-open');        // re-open (1.2 s)
                     setTimeout(() => {
@@ -1151,6 +1152,11 @@ function _setupListeners() {
                         setTimeout(() => ws.remove(), 1300);
                     }, 500);
                 };
+
+                // Cover everything with a solid colour — hides any shake during resize
+                const mask = document.createElement('div');
+                mask.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#084018;pointer-events:none;';
+                document.body.appendChild(mask);
 
                 const root = document.documentElement;
                 if (root.requestFullscreen) {

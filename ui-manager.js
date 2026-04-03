@@ -1158,19 +1158,23 @@ function _setupListeners() {
                 mask.style.cssText = 'position:fixed;inset:0;z-index:30000;background:#084018;pointer-events:none;';
                 document.body.appendChild(mask);
 
-                const root = document.documentElement;
-                if (root.requestFullscreen) {
-                    document.addEventListener('fullscreenchange', _openDoors, { once: true });
-                    root.requestFullscreen().catch(() => {
-                        document.removeEventListener('fullscreenchange', _openDoors);
+                // Wait 2 rAF frames so the mask is physically painted before
+                // requestFullscreen reshapes the viewport
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    const root = document.documentElement;
+                    if (root.requestFullscreen) {
+                        document.addEventListener('fullscreenchange', _openDoors, { once: true });
+                        root.requestFullscreen().catch(() => {
+                            document.removeEventListener('fullscreenchange', _openDoors);
+                            _openDoors();
+                        });
+                    } else if (root.webkitRequestFullscreen) {
+                        document.addEventListener('webkitfullscreenchange', _openDoors, { once: true });
+                        root.webkitRequestFullscreen();
+                    } else {
                         _openDoors();
-                    });
-                } else if (root.webkitRequestFullscreen) {
-                    document.addEventListener('webkitfullscreenchange', _openDoors, { once: true });
-                    root.webkitRequestFullscreen();
-                } else {
-                    _openDoors();
-                }
+                    }
+                }));
             }, 1300);
         });
     }

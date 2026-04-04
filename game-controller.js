@@ -35,7 +35,11 @@ import {
     onCardPlayed,
     onDrawRequested,
     getPlayerConfig,
+    onMultiplayerReady,
+    onMPHostStart,
 } from './ui-manager.js';
+
+import * as MP from './multiplayer.js';
 
 // ============================================================
 // Config
@@ -86,6 +90,15 @@ function _popcount(x) {
     return (Math.imul(x, 0x010101) >>> 16) & 0xFF;
 }
 
+/**
+ * Map a game-player index to the correct DOM container ID.
+ * In MP mode, rotates so _myMPIdx always maps to 'yourCards' (bottom).
+ */
+function _mpDispId(gameIdx) {
+    if (!_mpMode) return PLAYER_IDS[gameIdx];
+    return PLAYER_IDS[(gameIdx - _myMPIdx + 4) % 4];
+}
+
 // ============================================================
 // Game State
 // ============================================================
@@ -95,6 +108,11 @@ let _gameActive     = false;
 let _turboMode      = false;   // true once human player is safe
 let _turboTurnsLeft = 0;       // countdown of AI turns after human exits
 let _humanTimer     = null;    // setTimeout handle for human auto-move
+
+// Multiplayer state
+let _mpMode    = false;        // true during a multiplayer game
+let _myMPIdx   = 0;            // this client's player-seat index
+let _mpBotIdxs = [];           // seat indices managed as bots by the host
 
 const TURBO_TURNS   = 10;
 
@@ -106,6 +124,8 @@ onGameStart(_startGame);
 onDealComplete(_startTurn);
 onCardPlayed(_humanPlayCards);
 onDrawRequested(_humanDraw);
+onMultiplayerReady(_startMPGame);
+onMPHostStart(_handleMPHostStart);
 
 // ============================================================
 // Game Flow
@@ -155,6 +175,7 @@ function _startGame() {
 }
 
 function _startTurn() {
+    if (_mpMode) { _startMPTurn(); return; }
     if (!_state || !_gameActive) return;
 
     if (isGameOver(_state)) {
@@ -214,27 +235,31 @@ function _aiTurn(playerIdx) {
 }
 
 function _humanPlayCards(cards) {
-    if (!_state || !_gameActive || _state.currentPlayer !== HUMAN) return;
+    const hi = _mpMode ? _myMPIdx : HUMAN;
+    if (!_state || !_gameActive || _state.currentPlayer !== hi) return;
 
     const move = _matchPlay(cards);
     if (move === null) {
         Update('SHOW_MESSAGE', {
-            text: "❌  Can't play those cards — select 1, 4-of-a-kind, or triple 9s",
+            text: "\u274C  Can't play those cards — select 1, 4-of-a-kind, or triple 9s",
         });
         Update('DESELECT_ALL');
         return;
     }
 
-    _applyAndAdvance(move);
+    if (_mpMode) _applyMPMove(move);
+    else         _applyAndAdvance(move);
 }
 
 function _humanDraw() {
-    if (!_state || !_gameActive || _state.currentPlayer !== HUMAN) return;
+    const hi = _mpMode ? _myMPIdx : HUMAN;
+    if (!_state || !_gameActive || _state.currentPlayer !== hi) return;
 
     const drawMove = getPossibleMoves(_state).find(m => !!(m & DRAW_FLAG));
     if (drawMove === undefined) return;
 
-    _applyAndAdvance(drawMove);
+    if (_mpMode) _applyMPMove(drawMove);
+    else         _applyAndAdvance(drawMove);
 }
 
 function _applyAndAdvance(move) {
@@ -288,26 +313,27 @@ function _applyAndAdvance(move) {
  */
 function _humanTimerExpired() {
     _humanTimer = null;
-    if (!_state || !_gameActive || _state.currentPlayer !== HUMAN) return;
+    const hi = _mpMode ? _myMPIdx : HUMAN;
+    if (!_state || !_gameActive || _state.currentPlayer !== hi) return;
 
     const moves     = getPossibleMoves(_state);
     const playMoves = moves.filter(m => !(m & DRAW_FLAG));
 
+    let chosen;
     if (playMoves.length > 0) {
-        // Prefer single-card plays; fall back to any play move
         const singles = playMoves.filter(m => _popcount(m & 0xFFFFFF) === 1);
         const pool    = singles.length > 0 ? singles : playMoves;
-        // Pick whichever has the lowest set-bit (lowest rank/suit)
-        const move = pool.reduce((best, m) => {
-            const bLow = best & -best;   // isolate lowest bit
+        chosen = pool.reduce((best, m) => {
+            const bLow = best & -best;
             const mLow = m    & -m;
             return mLow < bLow ? m : best;
         });
-        _applyAndAdvance(move);
     } else {
-        const drawMove = moves.find(m => !!(m & DRAW_FLAG));
-        if (drawMove !== undefined) _applyAndAdvance(drawMove);
+        chosen = moves.find(m => !!(m & DRAW_FLAG));
     }
+    if (chosen === undefined) return;
+    if (_mpMode) _applyMPMove(chosen);
+    else         _applyAndAdvance(chosen);
 }
 
 function _endGame() {
@@ -318,11 +344,14 @@ function _endGame() {
 
     _renderHands(decodeState(_state));
 
+    const humanSeat = _mpMode ? _myMPIdx : HUMAN;
+    _mpMode = false;
+
     // The loser is the one player who still holds cards
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (!(_state.eliminated & (1 << p))) {
             Update('SHOW_MESSAGE', {
-                text: p === HUMAN
+                text: p === humanSeat
                     ? "💔  YOU are the LOSER — don't be a loser next time!"
                     : `💔  ${PLAYER_NAMES[p]} is the LOSER!`,
             });
@@ -387,16 +416,16 @@ function _findForcedLoser() {
 // ============================================================
 
 function _renderHands(ds) {
+    const humanIdx = _mpMode ? _myMPIdx : HUMAN;
     for (let p = 0; p < NUM_PLAYERS; p++) {
-        if (p === HUMAN) {
-            // Skip re-render if hand is unchanged — prevents portrait-mode blink
-            // when another player acts and the human hand stays the same
-            const el = document.getElementById(PLAYER_IDS[p]);
+        const dispId = _mpDispId(p);
+        if (p === humanIdx) {
+            const el = document.getElementById(dispId);
             if (!el || el.querySelectorAll('.card').length !== ds.hands[p].length) {
-                Update('RENDER_HAND', { playerId: PLAYER_IDS[p], cards: ds.hands[p] });
+                Update('RENDER_HAND', { playerId: dispId, cards: ds.hands[p] });
             }
         } else {
-            Update('RENDER_HAND', { playerId: PLAYER_IDS[p], count: ds.hands[p].length });
+            Update('RENDER_HAND', { playerId: dispId, count: ds.hands[p].length });
         }
     }
 }
@@ -440,4 +469,209 @@ function _matchPlay(uiCards) {
     }
 
     return null;
+}
+
+// ============================================================
+// Multiplayer Mode
+// ============================================================
+
+/** Called when the host clicks '▶ Start Game' in the MP lobby. */
+function _handleMPHostStart({ players, maxPlayers }) {
+    const humanIdxs = Object.values(players).map(p => p.idx);
+    _mpBotIdxs = [];
+    for (let i = 0; i < maxPlayers; i++) {
+        if (!humanIdxs.includes(i)) _mpBotIdxs.push(i);
+    }
+    NUM_PLAYERS = maxPlayers;
+    const state = createInitialState(NUM_PLAYERS);
+    MP.startGame(state).catch(e => console.error('[MP] startGame failed:', e));
+}
+
+/**
+ * Called by ui-manager after the lift-door animation completes.
+ * Sets up the MP game state and board for this client.
+ */
+function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
+    const initialState = MP.deserialiseState(rawState);
+
+    const humanIdxs = Object.values(players).map(p => p.idx);
+    _mpBotIdxs = [];
+    for (let i = 0; i < maxPlayers; i++) {
+        if (!humanIdxs.includes(i)) _mpBotIdxs.push(i);
+    }
+
+    _mpMode     = true;
+    _myMPIdx    = myIdx;
+    NUM_PLAYERS = maxPlayers;
+    _state      = initialState;
+    _gameActive = true;
+    _turboMode  = false;
+
+    const byIdx = {};
+    for (const p of Object.values(players)) byIdx[p.idx] = p;
+    for (let i = 0; i < NUM_PLAYERS; i++) {
+        PLAYER_NAMES[i] = i === myIdx ? 'You'
+            : (byIdx[i]?.nickname ?? `Player ${i + 1}`);
+    }
+
+    for (const engine of Object.values(_engines)) engine.resetKnowledge();
+
+    Update('SETUP_PLAYERS', {
+        numPlayers:  NUM_PLAYERS,
+        playerName:  byIdx[myIdx]?.nickname ?? 'You',
+        avatarIndex: byIdx[myIdx]?.avatarIdx ?? 0,
+    });
+
+    const ds = decodeState(_state);
+    Update('CLEAR_PILE');
+    Update('ADD_TO_PILE', { card: ds.pile[0] });
+
+    const hands = {};
+    for (let p = 0; p < NUM_PLAYERS; p++) hands[_mpDispId(p)] = ds.hands[p];
+    // After rotation _myMPIdx always maps to 'yourCards'
+    Update('ANIMATE_DEAL', { hands, humanPlayerId: 'yourCards' });
+
+    // Set player names at each display position
+    for (let p = 0; p < NUM_PLAYERS; p++) {
+        Update('SET_PLAYER_NAME', { playerId: _mpDispId(p), name: PLAYER_NAMES[p] });
+    }
+
+    MP.off('stateUpdate', _onMPStateUpdate);
+    MP.on ('stateUpdate', _onMPStateUpdate);
+}
+
+/** Firebase 'stateUpdate' — another player made a move; sync local state. */
+function _onMPStateUpdate(rawState) {
+    if (!_mpMode || !_gameActive) return;
+
+    const incoming = MP.deserialiseState(rawState);
+
+    // Skip echo of our own move (applied locally already in _applyMPMove / _mpBotTurn)
+    if (_state &&
+        incoming.currentPlayer === _state.currentPlayer &&
+        incoming.eliminated    === _state.eliminated) {
+        return;
+    }
+
+    // Visualise the move that was just made
+    const prevCP = _state ? _state.currentPlayer : -1;
+    if (prevCP >= 0 && prevCP !== _myMPIdx) {
+        const ds = decodeState(incoming);
+        if (incoming.pileSize > _state.pileSize) {
+            for (let i = _state.pileSize; i < incoming.pileSize; i++) {
+                Update('ADD_TO_PILE', { card: ds.pile[i] });
+            }
+            Update('RENDER_HAND', {
+                playerId: _mpDispId(prevCP),
+                count:    _popcount(incoming.hands[prevCP]),
+            });
+        } else if (incoming.pileSize < _state.pileSize) {
+            Update('REMOVE_FROM_PILE', { count: _state.pileSize - incoming.pileSize });
+        }
+    }
+
+    _state = incoming;
+    setTimeout(_startMPTurn, POST_MOVE_MS);
+}
+
+/** Start a turn in multiplayer mode. */
+function _startMPTurn() {
+    if (!_state || !_gameActive) return;
+
+    if (isGameOver(_state)) { _endGame(); return; }
+
+    const ds = decodeState(_state);
+    const p  = _state.currentPlayer;
+
+    _renderHands(ds);
+    Update('HIGHLIGHT_PLAYER', { playerId: _mpDispId(p) });
+    Update('SHOW_MESSAGE', {
+        text: p === _myMPIdx
+            ? `Your turn  ·  Top: ${ds.topCard.rank}${ds.topCard.suit}`
+            : `${PLAYER_NAMES[p]}'s turn  ·  Top: ${ds.topCard.rank}${ds.topCard.suit}`,
+    });
+
+    const drawable  = _state.pileSize - 1;
+    const drawCount = Math.min(3, drawable);
+
+    if (p === _myMPIdx) {
+        _updateDrawBtn(drawCount);
+        Update('ENABLE_PLAY', { enabled: true });
+        Update('ENABLE_DRAW', { enabled: drawable > 0 });
+        Update('START_TIMER', { playerId: _mpDispId(p), isHuman: true });
+        _humanTimer = setTimeout(_humanTimerExpired, HUMAN_TURN_MS);
+    } else if (_mpBotIdxs.includes(p) && MP.isHost()) {
+        Update('ENABLE_PLAY', { enabled: false });
+        Update('ENABLE_DRAW', { enabled: false });
+        Update('START_TIMER', { playerId: _mpDispId(p), isHuman: false });
+        setTimeout(() => _mpBotTurn(p), _aiDelay());
+    } else {
+        Update('ENABLE_PLAY', { enabled: false });
+        Update('ENABLE_DRAW', { enabled: false });
+        Update('START_TIMER', { playerId: _mpDispId(p), isHuman: false });
+    }
+}
+
+/** Host: run Shark bot for the given seat and push new state to Firebase. */
+async function _mpBotTurn(playerIdx) {
+    if (!_state || !_gameActive || _state.currentPlayer !== playerIdx) return;
+
+    const engine = _engines[playerIdx] ?? (_engines[playerIdx] = new ISMCTSEngine('shark'));
+    const move   = engine.chooseMove(_state);
+
+    for (const eng of Object.values(_engines)) {
+        eng.observeMove(_state, move);
+        eng.advanceTree(move);
+    }
+
+    const dm = decodeMove(move);
+    const cp = _state.currentPlayer;
+    Update('STOP_TIMER');
+    if (dm.type === 'draw') {
+        Update('REMOVE_FROM_PILE', { count: dm.count });
+    } else {
+        Update('RENDER_HAND', {
+            playerId: _mpDispId(cp),
+            count:    Math.max(0, _popcount(_state.hands[cp]) - dm.cards.length),
+        });
+        const played = dm.cards;
+        setTimeout(() => { for (const card of played) Update('ADD_TO_PILE', { card }); }, 150);
+    }
+
+    const newState = applyMove(_state, move);
+    _state = newState;
+
+    try   { await MP.pushMove(newState); }
+    catch (e) { console.error('[MP] bot pushMove failed:', e); }
+    engine.cleanup();
+}
+
+/**
+ * Local human applies a move in multiplayer:
+ * update UI immediately, apply locally, then push to Firebase.
+ */
+async function _applyMPMove(move) {
+    if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+
+    for (const engine of Object.values(_engines)) {
+        engine.observeMove(_state, move);
+        engine.advanceTree(move);
+    }
+    Update('STOP_TIMER');
+    Update('ENABLE_PLAY', { enabled: false });
+    Update('ENABLE_DRAW', { enabled: false });
+    Update('DESELECT_ALL');
+
+    const dm = decodeMove(move);
+    if (dm.type === 'draw') {
+        Update('REMOVE_FROM_PILE', { count: dm.count });
+    } else {
+        for (const card of dm.cards) Update('ADD_TO_PILE', { card });
+    }
+
+    const newState = applyMove(_state, move);
+    _state = newState;
+
+    try   { await MP.pushMove(newState); }
+    catch (e) { console.error('[MP] pushMove failed:', e); }
 }

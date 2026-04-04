@@ -1053,3 +1053,132 @@ body.welcome-active #tapToStart {
     .player-top .cards { padding-left: 0; }
     .player-top .card { margin-left: var(--top-overlap-margin); }
 }
+
+/* ============================================================
+   Multiplayer Panel
+   ============================================================ */
+
+.mp-section { display: flex; flex-direction: column; gap: clamp(10px, 1.5vh, 16px); }
+.mp-section.hidden { display: none; }
+
+.mp-status-msg {
+    color: rgba(255,255,255,0.75);
+    font-size: clamp(13px, 2vw, 15px);
+    text-align: center;
+}
+
+.mp-divider {
+    color: rgba(255,255,255,0.45);
+    font-size: clamp(11px, 1.6vw, 13px);
+    text-align: center;
+    padding: 2px 0;
+}
+
+.mp-code-input {
+    text-align: center;
+    font-size: clamp(22px, 5vw, 32px);
+    letter-spacing: 0.18em;
+    font-weight: 700;
+}
+
+.mp-code-row {
+    color: rgba(255,255,255,0.80);
+    font-size: clamp(13px, 2vw, 15px);
+    text-align: center;
+}
+.mp-code-val {
+    font-family: 'NHF-Becker', 'Arial Black', Arial, sans-serif;
+    font-size: clamp(26px, 5.5vw, 38px);
+    color: #fff;
+    letter-spacing: 0.18em;
+    display: block;
+    margin-top: 2px;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.mp-player-list {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 1vh, 10px);
+    min-height: 60px;
+}
+
+.mp-player-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: clamp(7px, 1.2vh, 11px) 12px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: #fff;
+    font-size: clamp(13px, 2vw, 15px);
+}
+.mp-player-row.mp-player-empty {
+    color: rgba(255,255,255,0.35);
+    font-style: italic;
+    justify-content: center;
+    border: 1px dashed rgba(255,255,255,0.18);
+    background: transparent;
+}
+
+.mp-player-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-image: url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg');
+    background-size: 435% 435%;
+    background-repeat: no-repeat;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+    cursor: default;
+    transform: none !important;
+}
+
+.mp-host-ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.2vh, 14px);
+}
+.mp-host-ctrl.hidden { display: none; }
+
+.mp-max-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: rgba(255,255,255,0.82);
+    font-size: clamp(13px, 2vw, 15px);
+}
+
+.mp-count-btn {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.28);
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 80ms;
+}
+.mp-count-btn:hover { background: rgba(255,255,255,0.22); }
+
+#mp-max-val {
+    font-weight: 700;
+    font-size: clamp(16px, 2.5vw, 20px);
+    color: #fff;
+    min-width: 24px;
+    text-align: center;
+}
+
+.mp-error {
+    color: #ff7878;
+    font-size: clamp(12px, 1.8vw, 14px);
+    text-align: center;
+    padding: 6px 0;
+}
+.mp-error.hidden { display: none; }

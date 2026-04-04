@@ -1,3 +1,5 @@
+import * as MP from './multiplayer.js';
+
 // ============================================================
 // ui-manager.js  —  Pure Visual / Rendering Layer
 // Nine of Hearts
@@ -67,6 +69,8 @@ let _cbCardPlayed    = null;   // ([{rank, suit}]) => void
 let _cbDrawRequested = null;   // () => void
 let _cbGameStart     = null;   // () => void
 let _cbDealComplete  = null;   // () => void
+let _cbMPGameReady   = null;   // ({rawState,players,myIdx,maxPlayers}) => void
+let _cbMPHostStart   = null;   // ({players,maxPlayers}) => void
 
 /** Fires when the human player drags/taps cards onto the pile. */
 export function onCardPlayed(fn)    { _cbCardPlayed    = fn; }
@@ -79,6 +83,12 @@ export function onGameStart(fn)     { _cbGameStart     = fn; }
 
 /** Fires once the deal animation has fully completed. */
 export function onDealComplete(fn)  { _cbDealComplete  = fn; }
+
+/** Fires after the MP door animation with the initial game payload. */
+export function onMultiplayerReady(fn) { _cbMPGameReady = fn; }
+
+/** Fires when the host clicks Start in the MP lobby. */
+export function onMPHostStart(fn)      { _cbMPHostStart = fn; }
 
 /** Returns the current welcome-screen configuration chosen by the player. */
 export function getPlayerConfig() {
@@ -154,7 +164,7 @@ export function Update(command, payload = {}) {
             _stopTimer();
             break;
         case 'ANIMATE_DEAL':
-            _animateDealing(payload.hands).then(() => {
+            _animateDealing(payload.hands, payload.humanPlayerId).then(() => {
                 if (_cbDealComplete) _cbDealComplete();
             });
             break;
@@ -170,6 +180,14 @@ export function Update(command, payload = {}) {
         case 'SETUP_PLAYERS':
             _setupPlayers(payload.numPlayers ?? 4, payload.playerName ?? 'Player', payload.avatarIndex ?? 0);
             break;
+        case 'SET_PLAYER_NAME': {
+            const infoId = INFO_ID[payload.playerId];
+            if (infoId) {
+                const nameEl = document.querySelector(`#${infoId} .player-name`);
+                if (nameEl) nameEl.textContent = payload.name ?? '';
+            }
+            break;
+        }
         default:
             console.warn(`[ui-manager] Unknown command: "${command}"`);
     }
@@ -849,7 +867,7 @@ function _getSizeForVar(wVar, hVar) {
     return { w: r.width, h: r.height };
 }
 
-async function _animateDealing(hands) {
+async function _animateDealing(hands, humanId = HUMAN_ID) {
     const dealOrder = ['yourCards', 'player3Cards', 'player2Cards', 'player1Cards'];
     const counts    = Object.fromEntries(dealOrder.map(id => [id, (hands[id] || []).length]));
     const rounds    = Math.max(...Object.values(counts));
@@ -874,7 +892,7 @@ async function _animateDealing(hands) {
             if (r >= handArr.length) { dealIdx++; continue; }
 
             const container = document.getElementById(targetId);
-            const isHuman   = targetId === HUMAN_ID;
+            const isHuman   = targetId === humanId;
             const isTop     = targetId === 'player2Cards';
             const isSide    = SIDE_IDS.has(targetId);
             const cardData  = handArr[r];
@@ -1027,15 +1045,22 @@ function _buildWelcomeOverlay() {
 
     // ---- Game Mode ----
     const modePanel = _buildOptionPanel('gameMode', 'Game Mode',
-        [['bots', 'Land of Bots'], ['multi', 'Multiplayer (coming soon)']],
+        [['bots', 'Land of Bots'], ['multi', 'Multiplayer']],
         () => _gameMode,
-        v => { _gameMode = v; _updateMenuBtnLabels(); },
-        new Set(['multi'])
+        v => { _gameMode = v; _updateMenuBtnLabels(); }
     );
 
-    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, modePanel);
+    // ---- Multiplayer panel ----
+    const mpPanel = _buildMPPanel();
+
+    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, modePanel, mpPanel);
     ws.appendChild(ov);
     _updateMenuBtnLabels();
+
+    // Firebase: lobby updates → refresh lobby UI
+    MP.on('lobby', _onMPLobby);
+    // Firebase: game starts → door animation then hand off to game-controller
+    MP.on('gameStart', _onMPGameStart);
 }
 
 function _buildOptionPanel(id, title, options, getCurrent, onChange, disabledValues = new Set()) {
@@ -1083,6 +1108,244 @@ function _closeWelcomePanel() {
     ov.classList.add('hidden');
     ov.querySelectorAll('.welcome-panel').forEach(p => p.classList.add('hidden'));
     _updateMenuBtnLabels();
+}
+
+// ============================================================
+// Multiplayer Panel
+// ============================================================
+
+function _buildMPPanel() {
+    const panel = _makePanelBase('multiplayer', 'Multiplayer');
+
+    // -- Auth / loading section -----------------------------------------------
+    const authSec = document.createElement('div');
+    authSec.id = 'mp-auth';
+    authSec.className = 'mp-section';
+    const authMsg = document.createElement('p');
+    authMsg.className = 'mp-status-msg';
+    authMsg.textContent = 'Connecting…';
+    authSec.appendChild(authMsg);
+
+    // -- Create / Join section ------------------------------------------------
+    const choiceSec = document.createElement('div');
+    choiceSec.id = 'mp-choice';
+    choiceSec.className = 'mp-section hidden';
+
+    const createBtn = document.createElement('button');
+    createBtn.className = 'menu-btn';
+    createBtn.textContent = '＋ Create Room';
+    createBtn.addEventListener('click', async () => {
+        createBtn.disabled = true;
+        _mpSetError('');
+        try {
+            await MP.createRoom({
+                nickname:   _playerName,
+                avatarIdx:  _selectedAvatar,
+                maxPlayers: _numPlayers,
+            });
+            _mpShowSection('lobby');
+        } catch (e) {
+            _mpSetError(e.message);
+            createBtn.disabled = false;
+        }
+    });
+
+    const divider = document.createElement('div');
+    divider.className = 'mp-divider';
+    divider.textContent = '— or join with code —';
+
+    const codeInput = document.createElement('input');
+    codeInput.type = 'text';
+    codeInput.id = 'mpCodeInput';
+    codeInput.className = 'nickname-input mp-code-input';
+    codeInput.maxLength = 4;
+    codeInput.placeholder = '0000';
+    codeInput.inputMode = 'numeric';
+
+    const joinBtn = document.createElement('button');
+    joinBtn.className = 'menu-btn';
+    joinBtn.textContent = '→ Join Room';
+    joinBtn.addEventListener('click', async () => {
+        const code = codeInput.value.trim();
+        if (!/^\d{4}$/.test(code)) { _mpSetError('Enter a 4-digit room code'); return; }
+        joinBtn.disabled = true;
+        _mpSetError('');
+        try {
+            await MP.joinRoom({ code, nickname: _playerName, avatarIdx: _selectedAvatar });
+            _mpShowSection('lobby');
+        } catch (e) {
+            _mpSetError(e.message);
+            joinBtn.disabled = false;
+        }
+    });
+
+    choiceSec.append(createBtn, divider, codeInput, joinBtn);
+
+    // -- Lobby section --------------------------------------------------------
+    const lobbySec = document.createElement('div');
+    lobbySec.id = 'mp-lobby';
+    lobbySec.className = 'mp-section hidden';
+
+    const codeRow = document.createElement('div');
+    codeRow.className = 'mp-code-row';
+    codeRow.innerHTML = 'Room code: <span id="mp-code-display" class="mp-code-val">----</span>';
+
+    const playerList = document.createElement('div');
+    playerList.id = 'mp-player-list';
+    playerList.className = 'mp-player-list';
+
+    const hostCtrl = document.createElement('div');
+    hostCtrl.id = 'mp-host-ctrl';
+    hostCtrl.className = 'mp-host-ctrl hidden';
+
+    const maxRow = document.createElement('div');
+    maxRow.className = 'mp-max-row';
+    const maxLabel = document.createElement('span');
+    maxLabel.textContent = 'Max players: ';
+    const minusBtn = document.createElement('button');
+    minusBtn.className = 'mp-count-btn';
+    minusBtn.textContent = '−';
+    minusBtn.addEventListener('click', () => {
+        const n = Math.max(2, MP.getMaxPlayers() - 1);
+        MP.setMaxPlayers(n);
+        document.getElementById('mp-max-val').textContent = n;
+    });
+    const maxVal = document.createElement('span');
+    maxVal.id = 'mp-max-val';
+    maxVal.textContent = String(_numPlayers);
+    const plusBtn = document.createElement('button');
+    plusBtn.className = 'mp-count-btn';
+    plusBtn.textContent = '+';
+    plusBtn.addEventListener('click', () => {
+        const n = Math.min(4, MP.getMaxPlayers() + 1);
+        MP.setMaxPlayers(n);
+        document.getElementById('mp-max-val').textContent = n;
+    });
+    maxRow.append(maxLabel, minusBtn, maxVal, plusBtn);
+
+    const startGameBtn = document.createElement('button');
+    startGameBtn.id = 'mp-start-game-btn';
+    startGameBtn.className = 'menu-btn menu-btn-start';
+    startGameBtn.textContent = '▶ Start Game';
+    startGameBtn.addEventListener('click', () => {
+        if (_cbMPHostStart) {
+            _cbMPHostStart({ players: MP.getPlayers(), maxPlayers: MP.getMaxPlayers() });
+        }
+    });
+
+    hostCtrl.append(maxRow, startGameBtn);
+
+    const guestWait = document.createElement('div');
+    guestWait.id = 'mp-guest-wait';
+    guestWait.className = 'mp-status-msg hidden';
+    guestWait.textContent = 'Waiting for host to start…';
+
+    lobbySec.append(codeRow, playerList, hostCtrl, guestWait);
+
+    // -- Error display --------------------------------------------------------
+    const errEl = document.createElement('div');
+    errEl.id = 'mp-error';
+    errEl.className = 'mp-error hidden';
+
+    // -- Back button ----------------------------------------------------------
+    const backBtn = _makePanelCloseBtn('← Back');
+    backBtn.addEventListener('click', () => {
+        MP.leaveRoom();
+        _mpShowSection('choice');
+    });
+
+    panel.append(authSec, choiceSec, lobbySec, errEl, backBtn);
+    return panel;
+}
+
+/** Show one MP sub-section and hide the others. */
+function _mpShowSection(id) {
+    for (const sec of ['auth', 'choice', 'lobby']) {
+        const el = document.getElementById(`mp-${sec}`);
+        if (el) el.classList.toggle('hidden', sec !== id);
+    }
+    document.getElementById('mp-error')?.classList.add('hidden');
+}
+
+/** Set (or clear) the MP error message. */
+function _mpSetError(msg) {
+    const el = document.getElementById('mp-error');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.toggle('hidden', !msg);
+}
+
+/** Open the MP panel and begin async auth. */
+async function _openMPPanel() {
+    _openWelcomePanel('multiplayer');
+    _mpShowSection('auth');
+    try {
+        await MP.initAuth();
+        _mpShowSection('choice');
+    } catch (e) {
+        _mpSetError('Connection failed: ' + e.message);
+    }
+}
+
+/** Firebase 'lobby' event — update the lobby player list. */
+function _onMPLobby(data) {
+    const panel = document.getElementById('welcomePanel-multiplayer');
+    if (!panel || panel.classList.contains('hidden')) return;
+
+    const codeDisplay = document.getElementById('mp-code-display');
+    if (codeDisplay) codeDisplay.textContent = data.code;
+
+    const maxVal = document.getElementById('mp-max-val');
+    if (maxVal) maxVal.textContent = data.maxPlayers;
+
+    // Build player rows
+    const list = document.getElementById('mp-player-list');
+    if (list) {
+        list.innerHTML = '';
+        const sorted = Object.values(data.players).sort((a, b) => a.idx - b.idx);
+        for (let i = 0; i < data.maxPlayers; i++) {
+            const row = document.createElement('div');
+            row.className = 'mp-player-row';
+            const p = sorted.find(x => x.idx === i);
+            if (p) {
+                const av = document.createElement('div');
+                av.className = `mp-player-avatar avatar-pos-${p.avatarIdx ?? 0}`;
+                const name = document.createElement('span');
+                name.textContent = (p.idx === data.myIdx ? '(You) ' : '') + (p.nickname || `Player ${i + 1}`);
+                row.append(av, name);
+            } else {
+                row.classList.add('mp-player-empty');
+                row.textContent = `— Seat ${i + 1} (open) —`;
+            }
+            list.appendChild(row);
+        }
+    }
+
+    // Show/hide host controls
+    const hostCtrl = document.getElementById('mp-host-ctrl');
+    const guestWait = document.getElementById('mp-guest-wait');
+    if (hostCtrl)  hostCtrl.classList.toggle('hidden',  !data.isHost);
+    if (guestWait) guestWait.classList.toggle('hidden', data.isHost);
+}
+
+/** Firebase 'gameStart' event — run the lift-door transition, then call _cbMPGameReady. */
+function _onMPGameStart(data) {
+    const ws = document.getElementById('welcomeScreen');
+    if (!ws) {
+        if (_cbMPGameReady) _cbMPGameReady(data);
+        return;
+    }
+
+    ws.style.zIndex = '21000';
+    ws.classList.remove('doors-open');
+    setTimeout(() => {
+        ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
+        ws.classList.add('doors-open');
+        setTimeout(() => {
+            if (_cbMPGameReady) _cbMPGameReady(data);
+            setTimeout(() => ws.remove(), 1300);
+        }, 500);
+    }, 1300);
 }
 
 function _updateMenuBtnLabels() {
@@ -1141,6 +1404,11 @@ function _setupListeners() {
             _initAudio();
             if (_welcomeSoundPending) { _welcomeSoundPending = false; _playWelcomeSound(); }
             document.getElementById('tapToStart')?.remove();
+
+            if (_gameMode === 'multi') {
+                _openMPPanel();
+                return;
+            }
 
             const ws = document.getElementById('welcomeScreen');
             if (!ws) { if (_cbGameStart) _cbGameStart(); return; }

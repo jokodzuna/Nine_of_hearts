@@ -681,16 +681,24 @@ async function _applyMPMove(move) {
     const newState  = applyMove(_state, move);
     _state = newState;
 
+    const ds = decodeState(_state);
     if (dm.type === 'draw') {
         Update('REMOVE_FROM_PILE', { count: dm.count });
-        // Re-render hand immediately — echo is skipped so we'd wait until
-        // the next player's Firebase event otherwise.
-        const ds = decodeState(_state);
-        Update('RENDER_HAND', { playerId: _mpDispId(_myMPIdx), cards: ds.hands[_myMPIdx] });
     } else {
         for (const card of dm.cards) Update('ADD_TO_PILE', { card });
     }
+    // Always re-render hand immediately — the echo is suppressed so without
+    // this the hand only updates when the next opponent Firebase event arrives.
+    Update('RENDER_HAND', { playerId: _mpDispId(_myMPIdx), cards: ds.hands[_myMPIdx] });
 
     try   { await MP.pushMove(newState); }
     catch (e) { console.error('[MP] pushMove failed:', e); }
+
+    // Chain the next turn directly.  The Firebase echo is always suppressed for
+    // our own moves, so if the only other human is eliminated (or it's a bot's
+    // turn next) nobody else will push and trigger _onMPStateUpdate → _startMPTurn.
+    // The double-call when another human IS active is harmless: their branch just
+    // highlights the other player and waits; the guard in _mpBotTurn prevents
+    // duplicate bot execution.
+    setTimeout(_startMPTurn, POST_MOVE_MS);
 }

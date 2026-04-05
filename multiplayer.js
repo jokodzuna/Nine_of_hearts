@@ -65,8 +65,15 @@ export const getUID         = () => _uid;
 export const getPlayerIndex = () => _playerIndex;
 export const getRoomCode    = () => _roomCode;
 export const isHost         = () => _isHost;
+export const isInRoom       = () => _roomCode !== null;
 export const getMaxPlayers  = () => _maxPlayers;
 export const getPlayers     = () => _players;
+
+/** Any player: update own avatarIdx in the lobby (real-time exclusion). */
+export async function updateAvatar(avatarIdx) {
+    if (!_roomCode || !_uid) return;
+    await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), { avatarIdx });
+}
 
 // ---- Room management --------------------------------------------------------
 

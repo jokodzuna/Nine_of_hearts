@@ -46,6 +46,7 @@ let _selectedAvatar = 0;
 let _numPlayers     = 4;
 let _difficulty     = 'easy';
 let _gameMode       = 'bots';
+let _mpTakenAvatars = new Set();   // avatarIdx values taken by OTHER lobby players
 
 const _AVATAR_BG_POS = [
     '14% 15%', '50% 15%', '86% 15%',
@@ -1047,8 +1048,10 @@ function _buildWelcomeOverlay() {
         const av = document.createElement('div');
         av.className = `avatar-preview avatar-pos-${i}${i === _selectedAvatar ? ' selected' : ''}`;
         av.addEventListener('click', () => {
+            if (_mpTakenAvatars.has(i)) return;   // taken by another lobby player
             _selectedAvatar = i;
             grid.querySelectorAll('.avatar-preview').forEach((el, idx) => el.classList.toggle('selected', idx === i));
+            if (MP.isInRoom()) MP.updateAvatar(i).catch(console.error);
         });
         grid.appendChild(av);
     }
@@ -1069,17 +1072,10 @@ function _buildWelcomeOverlay() {
         v => { _difficulty = v; _updateMenuBtnLabels(); }
     );
 
-    // ---- Game Mode ----
-    const modePanel = _buildOptionPanel('gameMode', 'Game Mode',
-        [['bots', 'Land of Bots'], ['multi', 'Multiplayer']],
-        () => _gameMode,
-        v => { _gameMode = v; _updateMenuBtnLabels(); }
-    );
-
     // ---- Multiplayer panel ----
     const mpPanel = _buildMPPanel();
 
-    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, modePanel, mpPanel);
+    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, mpPanel);
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 
@@ -1277,6 +1273,9 @@ function _buildMPPanel() {
     const backBtn = _makePanelCloseBtn('← Back');
     backBtn.addEventListener('click', () => {
         MP.leaveRoom();
+        _mpTakenAvatars = new Set();
+        const avGrid = document.querySelector('#welcomePanel-avatar .avatar-grid');
+        if (avGrid) avGrid.querySelectorAll('.avatar-preview').forEach(el => el.classList.remove('taken'));
         _mpShowSection('choice');
     });
 
@@ -1352,6 +1351,19 @@ function _onMPLobby(data) {
     const guestWait = document.getElementById('mp-guest-wait');
     if (hostCtrl)  hostCtrl.classList.toggle('hidden',  !data.isHost);
     if (guestWait) guestWait.classList.toggle('hidden', data.isHost);
+
+    // Refresh taken-avatar state so the avatar picker greys out other players' choices
+    _mpTakenAvatars = new Set(
+        Object.values(data.players)
+            .filter(p => p.idx !== data.myIdx)
+            .map(p => p.avatarIdx)
+    );
+    const avGrid = document.querySelector('#welcomePanel-avatar .avatar-grid');
+    if (avGrid) {
+        avGrid.querySelectorAll('.avatar-preview').forEach((el, i) => {
+            el.classList.toggle('taken', _mpTakenAvatars.has(i));
+        });
+    }
 }
 
 /** Firebase 'gameStart' event — run the lift-door transition, then call _cbMPGameReady. */
@@ -1376,15 +1388,18 @@ function _onMPGameStart(data) {
 
 function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
-    const modeLabel = { bots: 'Land of Bots', multi: 'Multiplayer' };
     const nb = document.getElementById('nicknameBtn');
     if (nb) nb.textContent = `Nickname: ${_playerName}`;
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
     const db = document.getElementById('difficultyBtn');
     if (db) db.textContent = `Difficulty: ${diffLabel[_difficulty] ?? _difficulty}`;
-    const mb = document.getElementById('gameModeBtn');
-    if (mb) mb.textContent = `Game Mode: ${modeLabel[_gameMode] ?? _gameMode}`;
+    const mb = document.getElementById('multiBtn');
+    if (mb) {
+        const on = _gameMode === 'multi';
+        mb.textContent = on ? '✓ Multiplayer ON' : 'Multiplayer';
+        mb.classList.toggle('menu-btn-toggled', on);
+    }
 }
 
 function _updateLayoutDebug() {
@@ -1419,7 +1434,11 @@ function _setupListeners() {
     document.getElementById('avatarBtn')    ?.addEventListener('click', () => _openWelcomePanel('avatar'));
     document.getElementById('playersBtn')   ?.addEventListener('click', () => _openWelcomePanel('players'));
     document.getElementById('difficultyBtn')?.addEventListener('click', () => _openWelcomePanel('difficulty'));
-    document.getElementById('gameModeBtn')  ?.addEventListener('click', () => _openWelcomePanel('gameMode'));
+    document.getElementById('multiBtn')?.addEventListener('click', () => {
+        _gameMode = _gameMode === 'multi' ? 'bots' : 'multi';
+        _updateMenuBtnLabels();
+        if (_gameMode === 'multi') _openMPPanel();
+    });
     document.getElementById('exitButton')   ?.addEventListener('click', () => { /* no-op on web */ });
 
     const startBtn = document.getElementById('startButton');

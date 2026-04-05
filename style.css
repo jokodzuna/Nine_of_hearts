@@ -305,6 +305,19 @@ body.welcome-active #tapToStart {
         inset 0 1px 0 rgba(255,255,255,0.12);
 }
 
+/* TOGGLED — Multiplayer button active state */
+.menu-btn-toggled {
+    background: linear-gradient(180deg, #f7d76a 0%, #d4a017 50%, #a07800 100%);
+    color: #1a0e00;
+    box-shadow:
+        0 5px 0 #5c4200,
+        0 8px 18px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.30);
+}
+.menu-btn-toggled:hover {
+    background: linear-gradient(180deg, #ffe080 0%, #e6b520 50%, #b88a00 100%);
+}
+
 /* START — larger, red accent */
 .menu-btn-start {
     width: min(440px, 86vw);
@@ -506,6 +519,11 @@ body.welcome-active #tapToStart {
     flex-shrink: 0;
 }
 .avatar-preview:hover   { transform: scale(1.08); }
+.avatar-preview.taken {
+    filter: grayscale(100%) opacity(0.35);
+    cursor: not-allowed;
+    transform: none !important;
+}
 .avatar-preview.selected {
     border-color: #f4f1e6;
     box-shadow: 0 0 0 3px #e11d48;

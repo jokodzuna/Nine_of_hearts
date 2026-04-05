@@ -188,6 +188,15 @@ export function Update(command, payload = {}) {
             }
             break;
         }
+        case 'SETUP_PLAYER_AREAS': {
+            const rightArea = document.querySelector('.player-area.player-right');
+            const topArea   = document.querySelector('.player-area.player-top');
+            const leftArea  = document.querySelector('.player-area.player-left');
+            if (rightArea) rightArea.style.display = payload.showRight ? '' : 'none';
+            if (topArea)   topArea.style.display   = payload.showTop   ? '' : 'none';
+            if (leftArea)  leftArea.style.display  = payload.showLeft  ? '' : 'none';
+            break;
+        }
         case 'SET_PLAYER_AVATAR': {
             const infoId = INFO_ID[payload.playerId];
             if (infoId) {

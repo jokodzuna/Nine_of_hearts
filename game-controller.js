@@ -531,6 +531,14 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
     // After rotation _myMPIdx always maps to 'yourCards'
     Update('ANIMATE_DEAL', { hands, humanPlayerId: 'yourCards' });
 
+    // Show/hide player areas based on actual rotated seat occupancy
+    const _occupied = new Set(Array.from({ length: NUM_PLAYERS }, (_, p) => _mpDispId(p)));
+    Update('SETUP_PLAYER_AREAS', {
+        showRight: _occupied.has('player1Cards'),
+        showTop:   _occupied.has('player2Cards'),
+        showLeft:  _occupied.has('player3Cards'),
+    });
+
     // Set player names and avatars at each display position
     for (let p = 0; p < NUM_PLAYERS; p++) {
         Update('SET_PLAYER_NAME',   { playerId: _mpDispId(p), name: PLAYER_NAMES[p] });
@@ -667,15 +675,19 @@ async function _applyMPMove(move) {
     Update('ENABLE_DRAW', { enabled: false });
     Update('DESELECT_ALL');
 
-    const dm = decodeMove(move);
+    const dm       = decodeMove(move);
+    const newState  = applyMove(_state, move);
+    _state = newState;
+
     if (dm.type === 'draw') {
         Update('REMOVE_FROM_PILE', { count: dm.count });
+        // Re-render hand immediately — echo is skipped so we'd wait until
+        // the next player's Firebase event otherwise.
+        const ds = decodeState(_state);
+        Update('RENDER_HAND', { playerId: _mpDispId(_myMPIdx), cards: ds.hands[_myMPIdx] });
     } else {
         for (const card of dm.cards) Update('ADD_TO_PILE', { card });
     }
-
-    const newState = applyMove(_state, move);
-    _state = newState;
 
     try   { await MP.pushMove(newState); }
     catch (e) { console.error('[MP] pushMove failed:', e); }

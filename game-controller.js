@@ -531,9 +531,10 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
     // After rotation _myMPIdx always maps to 'yourCards'
     Update('ANIMATE_DEAL', { hands, humanPlayerId: 'yourCards' });
 
-    // Set player names at each display position
+    // Set player names and avatars at each display position
     for (let p = 0; p < NUM_PLAYERS; p++) {
-        Update('SET_PLAYER_NAME', { playerId: _mpDispId(p), name: PLAYER_NAMES[p] });
+        Update('SET_PLAYER_NAME',   { playerId: _mpDispId(p), name: PLAYER_NAMES[p] });
+        Update('SET_PLAYER_AVATAR', { playerId: _mpDispId(p), avatarIdx: byIdx[p]?.avatarIdx ?? 0 });
     }
 
     MP.off('stateUpdate', _onMPStateUpdate);
@@ -644,6 +645,10 @@ async function _mpBotTurn(playerIdx) {
     try   { await MP.pushMove(newState); }
     catch (e) { console.error('[MP] bot pushMove failed:', e); }
     engine.cleanup();
+
+    // Echo is skipped on the host (same currentPlayer after local update),
+    // so chain the next turn directly instead of waiting for Firebase.
+    setTimeout(_startMPTurn, POST_MOVE_MS);
 }
 
 /**

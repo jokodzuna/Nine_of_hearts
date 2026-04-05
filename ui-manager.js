@@ -188,6 +188,23 @@ export function Update(command, payload = {}) {
             }
             break;
         }
+        case 'SET_PLAYER_AVATAR': {
+            const infoId = INFO_ID[payload.playerId];
+            if (infoId) {
+                const avatarEl = document.querySelector(`#${infoId} .avatar`);
+                if (avatarEl) {
+                    avatarEl.textContent = '';
+                    const pos = _AVATAR_BG_POS[payload.avatarIdx] ?? _AVATAR_BG_POS[0];
+                    Object.assign(avatarEl.style, {
+                        backgroundImage:    "url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg')",
+                        backgroundSize:     '435% 435%',
+                        backgroundPosition: pos,
+                        backgroundRepeat:   'no-repeat',
+                    });
+                }
+            }
+            break;
+        }
         default:
             console.warn(`[ui-manager] Unknown command: "${command}"`);
     }

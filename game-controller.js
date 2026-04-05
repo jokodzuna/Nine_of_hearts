@@ -565,17 +565,19 @@ function _onMPStateUpdate(rawState) {
     // Visualise the move that was just made
     const prevCP = _state ? _state.currentPlayer : -1;
     if (prevCP >= 0 && prevCP !== _myMPIdx) {
-        const ds = decodeState(incoming);
-        if (incoming.pileSize > _state.pileSize) {
-            for (let i = _state.pileSize; i < incoming.pileSize; i++) {
+        const ds         = decodeState(incoming);
+        const pileEl     = document.getElementById('pile');
+        const uiPileCount = pileEl ? pileEl.children.length : 0;
+        if (incoming.pileSize > uiPileCount) {
+            for (let i = uiPileCount; i < incoming.pileSize; i++) {
                 Update('ADD_TO_PILE', { card: ds.pile[i] });
             }
             Update('RENDER_HAND', {
                 playerId: _mpDispId(prevCP),
                 count:    _popcount(incoming.hands[prevCP]),
             });
-        } else if (incoming.pileSize < _state.pileSize) {
-            Update('REMOVE_FROM_PILE', { count: _state.pileSize - incoming.pileSize });
+        } else if (incoming.pileSize < uiPileCount) {
+            Update('REMOVE_FROM_PILE', { count: uiPileCount - incoming.pileSize });
         }
     }
 

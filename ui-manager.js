@@ -593,8 +593,11 @@ function _addCardToPile(cardData) {
 function _removeFromPile(count) {
     const pile = document.getElementById('pile');
     if (!pile) return;
-    for (let i = 0; i < count; i++) {
-        if (pile.lastElementChild) pile.lastElementChild.remove();
+    // Never remove the first child — the 9♥ is the permanent base card
+    const maxRemovable = Math.max(0, pile.children.length - 1);
+    const n = Math.min(count, maxRemovable);
+    for (let i = 0; i < n; i++) {
+        if (pile.lastElementChild !== pile.firstElementChild) pile.lastElementChild.remove();
     }
 }
 

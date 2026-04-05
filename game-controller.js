@@ -420,8 +420,10 @@ function _renderHands(ds) {
     for (let p = 0; p < NUM_PLAYERS; p++) {
         const dispId = _mpDispId(p);
         if (p === humanIdx) {
-            const el = document.getElementById(dispId);
-            if (!el || el.querySelectorAll('.card').length !== ds.hands[p].length) {
+            // In MP mode skip the count-check optimisation — always re-render so
+            // the hand is never stale regardless of player count or turn timing.
+            if (_mpMode || !document.getElementById(dispId) ||
+                document.getElementById(dispId).querySelectorAll('.card').length !== ds.hands[p].length) {
                 Update('RENDER_HAND', { playerId: dispId, cards: ds.hands[p] });
             }
         } else {

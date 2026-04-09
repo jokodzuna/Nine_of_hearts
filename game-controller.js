@@ -39,6 +39,7 @@ import {
     onMPHostStart,
     onNewGame,
     onMainMenu,
+    onHostLeft,
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
@@ -134,6 +135,7 @@ onMultiplayerReady(_startMPGame);
 onMPHostStart(_handleMPHostStart);
 onNewGame(_handleNewGame);
 onMainMenu(_handleMainMenu);
+onHostLeft(_handleHostLeft);
 
 // ============================================================
 // Game Flow
@@ -356,9 +358,11 @@ function _endGame() {
 
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (!(_state.eliminated & (1 << p))) {
-            const text = _bannerText(p);
+            const text   = _bannerText(p);
+            const isMP   = _mpMode;
+            const isHost = MP.isHost();
             _mpMode = false;
-            Update('SHOW_GAME_OVER_BANNER', { text });
+            Update('SHOW_GAME_OVER_BANNER', { text, isMP, isHost });
             return;
         }
     }
@@ -383,8 +387,10 @@ function _forceEndGame() {
 
     const loserIdx = _findForcedLoser();
     const text     = _bannerText(loserIdx);
+    const isMP     = _mpMode;
+    const isHost   = MP.isHost();
     _mpMode = false;
-    Update('SHOW_GAME_OVER_BANNER', { text });
+    Update('SHOW_GAME_OVER_BANNER', { text, isMP, isHost });
 }
 
 /**
@@ -494,10 +500,9 @@ function _matchPlay(uiCards) {
 // Post-game handlers (NEW GAME / MAIN MENU)
 // ============================================================
 
-async function _handleNewGame({ closeScreen }) {
+function _handleNewGame({ onReady }) {
     if (_lastMPMode) {
         if (MP.isHost()) {
-            closeScreen();
             const newState = createInitialState(NUM_PLAYERS);
             MP.restartGame(newState).catch(e => console.error('[MP] restartGame failed:', e));
             _startMPGame({
@@ -506,16 +511,27 @@ async function _handleNewGame({ closeScreen }) {
                 myIdx:      MP.getPlayerIndex(),
                 maxPlayers: MP.getMaxPlayers(),
             });
+            onReady();
         }
-        // Guest: screen stays with closed doors; Firebase gameStart will trigger _onMPGameStart
+        // Guest: screen stays with closed doors; Firebase 'gameStart' triggers _onMPGameStart
     } else {
-        closeScreen();
         _startGame(_lastLocalConfig);
+        onReady();
     }
 }
 
 function _handleMainMenu() {
-    if (_lastMPMode) MP.leaveRoom();
+    if (_lastMPMode) {
+        if (MP.isHost()) {
+            MP.hostReturnToMenu().catch(e => console.error('[MP] hostReturnToMenu failed:', e));
+        } else {
+            MP.leaveRoom();
+        }
+    }
+}
+
+function _handleHostLeft() {
+    MP.leaveRoom();
 }
 
 /** Called when the host clicks '▶ Start Game' in the MP lobby. */

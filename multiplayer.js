@@ -203,6 +203,14 @@ export async function restartGame(gameState) {
     });
 }
 
+/** Host-only: signal all guests to return to main menu, then leave room. */
+export async function hostReturnToMenu() {
+    if (!_isHost || !_roomCode) return;
+    const code = _roomCode;
+    await update(ref(_db, `rooms/${code}`), { status: 'hostLeft' });
+    leaveRoom();
+}
+
 // ---- State serialisation / deserialisation ----------------------------------
 
 function _serial(s) {
@@ -263,6 +271,10 @@ function _subscribeRoom(code) {
                 maxPlayers: room.maxPlayers,
                 players:    room.players ?? {},
             });
+        }
+
+        if (room.status === 'hostLeft') {
+            if (!_isHost) _emit('hostLeft');
         }
 
         if (room.status === 'playing') {

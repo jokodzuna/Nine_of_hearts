@@ -1208,7 +1208,7 @@ body.welcome-active #tapToStart {
 .game-over-banner {
     position: fixed;
     inset: 0;
-    z-index: 50000;
+    z-index: 10000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1222,15 +1222,6 @@ body.welcome-active #tapToStart {
     from { opacity: 0; transform: scale(1.1); }
     to   { opacity: 1; transform: scale(1);   }
 }
-@keyframes go-banner-out {
-    from { opacity: 1; transform: scale(1);    }
-    to   { opacity: 0; transform: scale(0.88); }
-}
-
-.game-over-banner.banner-exit {
-    animation: go-banner-out 0.35s ease-in both;
-}
-
 .go-banner-inner {
     text-align: center;
     padding: clamp(28px, 5vh, 52px) clamp(28px, 8vw, 72px);
@@ -1268,8 +1259,9 @@ body.welcome-active #tapToStart {
 #gameOverScreen {
     position: fixed;
     inset: 0;
-    z-index: 30000;
+    z-index: 20000;
     overflow: hidden;
+    background: transparent;
 }
 
 #gameOverScreen.doors-open .lift-door-left  { transform: translateX(-100%); }
@@ -1295,4 +1287,25 @@ body.welcome-active #tapToStart {
         repeating-linear-gradient(0deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 1px, rgba(0,0,0,0.02) 1px, rgba(0,0,0,0.02) 3px),
         repeating-linear-gradient(90deg, rgba(0,0,0,0.015), rgba(0,0,0,0.015) 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 6px);
     pointer-events: none;
+}
+
+.post-game-btn {
+    width: min(300px, 80vw) !important;
+}
+
+.post-game-wait-msg {
+    font-family: 'NHF-Becker', 'Arial Black', Arial, sans-serif;
+    font-size: clamp(13px, 2.2vw, 17px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    padding: 6px 0 14px;
+    animation: wait-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes wait-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
 }

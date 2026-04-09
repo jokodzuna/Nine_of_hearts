@@ -72,8 +72,9 @@ let _cbGameStart     = null;   // () => void
 let _cbDealComplete  = null;   // () => void
 let _cbMPGameReady   = null;   // ({rawState,players,myIdx,maxPlayers}) => void
 let _cbMPHostStart   = null;   // ({players,maxPlayers}) => void
-let _cbNewGame       = null;   // ({ closeScreen:fn }) => void
+let _cbNewGame       = null;   // ({ onReady:fn }) => void
 let _cbMainMenu      = null;   // () => void
+let _cbHostLeft      = null;   // () => void
 
 /** Fires when the human player drags/taps cards onto the pile. */
 export function onCardPlayed(fn)    { _cbCardPlayed    = fn; }
@@ -98,6 +99,9 @@ export function onNewGame(fn)          { _cbNewGame  = fn; }
 
 /** Fires when the player clicks MAIN MENU on the post-game screen. */
 export function onMainMenu(fn)         { _cbMainMenu = fn; }
+
+/** Fires when the MP host returns to main menu, directing guests to follow. */
+export function onHostLeft(fn)         { _cbHostLeft = fn; }
 
 /** Returns the current welcome-screen configuration chosen by the player. */
 export function getPlayerConfig() {
@@ -164,7 +168,7 @@ export function Update(command, payload = {}) {
             _showWinner(payload.playerName ?? '');
             break;
         case 'SHOW_GAME_OVER_BANNER':
-            _showGameOverBanner(payload.text ?? '');
+            _showGameOverBanner(payload.text ?? '', payload.isMP ?? false, payload.isHost ?? false);
             break;
         case 'SHOW_MAIN_MENU':
             _showMainMenuScreen();
@@ -450,7 +454,8 @@ function _showMessage(text) {
     if (el) el.textContent = text;
 }
 
-function _showGameOverBanner(text) {
+function _showGameOverBanner(text, isMP, isHost) {
+    // Banner sits on top of the game table and stays until covered by closing doors
     const banner = document.createElement('div');
     banner.className = 'game-over-banner';
     const inner = document.createElement('div');
@@ -462,75 +467,101 @@ function _showGameOverBanner(text) {
     banner.appendChild(inner);
     document.body.appendChild(banner);
 
-    setTimeout(() => {
-        banner.classList.add('banner-exit');
-        setTimeout(() => {
-            banner.remove();
-            _showPostGameScreen();
-        }, 350);
-    }, 3000);
-}
-
-function _showPostGameScreen() {
+    // Door overlay — created with doors-open BEFORE appending so no opening animation fires
     const gs = document.createElement('div');
     gs.id = 'gameOverScreen';
-
     const doorLeft  = document.createElement('div');
     doorLeft.className = 'lift-door lift-door-left';
-    const innerL = document.createElement('div');
-    innerL.className = 'door-inner';
-    doorLeft.appendChild(innerL);
-
+    doorLeft.appendChild(Object.assign(document.createElement('div'), { className: 'door-inner' }));
     const doorRight = document.createElement('div');
     doorRight.className = 'lift-door lift-door-right';
-    const innerR = document.createElement('div');
-    innerR.className = 'door-inner';
-    doorRight.appendChild(innerR);
+    doorRight.appendChild(Object.assign(document.createElement('div'), { className: 'door-inner' }));
+    gs.appendChild(doorLeft);
+    gs.appendChild(doorRight);
+    gs.classList.add('doors-open');  // instantly open (off-screen) — no transition yet
+    document.body.appendChild(gs);
 
+    // After 1 s: close doors over the banner + game table
+    setTimeout(() => {
+        gs.classList.remove('doors-open');  // 1.2 s close animation
+        setTimeout(() => {
+            banner.remove();  // safely hidden behind closed doors
+            // 1 s pause while doors are closed
+            setTimeout(() => {
+                // Build post-game menu and reveal it by opening doors
+                const menu = _buildPostGameMenu(gs, isMP, isHost);
+                gs.appendChild(menu);
+                gs.classList.add('doors-open');  // 1.2 s open animation
+            }, 1000);
+        }, 1300);
+    }, 1000);
+}
+
+/** Build the post-game menu div and attach button handlers. */
+function _buildPostGameMenu(gs, isMP, isHost) {
     const menu = document.createElement('div');
     menu.className = 'post-game-menu';
 
-    const newGameBtn = document.createElement('button');
-    newGameBtn.className = 'menu-btn menu-btn-start';
-    newGameBtn.textContent = '\u25B6 NEW GAME';
+    const disableAll = () => menu.querySelectorAll('button').forEach(b => { b.disabled = true; });
+
+    if (!isMP || isHost) {
+        // Local game or MP host: show NEW GAME button
+        const newGameBtn = document.createElement('button');
+        newGameBtn.className = 'menu-btn menu-btn-start post-game-btn';
+        newGameBtn.textContent = '\u25B6 NEW GAME';
+        newGameBtn.addEventListener('click', () => {
+            disableAll();
+            gs.classList.remove('doors-open');  // close doors
+            setTimeout(() => {
+                // 1 s pause
+                setTimeout(() => {
+                    menu.style.display = 'none';  // hide menu — game will be set up behind doors
+                    if (_cbNewGame) {
+                        _cbNewGame({
+                            onReady: () => {
+                                gs.classList.add('doors-open');  // open doors → new game revealed
+                                setTimeout(() => gs.remove(), 1300);
+                            }
+                        });
+                    } else {
+                        gs.remove();
+                    }
+                }, 1000);
+            }, 1300);
+        });
+        menu.appendChild(newGameBtn);
+    } else {
+        // MP guest: waiting message
+        const waitMsg = document.createElement('div');
+        waitMsg.className = 'post-game-wait-msg';
+        waitMsg.textContent = 'Waiting for host to start a new game\u2026';
+        menu.appendChild(waitMsg);
+    }
 
     const mainMenuBtn = document.createElement('button');
-    mainMenuBtn.className = 'menu-btn';
+    mainMenuBtn.className = 'menu-btn post-game-btn';
     mainMenuBtn.textContent = 'MAIN MENU';
-
-    menu.appendChild(newGameBtn);
-    menu.appendChild(mainMenuBtn);
-    gs.appendChild(doorLeft);
-    gs.appendChild(doorRight);
-    gs.appendChild(menu);
-    document.body.appendChild(gs);
-
-    requestAnimationFrame(() => requestAnimationFrame(() => gs.classList.add('doors-open')));
-
-    newGameBtn.addEventListener('click', () => {
-        newGameBtn.disabled = true;
-        mainMenuBtn.disabled = true;
-        gs.classList.remove('doors-open');
-        setTimeout(() => {
-            if (_cbNewGame) {
-                _cbNewGame({ closeScreen: () => gs.remove() });
-            } else {
-                gs.remove();
-            }
-        }, 1300);
-    });
-
     mainMenuBtn.addEventListener('click', () => {
-        newGameBtn.disabled = true;
-        mainMenuBtn.disabled = true;
-        const ws = document.getElementById('welcomeScreen');
-        if (ws) {
-            ws.style.display = '';
-            ws.style.zIndex  = '19999';
-            ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = '');
-            ws.classList.remove('doors-open');
-        }
-        gs.classList.remove('doors-open');
+        disableAll();
+        _doMainMenuTransition(gs);
+    });
+    menu.appendChild(mainMenuBtn);
+
+    return menu;
+}
+
+/** Shared door-close → 1 s pause → welcome-screen-open transition for main menu. */
+function _doMainMenuTransition(gs) {
+    // Pre-position welcome screen behind the door overlay (lower z-index)
+    const ws = _prepareMainMenuScreen(false);
+    if (ws) {
+        ws.style.zIndex = '18000';
+        ws.classList.remove('doors-open');
+    }
+
+    gs.classList.remove('doors-open');  // close door overlay (1.2 s)
+    setTimeout(() => {
+        // 1 s pause
         setTimeout(() => {
             gs.remove();
             if (ws) {
@@ -538,18 +569,35 @@ function _showPostGameScreen() {
                 requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
             }
             if (_cbMainMenu) _cbMainMenu();
-        }, 1300);
-    });
+        }, 1000);
+    }, 1300);
 }
 
-function _showMainMenuScreen() {
+/** Reset welcome screen state to main menu (not MP lobby panel). */
+function _prepareMainMenuScreen(openDoors = true) {
+    _gameMode = 'bots';
+    _mpTakenAvatars = new Set();
+    _updateMenuBtnLabels();
+    document.querySelector('#welcomePanel-avatar .avatar-grid')
+        ?.querySelectorAll('.avatar-preview').forEach(el => el.classList.remove('taken'));
+    const ov = document.getElementById('welcomeOverlay');
+    if (ov) { ov.classList.add('hidden'); ov.style.removeProperty('display'); }
+
     const ws = document.getElementById('welcomeScreen');
-    if (!ws) return;
+    if (!ws) return null;
     ws.style.display = '';
-    ws.style.zIndex  = '21000';
-    ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = '');
-    ws.classList.remove('doors-open');
-    requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
+    ws.querySelector('.welcome-menu')?.style.removeProperty('display');
+    if (openDoors) {
+        ws.style.zIndex = '21000';
+        ws.classList.remove('doors-open');
+        requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
+    }
+    return ws;
+}
+
+/** Called via Update('SHOW_MAIN_MENU') — direct show without intermediate overlay. */
+function _showMainMenuScreen() {
+    _prepareMainMenuScreen(true);
 }
 
 function _showWinner(playerName) {
@@ -1202,6 +1250,7 @@ function _buildWelcomeOverlay() {
     MP.on('lobby', _onMPLobby);
     // Firebase: game starts → door animation then hand off to game-controller
     MP.on('gameStart', _onMPGameStart);
+    MP.on('hostLeft', _onMPHostLeft);
 }
 
 function _buildOptionPanel(id, title, options, getCurrent, onChange, disabledValues = new Set()) {
@@ -1491,13 +1540,21 @@ function _onMPGameStart(data) {
 
     const gs = document.getElementById('gameOverScreen');
     if (gs) {
-        const needClose = gs.classList.contains('doors-open');
-        const proceed   = () => { gs.remove(); doStart(); };
-        if (needClose) {
+        // Guest's post-game screen is showing; animate into the new game
+        const afterClose = () => {
+            gs.querySelector('.post-game-menu')?.style.setProperty('display', 'none');
+            // 1 s pause then start game and open doors
+            setTimeout(() => {
+                doStart();
+                gs.classList.add('doors-open');
+                setTimeout(() => gs.remove(), 1300);
+            }, 1000);
+        };
+        if (gs.classList.contains('doors-open')) {
             gs.classList.remove('doors-open');
-            setTimeout(proceed, 1300);
+            setTimeout(afterClose, 1300);
         } else {
-            proceed();
+            afterClose();
         }
         return;
     }
@@ -1505,6 +1562,7 @@ function _onMPGameStart(data) {
     const ws = document.getElementById('welcomeScreen');
     if (!ws) { doStart(); return; }
 
+    // First-time game start from lobby — existing animation
     ws.style.zIndex = '21000';
     ws.classList.remove('doors-open');
     setTimeout(() => {
@@ -1515,6 +1573,17 @@ function _onMPGameStart(data) {
             setTimeout(() => { ws.style.display = 'none'; }, 1300);
         }, 500);
     }, 1300);
+}
+
+/** Firebase 'hostLeft' event — guide guests back to main menu via door animation. */
+function _onMPHostLeft() {
+    if (_cbHostLeft) _cbHostLeft();
+    const gs = document.getElementById('gameOverScreen');
+    if (gs) {
+        _doMainMenuTransition(gs);
+    } else {
+        _showMainMenuScreen();
+    }
 }
 
 function _updateMenuBtnLabels() {

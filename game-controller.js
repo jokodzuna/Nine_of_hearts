@@ -37,6 +37,8 @@ import {
     getPlayerConfig,
     onMultiplayerReady,
     onMPHostStart,
+    onNewGame,
+    onMainMenu,
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
@@ -114,6 +116,10 @@ let _mpMode    = false;        // true during a multiplayer game
 let _myMPIdx   = 0;            // this client's player-seat index
 let _mpBotIdxs = [];           // seat indices managed as bots by the host
 
+// Post-game restart data
+let _lastMPMode     = false;
+let _lastLocalConfig = null;
+
 const TURBO_TURNS   = 10;
 
 // ============================================================
@@ -126,13 +132,17 @@ onCardPlayed(_humanPlayCards);
 onDrawRequested(_humanDraw);
 onMultiplayerReady(_startMPGame);
 onMPHostStart(_handleMPHostStart);
+onNewGame(_handleNewGame);
+onMainMenu(_handleMainMenu);
 
 // ============================================================
 // Game Flow
 // ============================================================
 
-function _startGame() {
-    const cfg = getPlayerConfig();
+function _startGame(cfgOverride = null) {
+    const cfg = cfgOverride ?? getPlayerConfig();
+    _lastMPMode     = false;
+    _lastLocalConfig = { ...cfg };
 
     // ---- Difficulty: one 'strong' bot leads, others fill ----
     const DIFF_PROFILES = {
@@ -344,20 +354,23 @@ function _endGame() {
 
     _renderHands(decodeState(_state));
 
-    const humanSeat = _mpMode ? _myMPIdx : HUMAN;
-    _mpMode = false;
-
-    // The loser is the one player who still holds cards
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (!(_state.eliminated & (1 << p))) {
-            Update('SHOW_MESSAGE', {
-                text: p === humanSeat
-                    ? "💔  YOU are the LOSER — don't be a loser next time!"
-                    : `💔  ${PLAYER_NAMES[p]} is the LOSER!`,
-            });
+            const text = _bannerText(p);
+            _mpMode = false;
+            Update('SHOW_GAME_OVER_BANNER', { text });
             return;
         }
     }
+    _mpMode = false;
+}
+
+function _bannerText(loserIdx) {
+    const humanSeat = _mpMode ? _myMPIdx : HUMAN;
+    const isBot     = _mpMode ? _mpBotIdxs.includes(loserIdx) : loserIdx !== HUMAN;
+    if (isBot)                   return 'BOTS ARE LOSERS!';
+    if (loserIdx === humanSeat)  return 'YOU ARE THE LOSER!';
+    return `${PLAYER_NAMES[loserIdx]} IS THE LOSER!`;
 }
 
 function _forceEndGame() {
@@ -369,9 +382,9 @@ function _forceEndGame() {
     _renderHands(decodeState(_state));
 
     const loserIdx = _findForcedLoser();
-    Update('SHOW_MESSAGE', {
-        text: `⏱️  Time's up! ${PLAYER_NAMES[loserIdx]} is the LOSER (most dead weight)!`,
-    });
+    const text     = _bannerText(loserIdx);
+    _mpMode = false;
+    Update('SHOW_GAME_OVER_BANNER', { text });
 }
 
 /**
@@ -477,6 +490,34 @@ function _matchPlay(uiCards) {
 // Multiplayer Mode
 // ============================================================
 
+// ============================================================
+// Post-game handlers (NEW GAME / MAIN MENU)
+// ============================================================
+
+async function _handleNewGame({ closeScreen }) {
+    if (_lastMPMode) {
+        if (MP.isHost()) {
+            closeScreen();
+            const newState = createInitialState(NUM_PLAYERS);
+            MP.restartGame(newState).catch(e => console.error('[MP] restartGame failed:', e));
+            _startMPGame({
+                rawState:   MP.serialiseState(newState),
+                players:    MP.getPlayers(),
+                myIdx:      MP.getPlayerIndex(),
+                maxPlayers: MP.getMaxPlayers(),
+            });
+        }
+        // Guest: screen stays with closed doors; Firebase gameStart will trigger _onMPGameStart
+    } else {
+        closeScreen();
+        _startGame(_lastLocalConfig);
+    }
+}
+
+function _handleMainMenu() {
+    if (_lastMPMode) MP.leaveRoom();
+}
+
 /** Called when the host clicks '▶ Start Game' in the MP lobby. */
 function _handleMPHostStart({ players, maxPlayers }) {
     const humanIdxs = Object.values(players).map(p => p.idx);
@@ -494,6 +535,7 @@ function _handleMPHostStart({ players, maxPlayers }) {
  * Sets up the MP game state and board for this client.
  */
 function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
+    _lastMPMode = true;
     const initialState = MP.deserialiseState(rawState);
 
     const humanIdxs = Object.values(players).map(p => p.idx);

@@ -72,6 +72,8 @@ let _cbGameStart     = null;   // () => void
 let _cbDealComplete  = null;   // () => void
 let _cbMPGameReady   = null;   // ({rawState,players,myIdx,maxPlayers}) => void
 let _cbMPHostStart   = null;   // ({players,maxPlayers}) => void
+let _cbNewGame       = null;   // ({ closeScreen:fn }) => void
+let _cbMainMenu      = null;   // () => void
 
 /** Fires when the human player drags/taps cards onto the pile. */
 export function onCardPlayed(fn)    { _cbCardPlayed    = fn; }
@@ -90,6 +92,12 @@ export function onMultiplayerReady(fn) { _cbMPGameReady = fn; }
 
 /** Fires when the host clicks Start in the MP lobby. */
 export function onMPHostStart(fn)      { _cbMPHostStart = fn; }
+
+/** Fires when the player clicks NEW GAME on the post-game screen. */
+export function onNewGame(fn)          { _cbNewGame  = fn; }
+
+/** Fires when the player clicks MAIN MENU on the post-game screen. */
+export function onMainMenu(fn)         { _cbMainMenu = fn; }
 
 /** Returns the current welcome-screen configuration chosen by the player. */
 export function getPlayerConfig() {
@@ -154,6 +162,12 @@ export function Update(command, payload = {}) {
             break;
         case 'SHOW_WINNER':
             _showWinner(payload.playerName ?? '');
+            break;
+        case 'SHOW_GAME_OVER_BANNER':
+            _showGameOverBanner(payload.text ?? '');
+            break;
+        case 'SHOW_MAIN_MENU':
+            _showMainMenuScreen();
             break;
         case 'HIGHLIGHT_PLAYER':
             _highlightPlayer(payload.playerId);
@@ -434,6 +448,108 @@ function _highlightPlayer(playerId) {
 function _showMessage(text) {
     const el = document.getElementById('message');
     if (el) el.textContent = text;
+}
+
+function _showGameOverBanner(text) {
+    const banner = document.createElement('div');
+    banner.className = 'game-over-banner';
+    const inner = document.createElement('div');
+    inner.className = 'go-banner-inner';
+    const textEl = document.createElement('div');
+    textEl.className = 'go-banner-text';
+    textEl.textContent = text;
+    inner.appendChild(textEl);
+    banner.appendChild(inner);
+    document.body.appendChild(banner);
+
+    setTimeout(() => {
+        banner.classList.add('banner-exit');
+        setTimeout(() => {
+            banner.remove();
+            _showPostGameScreen();
+        }, 350);
+    }, 3000);
+}
+
+function _showPostGameScreen() {
+    const gs = document.createElement('div');
+    gs.id = 'gameOverScreen';
+
+    const doorLeft  = document.createElement('div');
+    doorLeft.className = 'lift-door lift-door-left';
+    const innerL = document.createElement('div');
+    innerL.className = 'door-inner';
+    doorLeft.appendChild(innerL);
+
+    const doorRight = document.createElement('div');
+    doorRight.className = 'lift-door lift-door-right';
+    const innerR = document.createElement('div');
+    innerR.className = 'door-inner';
+    doorRight.appendChild(innerR);
+
+    const menu = document.createElement('div');
+    menu.className = 'post-game-menu';
+
+    const newGameBtn = document.createElement('button');
+    newGameBtn.className = 'menu-btn menu-btn-start';
+    newGameBtn.textContent = '\u25B6 NEW GAME';
+
+    const mainMenuBtn = document.createElement('button');
+    mainMenuBtn.className = 'menu-btn';
+    mainMenuBtn.textContent = 'MAIN MENU';
+
+    menu.appendChild(newGameBtn);
+    menu.appendChild(mainMenuBtn);
+    gs.appendChild(doorLeft);
+    gs.appendChild(doorRight);
+    gs.appendChild(menu);
+    document.body.appendChild(gs);
+
+    requestAnimationFrame(() => requestAnimationFrame(() => gs.classList.add('doors-open')));
+
+    newGameBtn.addEventListener('click', () => {
+        newGameBtn.disabled = true;
+        mainMenuBtn.disabled = true;
+        gs.classList.remove('doors-open');
+        setTimeout(() => {
+            if (_cbNewGame) {
+                _cbNewGame({ closeScreen: () => gs.remove() });
+            } else {
+                gs.remove();
+            }
+        }, 1300);
+    });
+
+    mainMenuBtn.addEventListener('click', () => {
+        newGameBtn.disabled = true;
+        mainMenuBtn.disabled = true;
+        const ws = document.getElementById('welcomeScreen');
+        if (ws) {
+            ws.style.display = '';
+            ws.style.zIndex  = '19999';
+            ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = '');
+            ws.classList.remove('doors-open');
+        }
+        gs.classList.remove('doors-open');
+        setTimeout(() => {
+            gs.remove();
+            if (ws) {
+                ws.style.zIndex = '21000';
+                requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
+            }
+            if (_cbMainMenu) _cbMainMenu();
+        }, 1300);
+    });
+}
+
+function _showMainMenuScreen() {
+    const ws = document.getElementById('welcomeScreen');
+    if (!ws) return;
+    ws.style.display = '';
+    ws.style.zIndex  = '21000';
+    ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = '');
+    ws.classList.remove('doors-open');
+    requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
 }
 
 function _showWinner(playerName) {
@@ -1371,11 +1487,23 @@ function _onMPLobby(data) {
 
 /** Firebase 'gameStart' event — run the lift-door transition, then call _cbMPGameReady. */
 function _onMPGameStart(data) {
-    const ws = document.getElementById('welcomeScreen');
-    if (!ws) {
-        if (_cbMPGameReady) _cbMPGameReady(data);
+    const doStart = () => { if (_cbMPGameReady) _cbMPGameReady(data); };
+
+    const gs = document.getElementById('gameOverScreen');
+    if (gs) {
+        const needClose = gs.classList.contains('doors-open');
+        const proceed   = () => { gs.remove(); doStart(); };
+        if (needClose) {
+            gs.classList.remove('doors-open');
+            setTimeout(proceed, 1300);
+        } else {
+            proceed();
+        }
         return;
     }
+
+    const ws = document.getElementById('welcomeScreen');
+    if (!ws) { doStart(); return; }
 
     ws.style.zIndex = '21000';
     ws.classList.remove('doors-open');
@@ -1383,8 +1511,8 @@ function _onMPGameStart(data) {
         ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
         ws.classList.add('doors-open');
         setTimeout(() => {
-            if (_cbMPGameReady) _cbMPGameReady(data);
-            setTimeout(() => ws.remove(), 1300);
+            doStart();
+            setTimeout(() => { ws.style.display = 'none'; }, 1300);
         }, 500);
     }, 1300);
 }
@@ -1469,7 +1597,7 @@ function _setupListeners() {
                 ws.classList.add('doors-open');            // re-open (1.2 s)
                 setTimeout(() => {
                     if (_cbGameStart) _cbGameStart();
-                    setTimeout(() => ws.remove(), 1300);
+                    setTimeout(() => { ws.style.display = 'none'; }, 1300);
                 }, 500);
             }, 1300);
         });

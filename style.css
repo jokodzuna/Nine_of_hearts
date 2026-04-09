@@ -1200,3 +1200,99 @@ body.welcome-active #tapToStart {
     padding: 6px 0;
 }
 .mp-error.hidden { display: none; }
+
+/* ============================================================
+   Game-Over Banner
+   ============================================================ */
+
+.game-over-banner {
+    position: fixed;
+    inset: 0;
+    z-index: 50000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.83);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: go-banner-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes go-banner-in {
+    from { opacity: 0; transform: scale(1.1); }
+    to   { opacity: 1; transform: scale(1);   }
+}
+@keyframes go-banner-out {
+    from { opacity: 1; transform: scale(1);    }
+    to   { opacity: 0; transform: scale(0.88); }
+}
+
+.game-over-banner.banner-exit {
+    animation: go-banner-out 0.35s ease-in both;
+}
+
+.go-banner-inner {
+    text-align: center;
+    padding: clamp(28px, 5vh, 52px) clamp(28px, 8vw, 72px);
+    border-radius: 20px;
+    background: linear-gradient(160deg, #7a0000 0%, #c01010 45%, #900000 100%);
+    box-shadow:
+        0 0 0 4px #FFD700,
+        0 0 0 8px rgba(170, 0, 0, 0.8),
+        0 0 55px rgba(220, 30, 0, 0.7),
+        0 24px 64px rgba(0, 0, 0, 0.75);
+    max-width: min(88vw, 620px);
+}
+
+.go-banner-text {
+    font-family: 'NHF-Becker', 'Arial Black', Arial, sans-serif;
+    font-size: clamp(26px, 7.5vw, 76px);
+    font-weight: 900;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    line-height: 1.18;
+    animation: loser-flash 0.65s ease-in-out infinite alternate;
+}
+
+@keyframes loser-flash {
+    0%   { color: #FFFFFF; text-shadow: 0 0 28px rgba(255,255,255,0.95), 0 3px 0 rgba(0,0,0,0.55); }
+    40%  { color: #FFD700; text-shadow: 0 0 28px rgba(255,215,0,0.9),   0 3px 0 rgba(0,0,0,0.55); }
+    80%  { color: #FF3838; text-shadow: 0 0 28px rgba(255,40,0,0.9),    0 3px 0 rgba(0,0,0,0.55); }
+    100% { color: #FFFFFF; text-shadow: 0 0 38px rgba(255,255,255,1),   0 3px 0 rgba(0,0,0,0.55); }
+}
+
+/* ============================================================
+   Post-Game Screen  (lift-door structure, same as #welcomeScreen)
+   ============================================================ */
+
+#gameOverScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 30000;
+    overflow: hidden;
+}
+
+#gameOverScreen.doors-open .lift-door-left  { transform: translateX(-100%); }
+#gameOverScreen.doors-open .lift-door-right { transform: translateX(100%); }
+
+.post-game-menu {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(14px, 2.2vh, 26px);
+    padding: 5vh 8vw;
+    background: radial-gradient(ellipse at 50% 38%, #1d9449 0%, #0c6030 52%, #063617 100%);
+}
+
+.post-game-menu::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.025), rgba(255,255,255,0.025) 1px, rgba(0,0,0,0.02) 1px, rgba(0,0,0,0.02) 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.015), rgba(0,0,0,0.015) 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 6px);
+    pointer-events: none;
+}

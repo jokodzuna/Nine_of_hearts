@@ -25,14 +25,15 @@ const _db   = getDatabase(_app);
 const _auth = getAuth(_app);
 
 // ---- Session ----------------------------------------------------------------
-let _uid         = null;
-let _roomCode    = null;
-let _playerIndex = -1;
-let _isHost      = false;
-let _roomUnsub   = null;
-let _prevStatus  = null;
-let _maxPlayers  = 4;
-let _players     = {};   // uid → { nickname, avatarIdx, idx, isBot }
+let _uid          = null;
+let _roomCode     = null;
+let _playerIndex  = -1;
+let _isHost       = false;
+let _roomUnsub    = null;
+let _prevStatus   = null;
+let _maxPlayers   = 4;
+let _players      = {};   // uid → { nickname, avatarIdx, idx, isBot }
+let _restartCount = -1;
 
 // ---- Lightweight event bus --------------------------------------------------
 const _listeners = {};
@@ -170,10 +171,36 @@ export async function pushMove(newState) {
 /** Detach listener and reset session. */
 export function leaveRoom() {
     if (_roomUnsub) { _roomUnsub(); _roomUnsub = null; }
-    _roomCode    = null;
-    _playerIndex = -1;
-    _isHost      = false;
-    _prevStatus  = null;
+    _roomCode     = null;
+    _playerIndex  = -1;
+    _isHost       = false;
+    _prevStatus   = null;
+    _restartCount = -1;
+}
+
+/** Convert native game state to Firebase-serialisable object. */
+export function serialiseState(s) {
+    return {
+        hands:         Array.from(s.hands),
+        pile:          Array.from(s.pile.slice(0, s.pileSize)),
+        pileSize:      s.pileSize,
+        topRankIdx:    s.topRankIdx,
+        currentPlayer: s.currentPlayer,
+        eliminated:    s.eliminated,
+        numPlayers:    s.numPlayers,
+    };
+}
+
+/** Host-only: start a fresh game in the same room (keeps players/settings). */
+export async function restartGame(gameState) {
+    if (!_isHost || !_roomCode) return;
+    const rc = _restartCount + 1;
+    _restartCount = rc;   // pre-update so our own echo is NOT treated as gameStart
+    await update(ref(_db, `rooms/${_roomCode}`), {
+        status:       'playing',
+        restartCount: rc,
+        gameState:    serialiseState(gameState),
+    });
 }
 
 // ---- State serialisation / deserialisation ----------------------------------
@@ -239,8 +266,10 @@ function _subscribeRoom(code) {
         }
 
         if (room.status === 'playing') {
-            if (_prevStatus !== 'playing') {
-                // First time we see 'playing' — fire gameStart on every client
+            const rc = Number(room.restartCount ?? 0);
+            const isNewGame = _prevStatus !== 'playing' || rc !== _restartCount;
+            _restartCount = rc;
+            if (isNewGame) {
                 _emit('gameStart', {
                     rawState:   room.gameState,
                     players:    room.players ?? {},
@@ -248,7 +277,6 @@ function _subscribeRoom(code) {
                     maxPlayers: room.maxPlayers,
                 });
             } else {
-                // Subsequent move
                 _emit('stateUpdate', room.gameState);
             }
         }

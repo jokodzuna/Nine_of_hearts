@@ -88,6 +88,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 
 /* Rejoin Game button — highlighted to draw attention */
 .rejoin-btn {
+    width: min(440px, 86vw);
     background: linear-gradient(135deg, #1a6b3a 0%, #27a55a 100%) !important;
     border-color: #27a55a !important;
     color: #fff !important;

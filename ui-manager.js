@@ -639,6 +639,7 @@ function _doMainMenuTransition(gs) {
                 requestAnimationFrame(() => requestAnimationFrame(() => ws.classList.add('doors-open')));
             }
             if (_cbMainMenu) _cbMainMenu();
+            _refreshRejoinButton();   // clearLastRoom may have been called above — sync now
         }, 1000);
     }, 1300);
 }

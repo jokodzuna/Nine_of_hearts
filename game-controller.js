@@ -121,9 +121,10 @@ let _turboTurnsLeft = 0;       // countdown of AI turns after human exits
 let _humanTimer     = null;    // setTimeout handle for human auto-move
 
 // Multiplayer state
-let _mpMode    = false;        // true during a multiplayer game
-let _myMPIdx   = 0;            // this client's player-seat index
-let _mpBotIdxs = [];           // seat indices managed as bots by the host
+let _mpMode       = false;     // true during a multiplayer game
+let _myMPIdx      = 0;         // this client's player-seat index
+let _mpBotIdxs    = [];        // seat indices managed as bots by the host
+let _abandonTimer = null;      // host: fires when all human guests have been gone 1 min
 
 // Post-game restart data
 let _lastMPMode     = false;
@@ -605,6 +606,7 @@ function _handleNewGame() {
 function _handleMainMenu() {
     _gameActive = false;
     _mpMode     = false;
+    if (_abandonTimer) { clearTimeout(_abandonTimer); _abandonTimer = null; }
     if (_lastMPMode) {
         MP.clearLastRoom();
         if (MP.isHost()) {
@@ -641,6 +643,22 @@ function _handlePlayerDisconnected({ uid, playerIdx, nickname, wasHost }) {
             Update('STOP_TIMER');
             setTimeout(_startMPTurn, 300);
         }
+
+        // If every human guest has now disconnected, start the 1-minute abandon
+        // countdown.  We only trigger this when at least one human was present
+        // (i.e. _disconnectedUids is non-empty) so a host-vs-bots game is
+        // left untouched.
+        const totalGuests = (_state?.numPlayers ?? 1) - 1;  // slots excluding host
+        const botGuests   = _mpBotIdxs.filter(i => i !== _myMPIdx).length;
+        const allGone     = botGuests >= totalGuests && Object.keys(_disconnectedUids).length > 0;
+        if (allGone && !_abandonTimer) {
+            _abandonTimer = setTimeout(() => {
+                _abandonTimer = null;
+                if (!_mpMode || !MP.isHost()) return;
+                console.log('[MP] All human guests gone for 1 min — ending session.');
+                MP.hostReturnToMenu().catch(e => console.error('[MP] abandon hostReturnToMenu:', e));
+            }, 60_000);
+        }
     }
 
     if (wasHost) {
@@ -658,6 +676,9 @@ function _handlePlayerReconnected({ uid, playerIdx, nickname, turnsMissed }) {
         delete _reconnectTimeouts[playerIdx];
         delete _disconnectedUids[playerIdx];
         _mpBotIdxs = _mpBotIdxs.filter(i => i !== playerIdx);
+
+        // A human is back — cancel the room-abandon countdown.
+        if (_abandonTimer) { clearTimeout(_abandonTimer); _abandonTimer = null; }
 
         // If it's currently the reconnected player's turn, cancel any stale bot
         // or remote-human timer and restart _startMPTurn so they get a fresh window.

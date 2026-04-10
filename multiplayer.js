@@ -36,6 +36,7 @@ let _restartCount = -1;
 
 // ---- Presence / Disconnect --------------------------------------------------
 let _myOnDisconnect         = null;   // OnDisconnect handle — cancelled on intentional leave
+let _roomOnDisconnect       = null;   // host-only: marks room hostLeft when host tab closes
 let _prevPlayers            = {};     // uid → player snapshot for diff detection
 let _prevHost               = null;   // previous room.host uid
 let _wasConnectedToFirebase = null;   // tracks true/false to detect transitions
@@ -336,7 +337,8 @@ export function leaveRoom() {
     _stopGuestHbWrite();
     _stopGuestHbWatch();
     for (const k of Object.keys(_guestLastDetectedHb)) delete _guestLastDetectedHb[k];
-    if (_myOnDisconnect) { _myOnDisconnect.cancel().catch(() => {}); _myOnDisconnect = null; }
+    if (_myOnDisconnect)   { _myOnDisconnect.cancel().catch(() => {});   _myOnDisconnect   = null; }
+    if (_roomOnDisconnect) { _roomOnDisconnect.cancel().catch(() => {}); _roomOnDisconnect = null; }
     if (_roomUnsub) { _roomUnsub(); _roomUnsub = null; }
     _roomCode     = null;
     _playerIndex  = -1;
@@ -380,6 +382,14 @@ function _setupPresence(code) {
     const dc = onDisconnect(ref(_db, `rooms/${code}/players/${_uid}`));
     dc.update({ connected: false, disconnectedAt: { '.sv': 'timestamp' } });
     _myOnDisconnect = dc;
+
+    // Host-only: if the host tab closes unexpectedly, mark the room as hostLeft
+    // so rejoining guests see a clean terminal state instead of a stale room.
+    if (_isHost) {
+        const rdc = onDisconnect(ref(_db, `rooms/${code}/status`));
+        rdc.set('hostLeft');
+        _roomOnDisconnect = rdc;
+    }
 }
 
 /**

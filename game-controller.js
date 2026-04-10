@@ -365,6 +365,58 @@ function _humanTimerExpired() {
     else         _applyAndAdvance(chosen);
 }
 
+/**
+ * Host: when a remote human's 15 s turn timer expires before their disconnect
+ * is detected, play the lowest valid card (or draw) on their behalf so the
+ * game keeps moving.
+ */
+async function _remoteHumanTimerExpired(playerIdx) {
+    _humanTimer = null;
+    if (!_state || !_gameActive || _state.currentPlayer !== playerIdx) return;
+    if (_mpBotIdxs.includes(playerIdx)) return;  // already handled as bot
+
+    const moves     = getPossibleMoves(_state);
+    const playMoves = moves.filter(m => !(m & DRAW_FLAG));
+    let chosen;
+    if (playMoves.length > 0) {
+        const singles = playMoves.filter(m => _popcount(m & 0xFFFFFF) === 1);
+        const pool    = singles.length > 0 ? singles : playMoves;
+        chosen = pool.reduce((best, m) => {
+            const bLow = best & -best;
+            const mLow = m    & -m;
+            return mLow < bLow ? m : best;
+        });
+    } else {
+        chosen = moves.find(m => !!(m & DRAW_FLAG));
+    }
+    if (chosen === undefined) return;
+
+    for (const eng of Object.values(_engines)) {
+        eng.observeMove(_state, chosen);
+        eng.advanceTree(chosen);
+    }
+
+    const dm = decodeMove(chosen);
+    const cp = _state.currentPlayer;
+    Update('STOP_TIMER');
+    if (dm.type === 'draw') {
+        Update('REMOVE_FROM_PILE', { count: dm.count });
+    } else {
+        Update('RENDER_HAND', {
+            playerId: _mpDispId(cp),
+            count:    Math.max(0, _popcount(_state.hands[cp]) - dm.cards.length),
+        });
+        const played = dm.cards;
+        setTimeout(() => { for (const card of played) Update('ADD_TO_PILE', { card }); }, 150);
+    }
+
+    const newState = applyMove(_state, chosen);
+    _state = newState;
+    try   { await MP.pushMove(newState); }
+    catch (e) { console.error('[MP] remoteHumanTimerExpired pushMove failed:', e); }
+    setTimeout(_startMPTurn, POST_MOVE_MS);
+}
+
 function _endGame() {
     _gameActive = false;
     Update('STOP_TIMER');
@@ -581,6 +633,14 @@ function _handlePlayerDisconnected({ uid, playerIdx, nickname, wasHost }) {
                 .catch(e => console.error('[MP] permanentBot failed:', e));
             Update('SHOW_MESSAGE', { text: `${nickname} timed out. AI will finish the game.` });
         }, 5 * 60 * 1000);
+
+        // If it's currently this player's turn, restart the turn so the bot
+        // branch in _startMPTurn picks up immediately.
+        if (_gameActive && _state && _state.currentPlayer === playerIdx) {
+            if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+            Update('STOP_TIMER');
+            setTimeout(_startMPTurn, 300);
+        }
     }
 
     if (wasHost) {
@@ -825,6 +885,7 @@ function _onMPStateUpdate(rawState) {
 
 /** Start a turn in multiplayer mode. */
 function _startMPTurn() {
+    if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
     if (!_state || !_gameActive) return;
 
     if (isGameOver(_state)) { _endGame(); return; }
@@ -857,7 +918,12 @@ function _startMPTurn() {
     } else {
         Update('ENABLE_PLAY', { enabled: false });
         Update('ENABLE_DRAW', { enabled: false });
-        Update('START_TIMER', { playerId: _mpDispId(p), isHuman: false });
+        Update('START_TIMER', { playerId: _mpDispId(p), isHuman: true });
+        // Host enforces the 15 s timer so a slow/disconnected remote player
+        // can't stall the game indefinitely before the heartbeat fires.
+        if (MP.isHost()) {
+            _humanTimer = setTimeout(() => _remoteHumanTimerExpired(p), HUMAN_TURN_MS);
+        }
     }
 }
 

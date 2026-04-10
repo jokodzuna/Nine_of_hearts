@@ -100,6 +100,56 @@ function _stopHeartbeat() {
     _hbLost = false;
 }
 
+// ---- Guest-to-host heartbeat (fast guest-offline detection for hosts) -------
+// Guests write players/${uid}/heartbeat every _HB_WRITE_MS.
+// The host polls _players[uid].heartbeat every _HB_POLL_MS; if the timestamp
+// is stale by more than _HB_TIMEOUT_MS it emits playerDisconnected immediately
+// without waiting for Firebase's onDisconnect (which can take 60-90 s).
+
+let _guestHbWriteInterval = null;   // guest: writes own heartbeat
+let _guestHbWatchInterval = null;   // host: polls for stale guest heartbeats
+
+function _startGuestHbWrite(code) {
+    _stopGuestHbWrite();
+    const doWrite = () => {
+        if (_isHost || !_roomCode || _wasConnectedToFirebase === false) return;
+        update(ref(_db, `rooms/${code}/players/${_uid}`), { heartbeat: Date.now() }).catch(() => {});
+    };
+    doWrite();
+    _guestHbWriteInterval = setInterval(doWrite, _HB_WRITE_MS);
+}
+
+function _stopGuestHbWrite() {
+    if (_guestHbWriteInterval) { clearInterval(_guestHbWriteInterval); _guestHbWriteInterval = null; }
+}
+
+function _startGuestHbWatch() {
+    _stopGuestHbWatch();
+    _guestHbWatchInterval = setInterval(() => {
+        if (!_isHost || !_roomCode || _prevStatus !== 'playing') return;
+        const now = Date.now();
+        for (const [uid, player] of Object.entries(_players)) {
+            if (uid === _uid) continue;
+            if (!!player.isAI || player.connected === false) continue;
+            if (!player.heartbeat) continue;
+            if (now - player.heartbeat > _HB_TIMEOUT_MS) {
+                // Locally mark disconnected to suppress immediate re-fire
+                _players = { ..._players, [uid]: { ..._players[uid], connected: false } };
+                _emit('playerDisconnected', {
+                    uid,
+                    playerIdx: player.idx,
+                    nickname:  player.nickname,
+                    wasHost:   false,
+                });
+            }
+        }
+    }, _HB_POLL_MS);
+}
+
+function _stopGuestHbWatch() {
+    if (_guestHbWatchInterval) { clearInterval(_guestHbWatchInterval); _guestHbWatchInterval = null; }
+}
+
 // ---- Lightweight event bus --------------------------------------------------
 const _listeners = {};
 
@@ -200,6 +250,7 @@ export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
 
     _setupPresence(code);
     _startHostHeartbeat(code);
+    _startGuestHbWatch();
     _saveLastRoom(code);
     _subscribeRoom(code);
     return code;
@@ -244,6 +295,7 @@ export async function joinRoom({ code, nickname, avatarIdx }) {
 
     _setupPresence(code);
     _startGuestHeartbeatWatch(code);
+    _startGuestHbWrite(code);
     _saveLastRoom(code);
     _subscribeRoom(code);
     return { playerIdx: nextIdx, reconnected: false };
@@ -276,6 +328,8 @@ export async function pushMove(newState) {
 /** Detach listener and reset session. */
 export function leaveRoom() {
     _stopHeartbeat();
+    _stopGuestHbWrite();
+    _stopGuestHbWatch();
     if (_myOnDisconnect) { _myOnDisconnect.cancel().catch(() => {}); _myOnDisconnect = null; }
     if (_roomUnsub) { _roomUnsub(); _roomUnsub = null; }
     _roomCode     = null;
@@ -350,6 +404,7 @@ async function _doReconnect(code, room, slot) {
 
     _setupPresence(code);
     _startGuestHeartbeatWatch(code);   // reconnecting as non-host
+    _startGuestHbWrite(code);
     _saveLastRoom(code);
     _subscribeRoom(code);
 
@@ -405,7 +460,9 @@ export async function tryPromoteHost() {
     if (candidateUid !== _uid) return;
     _isHost = true;
     _stopHeartbeat();
+    _stopGuestHbWrite();       // no longer a guest writer
     _startHostHeartbeat(_roomCode);
+    _startGuestHbWatch();      // now watch all guest heartbeats as new host
     await update(ref(_db, `rooms/${_roomCode}`), { host: _uid });
 }
 
@@ -510,9 +567,12 @@ function _setupConnectionMonitor() {
                 // Restart appropriate heartbeat role after reconnect
                 if (isStillHost) {
                     _stopHeartbeat();
+                    _stopGuestHbWrite();
                     _startHostHeartbeat(_roomCode);
+                    _startGuestHbWatch();
                 } else {
                     _startGuestHeartbeatWatch(_roomCode);
+                    _startGuestHbWrite(_roomCode);
                 }
 
                 // Always emit selfReconnected so game-controller can resume

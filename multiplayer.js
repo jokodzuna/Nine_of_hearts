@@ -73,6 +73,9 @@ function _startGuestHeartbeatWatch(_code) {
         if (_isHost || !_roomCode || _prevStatus !== 'playing') return;
         const age = Date.now() - _lastRoomUpdateMs;
         if (age > _HB_TIMEOUT_MS && !_hbLost) {
+            // If OUR OWN connection is down, the stale timer is a false-positive
+            // caused by us not receiving Firebase events — not by the host being gone.
+            if (_wasConnectedToFirebase === false) return;
             _hbLost = true;
             // Locally mark the host as disconnected so tryPromoteHost's
             // connected:false filter works before Firebase onDisconnect fires.
@@ -391,6 +394,9 @@ export async function incrementTurnsMissed(uid) {
  */
 export async function tryPromoteHost() {
     if (_isHost || !_roomCode || !_uid) return;
+    // Don't write while our Firebase connection is down — the write would queue
+    // locally and propagate on reconnect, potentially demoting an active host.
+    if (_wasConnectedToFirebase === false) return;
     const candidates = Object.entries(_players)
         .filter(([, p]) => p.connected !== false && !p.isAI)
         .sort((a, b) => a[1].idx - b[1].idx);

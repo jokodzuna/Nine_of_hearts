@@ -36,9 +36,10 @@ let _players      = {};   // uid → { nickname, avatarIdx, idx, isBot }
 let _restartCount = -1;
 
 // ---- Presence / Disconnect --------------------------------------------------
-let _myOnDisconnect = null;   // OnDisconnect handle — cancelled on intentional leave
-let _prevPlayers    = {};     // uid → player snapshot for diff detection
-let _prevHost       = null;   // previous room.host uid
+let _myOnDisconnect         = null;   // OnDisconnect handle — cancelled on intentional leave
+let _prevPlayers            = {};     // uid → player snapshot for diff detection
+let _prevHost               = null;   // previous room.host uid
+let _wasConnectedToFirebase = null;   // tracks true/false to detect transitions
 
 // ---- Lightweight event bus --------------------------------------------------
 const _listeners = {};
@@ -63,6 +64,7 @@ export async function initAuth() {
     if (_uid) return _uid;
     const cred = await signInAnonymously(_auth);
     _uid = cred.user.uid;
+    _setupConnectionMonitor();
     return _uid;
 }
 
@@ -252,6 +254,13 @@ async function _doReconnect(code, room, slot) {
         connected: true, isAI: false, wasHuman: false, disconnectedAt: null,
     });
 
+    // Return an updated players snapshot that reflects our own reclaim so
+    // _startMPGame won't re-apply the disconnect indicator on 'yourCards'.
+    const updatedPlayers = {
+        ...room.players,
+        [_uid]: { ...slot, connected: true, isAI: false, wasHuman: false, disconnectedAt: null },
+    };
+
     _setupPresence(code);
     _subscribeRoom(code);
 
@@ -260,7 +269,7 @@ async function _doReconnect(code, room, slot) {
         playerIdx:   slot.idx,
         turnsMissed: slot.turnsMissed ?? 0,
         rawState:    room.gameState,
-        players:     room.players,
+        players:     updatedPlayers,
         maxPlayers:  room.maxPlayers,
     };
 }
@@ -351,6 +360,63 @@ export function deserialiseState(raw) {
         eliminated:    Number(raw.eliminated)      || 0,
         numPlayers:    Number(raw.numPlayers)       || 4,
     };
+}
+
+// ---- Firebase connection monitor -------------------------------------------
+
+/**
+ * Watches /.info/connected to detect local network drops.
+ * - true→false while in a room  →  emits 'connectionLost'
+ * - false→true while in a room  →  re-establishes presence and, if our slot
+ *   was taken over by a bot, auto-reclaims it ('selfReconnected').
+ */
+function _setupConnectionMonitor() {
+    onValue(ref(_db, '.info/connected'), async snap => {
+        const connected = snap.val();
+        if (connected === null) return;   // initial null before first value
+
+        const prev = _wasConnectedToFirebase;
+        _wasConnectedToFirebase = connected;
+
+        if (connected === false && prev === true && _roomCode) {
+            _emit('connectionLost');
+            return;
+        }
+
+        if (connected === true && prev === false && _roomCode) {
+            // Re-establish the onDisconnect hook (it was cancelled server-side)
+            _setupPresence(_roomCode);
+
+            try {
+                const roomSnap = await get(ref(_db, `rooms/${_roomCode}`));
+                if (!roomSnap.exists()) { _emit('connectionRestored'); return; }
+
+                const room   = roomSnap.val();
+                const mySlot = (room.players ?? {})[_uid];
+
+                if (mySlot?.isAI && mySlot?.wasHuman) {
+                    // Bot took over while we were offline — reclaim the slot
+                    const wasHost    = _isHost;
+                    const isStillHost = wasHost && room.host === _uid;
+                    if (!isStillHost) _isHost = false;
+
+                    await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), {
+                        connected: true, isAI: false, wasHuman: false, disconnectedAt: null,
+                    });
+                    _emit('selfReconnected', {
+                        turnsMissed: mySlot.turnsMissed ?? 0,
+                        wasHost,
+                        isStillHost,
+                    });
+                } else {
+                    _emit('connectionRestored');
+                }
+            } catch (e) {
+                console.error('[MP] auto-reclaim failed:', e);
+                _emit('connectionRestored');
+            }
+        }
+    });
 }
 
 // ---- Internal — Firebase room listener --------------------------------------

@@ -58,6 +58,8 @@ let _lastTap  = { time: 0, card: null };
 let _touchTap = { time: 0, card: null, startX: 0, startY: 0 };
 let _mouseTap = { card: null, startX: 0, startY: 0 };
 
+let _connOverlay = null;  // full-screen connection-lost overlay element
+
 const TURN_DURATION_MS = 15000;
 let _timer = { rafId: null, endTime: 0, isHuman: false, lastTick: null, container: null };
 
@@ -224,6 +226,14 @@ export function Update(command, payload = {}) {
             infoEl.classList.toggle('player-disconnected', !!payload.disconnected);
             break;
         }
+        case 'SHOW_CONNECTION_OVERLAY': {
+            _showConnectionOverlay(payload.mode);
+            break;
+        }
+        case 'HIDE_CONNECTION_OVERLAY': {
+            _hideConnectionOverlay();
+            break;
+        }
         case 'SET_PLAYER_AVATAR': {
             const infoId = INFO_ID[payload.playerId];
             if (infoId) {
@@ -245,6 +255,36 @@ export function Update(command, payload = {}) {
             console.warn(`[ui-manager] Unknown command: "${command}"`);
     }
 }
+
+// ---- Connection-lost overlay ------------------------------------------------
+
+function _showConnectionOverlay(mode) {
+    if (_connOverlay) return;   // already visible
+    _connOverlay = document.createElement('div');
+    _connOverlay.className = 'connection-overlay';
+
+    const line1 = document.createElement('p');
+    const line2 = document.createElement('p');
+
+    if (mode === 'host') {
+        line1.textContent = 'Lost connection to Host\u2026';
+        line2.textContent = "Attempting to resume game\u2026 Please don't close the app!";
+    } else {
+        line1.textContent = 'Connection lost.';
+        line2.textContent = 'Attempting to rejoin\u2026';
+    }
+
+    _connOverlay.append(line1, line2);
+    document.body.appendChild(_connOverlay);
+}
+
+function _hideConnectionOverlay() {
+    if (!_connOverlay) return;
+    _connOverlay.remove();
+    _connOverlay = null;
+}
+
+// ---- Player setup -----------------------------------------------------------
 
 function _setupPlayers(numPlayers, playerName, avatarIndex) {
     // Clear disconnect indicators from any previous game

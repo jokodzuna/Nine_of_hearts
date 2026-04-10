@@ -145,9 +145,12 @@ onNewGame(_handleNewGame);
 onMainMenu(_handleMainMenu);
 onHostLeft(_handleHostLeft);
 
-MP.on('playerDisconnected', _handlePlayerDisconnected);
-MP.on('playerReconnected',  _handlePlayerReconnected);
-MP.on('hostChanged',        _handleHostChanged);
+MP.on('playerDisconnected',  _handlePlayerDisconnected);
+MP.on('playerReconnected',   _handlePlayerReconnected);
+MP.on('hostChanged',         _handleHostChanged);
+MP.on('connectionLost',      _handleConnectionLost);
+MP.on('connectionRestored',  _handleConnectionRestored);
+MP.on('selfReconnected',     _handleSelfReconnected);
 
 // ============================================================
 // Game Flow
@@ -576,6 +579,7 @@ function _handlePlayerDisconnected({ uid, playerIdx, nickname, wasHost }) {
     }
 
     if (wasHost) {
+        Update('SHOW_CONNECTION_OVERLAY', { mode: 'host' });
         tryPromoteHost().catch(e => console.error('[MP] host promotion failed:', e));
     }
 
@@ -595,9 +599,38 @@ function _handlePlayerReconnected({ uid, playerIdx, nickname, turnsMissed }) {
 }
 
 function _handleHostChanged({ isMe }) {
-    if (!isMe) return;
-    Update('SHOW_MESSAGE', { text: 'You are now the game host.' });
-    if (_gameActive) setTimeout(_startMPTurn, 500);
+    // New host found — dismiss the 'lost connection to host' overlay for everyone
+    Update('HIDE_CONNECTION_OVERLAY');
+
+    if (isMe) {
+        Update('SHOW_MESSAGE', { text: 'You are now the game host.' });
+        if (_gameActive) setTimeout(_startMPTurn, 500);
+    }
+}
+
+function _handleConnectionLost() {
+    if (!_mpMode || !_gameActive) return;
+    Update('SHOW_CONNECTION_OVERLAY', { mode: 'self' });
+}
+
+function _handleConnectionRestored() {
+    Update('HIDE_CONNECTION_OVERLAY');
+}
+
+function _handleSelfReconnected({ turnsMissed, wasHost, isStillHost }) {
+    Update('HIDE_CONNECTION_OVERLAY');
+    Update('PLAYER_STATUS', { playerId: 'yourCards', disconnected: false });
+
+    const msg = turnsMissed > 0
+        ? `Welcome back! AI played ${turnsMissed} turn${turnsMissed !== 1 ? 's' : ''} for you.`
+        : 'Welcome back! Connection restored.';
+    Update('SHOW_MESSAGE', { text: msg });
+
+    if (wasHost && !isStillHost) {
+        // Demoted while offline — stop managing bot timers
+        for (const h of Object.values(_reconnectTimeouts)) clearTimeout(h);
+        _reconnectTimeouts = {};
+    }
 }
 
 /** Called when the host clicks '▶ Start Game' in the MP lobby. */

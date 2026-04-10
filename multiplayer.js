@@ -41,12 +41,18 @@ let _prevHost               = null;   // previous room.host uid
 let _wasConnectedToFirebase = null;   // tracks true/false to detect transitions
 
 // ---- Heartbeat (fast host-offline detection for guests) ---------------------
+// The host writes `hostHeartbeat` every _HB_WRITE_MS.  That write triggers
+// _subscribeRoom's existing onValue, which bumps _lastRoomUpdateMs.
+// Guests poll _lastRoomUpdateMs every _HB_POLL_MS; if it goes stale for
+// longer than _HB_TIMEOUT_MS they emit hostHeartbeatLost.
+// Using the existing room subscription avoids a second onValue and the
+// false-positives that can arise from its initial-null cached response.
 const _HB_WRITE_MS   = 6_000;   // host writes every 6 s
-const _HB_TIMEOUT_MS = 18_000;  // guests alert after 18 s without a write
-let _hbInterval   = null;
-let _hbUnsub      = null;
-let _hbStaleTimer = null;
-let _hbLost       = false;   // prevents duplicate 'hostHeartbeatLost' events
+const _HB_TIMEOUT_MS = 20_000;  // guests alert after 20 s without any room update
+const _HB_POLL_MS    = 2_000;   // how often guests check the timestamp
+let _hbInterval      = null;    // host: write interval  |  guest: poll interval
+let _hbLost          = false;   // prevents duplicate 'hostHeartbeatLost' events
+let _lastRoomUpdateMs = 0;      // set by _subscribeRoom on every callback
 
 function _startHostHeartbeat(code) {
     _stopHeartbeat();
@@ -58,39 +64,30 @@ function _startHostHeartbeat(code) {
     _hbInterval = setInterval(doWrite, _HB_WRITE_MS);
 }
 
-function _startGuestHeartbeatWatch(code) {
+function _startGuestHeartbeatWatch(_code) {
     _stopHeartbeat();
     _hbLost = false;
+    _lastRoomUpdateMs = Date.now();   // treat join/reconnect moment as fresh
 
-    const arm = () => {
-        clearTimeout(_hbStaleTimer);
-        _hbStaleTimer = setTimeout(() => {
-            if (_isHost || !_roomCode || _hbLost || _prevStatus !== 'playing') return;
+    _hbInterval = setInterval(() => {
+        if (_isHost || !_roomCode || _prevStatus !== 'playing') return;
+        const age = Date.now() - _lastRoomUpdateMs;
+        if (age > _HB_TIMEOUT_MS && !_hbLost) {
             _hbLost = true;
             _emit('hostHeartbeatLost', {
                 uid:       _prevHost,
                 playerIdx: (_prevHost && _players[_prevHost]) ? _players[_prevHost].idx  : -1,
                 nickname:  (_prevHost && _players[_prevHost]) ? (_players[_prevHost].nickname ?? 'Host') : 'Host',
             });
-        }, _HB_TIMEOUT_MS);
-    };
-
-    _hbUnsub = onValue(ref(_db, `rooms/${code}/hostHeartbeat`), snap => {
-        if (snap.val() === null) return;   // never been written yet
-        if (_hbLost) {
+        } else if (age <= _HB_TIMEOUT_MS && _hbLost) {
             _hbLost = false;
             _emit('hostHeartbeatRestored');
         }
-        arm();
-    });
-
-    arm();   // start the initial stale timer immediately
+    }, _HB_POLL_MS);
 }
 
 function _stopHeartbeat() {
-    if (_hbInterval)   { clearInterval(_hbInterval);   _hbInterval   = null; }
-    if (_hbUnsub)      { _hbUnsub();                   _hbUnsub      = null; }
-    if (_hbStaleTimer) { clearTimeout(_hbStaleTimer);  _hbStaleTimer = null; }
+    if (_hbInterval) { clearInterval(_hbInterval); _hbInterval = null; }
     _hbLost = false;
 }
 
@@ -530,6 +527,7 @@ function _subscribeRoom(code) {
     // spurious gameStart event on the first listener fire.
 
     _roomUnsub = onValue(ref(_db, `rooms/${code}`), snap => {
+        _lastRoomUpdateMs = Date.now();   // used by guest heartbeat stale-check
         if (!snap.exists()) return;
         const room    = snap.val();
         const players = room.players ?? {};

@@ -618,6 +618,8 @@ function _handleConnectionLost() {
 
 function _handleConnectionRestored() {
     Update('HIDE_CONNECTION_OVERLAY');
+    // Fallback: resume turn processing in case selfReconnected wasn't emitted
+    if (_mpMode && _gameActive && MP.isHost()) setTimeout(_startMPTurn, 800);
 }
 
 function _handleSelfReconnected({ turnsMissed, wasHost, isStillHost }) {
@@ -634,6 +636,11 @@ function _handleSelfReconnected({ turnsMissed, wasHost, isStillHost }) {
         for (const h of Object.values(_reconnectTimeouts)) clearTimeout(h);
         _reconnectTimeouts = {};
     }
+
+    // Always resume turn processing after reconnection.
+    // - If still host: drives bot turns that stalled during the outage.
+    // - If guest/demoted: enables play buttons if it happens to be our turn.
+    if (_mpMode && _gameActive) setTimeout(_startMPTurn, 800);
 }
 
 /** Called when the host clicks '▶ Start Game' in the MP lobby. */

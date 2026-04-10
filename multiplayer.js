@@ -9,7 +9,6 @@ import { getDatabase, ref, set, get, update, onValue, onDisconnect }
     from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js';
 import { getAuth, signInAnonymously }
     from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
-
 const _config = {
     apiKey:            'AIzaSyDC33g7aIfkEkT4fI5vskN-vQuCdi6LDkU',
     authDomain:        'nine-of-hearts.firebaseapp.com',
@@ -417,26 +416,34 @@ function _setupConnectionMonitor() {
                 const roomSnap = await get(ref(_db, `rooms/${_roomCode}`));
                 if (!roomSnap.exists()) { _emit('connectionRestored'); return; }
 
-                const room   = roomSnap.val();
-                const mySlot = (room.players ?? {})[_uid];
+                const room    = roomSnap.val();
+                const mySlot  = (room.players ?? {})[_uid];
+                if (!mySlot)  { _emit('connectionRestored'); return; }
 
-                if (mySlot?.isAI && mySlot?.wasHuman) {
-                    // Bot took over while we were offline — reclaim the slot
-                    const wasHost    = _isHost;
-                    const isStillHost = wasHost && room.host === _uid;
-                    if (!isStillHost) _isHost = false;
+                const wasHost     = _isHost;
+                const isStillHost = wasHost && room.host === _uid;
+                if (!isStillHost) _isHost = false;
 
+                if (mySlot.isAI && mySlot.wasHuman) {
+                    // Bot took over — full slot reclaim
                     await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), {
                         connected: true, isAI: false, wasHuman: false, disconnectedAt: null,
                     });
-                    _emit('selfReconnected', {
-                        turnsMissed: mySlot.turnsMissed ?? 0,
-                        wasHost,
-                        isStillHost,
+                } else if (!mySlot.connected) {
+                    // Quick reconnect: Firebase never marked us as disconnected yet,
+                    // but the onDisconnect hook was re-written above.  Write
+                    // connected:true so other clients can see we're back.
+                    await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), {
+                        connected: true,
                     });
-                } else {
-                    _emit('connectionRestored');
                 }
+                // Always emit selfReconnected so game-controller can resume
+                // _startMPTurn regardless of how long we were offline.
+                _emit('selfReconnected', {
+                    turnsMissed: mySlot.turnsMissed ?? 0,
+                    wasHost,
+                    isStillHost,
+                });
             } catch (e) {
                 console.error('[MP] auto-reclaim failed:', e);
                 _emit('connectionRestored');

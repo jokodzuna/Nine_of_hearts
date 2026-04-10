@@ -439,16 +439,31 @@ function _renderHands(ds) {
     for (let p = 0; p < NUM_PLAYERS; p++) {
         const dispId = _mpDispId(p);
         if (p === humanIdx) {
-            // In MP mode skip the count-check optimisation — always re-render so
-            // the hand is never stale regardless of player count or turn timing.
-            if (_mpMode || !document.getElementById(dispId) ||
-                document.getElementById(dispId).querySelectorAll('.card').length !== ds.hands[p].length) {
+            // In MP: compare actual card content to avoid unnecessary re-renders
+            // (prevents portrait-mode hand blink on other players' moves).
+            const needsRender = _mpMode
+                ? _handNeedsRender(dispId, ds.hands[p])
+                : (!document.getElementById(dispId) ||
+                   document.getElementById(dispId).querySelectorAll('.card').length !== ds.hands[p].length);
+            if (needsRender) {
                 Update('RENDER_HAND', { playerId: dispId, cards: ds.hands[p] });
             }
         } else {
             Update('RENDER_HAND', { playerId: dispId, count: ds.hands[p].length });
         }
     }
+}
+
+function _handNeedsRender(containerId, expectedCards) {
+    const container = document.getElementById(containerId);
+    if (!container) return true;
+    const els = container.querySelectorAll('.card');
+    if (els.length !== expectedCards.length) return true;
+    for (let i = 0; i < expectedCards.length; i++) {
+        if (els[i].dataset.rank !== expectedCards[i].rank ||
+            els[i].dataset.suit !== expectedCards[i].suit) return true;
+    }
+    return false;
 }
 
 function _updateDrawBtn(count) {
@@ -500,7 +515,7 @@ function _matchPlay(uiCards) {
 // Post-game handlers (NEW GAME / MAIN MENU)
 // ============================================================
 
-function _handleNewGame({ onReady }) {
+function _handleNewGame() {
     if (_lastMPMode) {
         if (MP.isHost()) {
             const newState = createInitialState(NUM_PLAYERS);
@@ -511,12 +526,10 @@ function _handleNewGame({ onReady }) {
                 myIdx:      MP.getPlayerIndex(),
                 maxPlayers: MP.getMaxPlayers(),
             });
-            onReady();
         }
-        // Guest: screen stays with closed doors; Firebase 'gameStart' triggers _onMPGameStart
+        // Guest: screen stays; Firebase 'gameStart' triggers _onMPGameStart
     } else {
         _startGame(_lastLocalConfig);
-        onReady();
     }
 }
 
@@ -728,16 +741,13 @@ async function _mpBotTurn(playerIdx) {
 async function _applyMPMove(move) {
     if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
 
-    for (const engine of Object.values(_engines)) {
-        engine.observeMove(_state, move);
-        engine.advanceTree(move);
-    }
     Update('STOP_TIMER');
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
     Update('DESELECT_ALL');
 
-    const dm       = decodeMove(move);
+    const dm        = decodeMove(move);
+    const prevState = _state;              // pre-move state needed by engines
     const newState  = applyMove(_state, move);
     _state = newState;
 
@@ -747,9 +757,18 @@ async function _applyMPMove(move) {
     } else {
         for (const card of dm.cards) Update('ADD_TO_PILE', { card });
     }
-    // Always re-render hand immediately — the echo is suppressed so without
-    // this the hand only updates when the next opponent Firebase event arrives.
+    // Re-render hand immediately — the echo is suppressed so without this the
+    // hand only updates when the next opponent Firebase event arrives.
     Update('RENDER_HAND', { playerId: _mpDispId(_myMPIdx), cards: ds.hands[_myMPIdx] });
+
+    // Yield to the browser before heavy engine work so the card appears on the
+    // pile right away and _onDragEnd can remove the drag preview without delay.
+    await new Promise(r => setTimeout(r, 0));
+
+    for (const engine of Object.values(_engines)) {
+        engine.observeMove(prevState, move);
+        engine.advanceTree(move);
+    }
 
     try   { await MP.pushMove(newState); }
     catch (e) { console.error('[MP] pushMove failed:', e); }

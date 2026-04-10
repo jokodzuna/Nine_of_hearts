@@ -72,7 +72,7 @@ let _cbGameStart     = null;   // () => void
 let _cbDealComplete  = null;   // () => void
 let _cbMPGameReady   = null;   // ({rawState,players,myIdx,maxPlayers}) => void
 let _cbMPHostStart   = null;   // ({players,maxPlayers}) => void
-let _cbNewGame       = null;   // ({ onReady:fn }) => void
+let _cbNewGame       = null;   // () => void
 let _cbMainMenu      = null;   // () => void
 let _cbHostLeft      = null;   // () => void
 
@@ -472,16 +472,16 @@ function _showGameOverBanner(text, isMP, isHost) {
     gs.id = 'gameOverScreen';
     const doorLeft  = document.createElement('div');
     doorLeft.className = 'lift-door lift-door-left';
-    doorLeft.appendChild(Object.assign(document.createElement('div'), { className: 'door-inner' }));
+    doorLeft.appendChild(_createDoorInner());
     const doorRight = document.createElement('div');
     doorRight.className = 'lift-door lift-door-right';
-    doorRight.appendChild(Object.assign(document.createElement('div'), { className: 'door-inner' }));
+    doorRight.appendChild(_createDoorInner());
     gs.appendChild(doorLeft);
     gs.appendChild(doorRight);
     gs.classList.add('doors-open');  // instantly open (off-screen) — no transition yet
     document.body.appendChild(gs);
 
-    // After 1 s: close doors over the banner + game table
+    // After 3 s: close doors over the banner + game table
     setTimeout(() => {
         gs.classList.remove('doors-open');  // 1.2 s close animation
         setTimeout(() => {
@@ -494,7 +494,28 @@ function _showGameOverBanner(text, isMP, isHost) {
                 gs.classList.add('doors-open');  // 1.2 s open animation
             }, 1000);
         }, 1300);
-    }, 1000);
+    }, 3000);
+}
+
+/** Build a door-inner element with the full Nine of Hearts title content. */
+function _createDoorInner() {
+    const inner   = document.createElement('div');
+    inner.className = 'door-inner';
+    const content = document.createElement('div');
+    content.className = 'door-content';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'door-title';
+    const nine = document.createElement('div'); nine.textContent = 'NINE';
+    const ofRow = document.createElement('div'); ofRow.className = 'door-of';
+    const ofSpan = document.createElement('span'); ofSpan.textContent = 'OF'; ofRow.appendChild(ofSpan);
+    const hearts = document.createElement('div'); hearts.textContent = 'HEARTS';
+    titleEl.append(nine, ofRow, hearts);
+    const tagline = document.createElement('div');
+    tagline.className = 'door-tagline';
+    tagline.textContent = "DON'T BE A LOSER!";
+    content.append(titleEl, tagline);
+    inner.appendChild(content);
+    return inner;
 }
 
 /** Build the post-game menu div and attach button handlers. */
@@ -511,21 +532,16 @@ function _buildPostGameMenu(gs, isMP, isHost) {
         newGameBtn.textContent = '\u25B6 NEW GAME';
         newGameBtn.addEventListener('click', () => {
             disableAll();
-            gs.classList.remove('doors-open');  // close doors
+            gs.classList.remove('doors-open');  // 1.2 s close
             setTimeout(() => {
-                // 1 s pause
+                menu.style.display = 'none';
+                // 1 s pause, then open doors
                 setTimeout(() => {
-                    menu.style.display = 'none';  // hide menu — game will be set up behind doors
-                    if (_cbNewGame) {
-                        _cbNewGame({
-                            onReady: () => {
-                                gs.classList.add('doors-open');  // open doors → new game revealed
-                                setTimeout(() => gs.remove(), 1300);
-                            }
-                        });
-                    } else {
-                        gs.remove();
-                    }
+                    gs.classList.add('doors-open');  // 1.2 s open
+                    setTimeout(() => {
+                        if (_cbNewGame) _cbNewGame();  // start game 500 ms into opening
+                        setTimeout(() => gs.remove(), 800);
+                    }, 500);
                 }, 1000);
             }, 1300);
         });
@@ -1543,11 +1559,13 @@ function _onMPGameStart(data) {
         // Guest's post-game screen is showing; animate into the new game
         const afterClose = () => {
             gs.querySelector('.post-game-menu')?.style.setProperty('display', 'none');
-            // 1 s pause then start game and open doors
+            // 1 s pause, then open doors and start game (mirroring initial start)
             setTimeout(() => {
-                doStart();
-                gs.classList.add('doors-open');
-                setTimeout(() => gs.remove(), 1300);
+                gs.classList.add('doors-open');  // 1.2 s open
+                setTimeout(() => {
+                    doStart();  // 500 ms into opening — deal visible through doors
+                    setTimeout(() => gs.remove(), 800);
+                }, 500);
             }, 1000);
         };
         if (gs.classList.contains('doors-open')) {

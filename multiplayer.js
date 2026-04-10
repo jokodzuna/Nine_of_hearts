@@ -57,6 +57,28 @@ function _emit(event, data) {
     }
 }
 
+// ---- localStorage persistence ----------------------------------------------
+
+const _LS_ROOM_KEY = 'nhLastRoom';
+
+function _saveLastRoom(code) {
+    if (!_uid || !code) return;
+    try { localStorage.setItem(_LS_ROOM_KEY, JSON.stringify({ code, uid: _uid })); } catch {}
+}
+
+export function clearLastRoom() {
+    try { localStorage.removeItem(_LS_ROOM_KEY); } catch {}
+}
+
+export function getLastRoom() {
+    try {
+        const raw = localStorage.getItem(_LS_ROOM_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        return (obj && obj.code && obj.uid) ? obj : null;
+    } catch { return null; }
+}
+
 // ---- Auth -------------------------------------------------------------------
 
 /** Sign in anonymously (idempotent). Resolves with the uid. */
@@ -117,6 +139,7 @@ export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
     });
 
     _setupPresence(code);
+    _saveLastRoom(code);
     _subscribeRoom(code);
     return code;
 }
@@ -159,6 +182,7 @@ export async function joinRoom({ code, nickname, avatarIdx }) {
     });
 
     _setupPresence(code);
+    _saveLastRoom(code);
     _subscribeRoom(code);
     return { playerIdx: nextIdx, reconnected: false };
 }
@@ -262,6 +286,7 @@ async function _doReconnect(code, room, slot) {
     };
 
     _setupPresence(code);
+    _saveLastRoom(code);
     _subscribeRoom(code);
 
     return {
@@ -320,6 +345,7 @@ export async function hostReturnToMenu() {
     if (!_isHost || !_roomCode) return;
     const code = _roomCode;
     await update(ref(_db, `rooms/${code}`), { status: 'hostLeft' });
+    clearLastRoom();
     leaveRoom();
 }
 

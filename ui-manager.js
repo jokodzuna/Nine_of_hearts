@@ -643,6 +643,72 @@ function _doMainMenuTransition(gs) {
     }, 1300);
 }
 
+// ---- Rejoin button ---------------------------------------------------------
+
+/**
+ * Creates or removes the 'Rejoin Game' button on the welcome menu depending
+ * on whether localStorage has a saved room code.
+ */
+function _refreshRejoinButton() {
+    const existing = document.getElementById('rejoinBtn');
+    const saved    = MP.getLastRoom();
+
+    if (!saved) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    if (existing) {
+        // Update label in case code changed
+        existing.textContent = `\u21A9 Rejoin Game (${saved.code})`;
+        existing.disabled = false;
+        return;
+    }
+
+    const btn = document.createElement('button');
+    btn.id        = 'rejoinBtn';
+    btn.className = 'menu-btn rejoin-btn';
+    btn.textContent = `\u21A9 Rejoin Game (${saved.code})`;
+
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+            await MP.initAuth();
+            const result = await MP.joinRoom({
+                code:      saved.code,
+                nickname:  _playerName,
+                avatarIdx: _selectedAvatar,
+            });
+            if (result && result.reconnected) {
+                _onMPGameStart({
+                    rawState:    result.rawState,
+                    players:     result.players,
+                    myIdx:       result.playerIdx,
+                    maxPlayers:  result.maxPlayers,
+                    isReconnect: true,
+                    turnsMissed: result.turnsMissed,
+                });
+            } else {
+                // Joined a lobby that's still waiting
+                _openWelcomePanel('multiplayer');
+                _mpShowSection('lobby');
+            }
+        } catch (e) {
+            // Room is gone or inaccessible — clear the stale data
+            MP.clearLastRoom();
+            btn.remove();
+            _openMPPanel();
+            setTimeout(() => _mpSetError(`Could not rejoin room ${saved.code}: ${e.message}`), 400);
+        }
+    });
+
+    // Insert above the main START button so it's prominent
+    const menu     = document.querySelector('.welcome-menu');
+    const startBtn = document.getElementById('startButton');
+    if (menu && startBtn) menu.insertBefore(btn, startBtn);
+    else if (menu) menu.appendChild(btn);
+}
+
 /** Reset welcome screen state to main menu (not MP lobby panel). */
 function _prepareMainMenuScreen(openDoors = true) {
     _gameMode = 'bots';
@@ -657,6 +723,7 @@ function _prepareMainMenuScreen(openDoors = true) {
     if (!ws) return null;
     ws.style.display = '';
     ws.querySelector('.welcome-menu')?.style.removeProperty('display');
+    _refreshRejoinButton();   // sync rejoin button with localStorage state
     if (openDoors) {
         ws.style.zIndex = '21000';
         ws.classList.remove('doors-open');
@@ -1557,6 +1624,12 @@ async function _openMPPanel() {
     try {
         await MP.initAuth();
         _mpShowSection('choice');
+        // Auto-fill saved room code if present
+        const saved = MP.getLastRoom();
+        if (saved) {
+            const ci = document.getElementById('mpCodeInput');
+            if (ci && !ci.value) ci.value = saved.code;
+        }
     } catch (e) {
         _mpSetError('Connection failed: ' + e.message);
     }
@@ -1662,6 +1735,7 @@ function _onMPGameStart(data) {
 /** Firebase 'hostLeft' event — guide guests back to main menu via door animation. */
 function _onMPHostLeft() {
     if (_cbHostLeft) _cbHostLeft();
+    MP.clearLastRoom();   // host ended the session — room is gone
     const gs = document.getElementById('gameOverScreen');
     if (gs) {
         _doMainMenuTransition(gs);
@@ -1724,6 +1798,8 @@ function _setupListeners() {
         if (_gameMode === 'multi') _openMPPanel();
     });
     document.getElementById('exitButton')   ?.addEventListener('click', () => { /* no-op on web */ });
+
+    _refreshRejoinButton();  // show rejoin button on first load if a room was saved
 
     const startBtn = document.getElementById('startButton');
     if (startBtn) {

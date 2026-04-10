@@ -549,7 +549,10 @@ function _handleNewGame() {
 }
 
 function _handleMainMenu() {
+    _gameActive = false;
+    _mpMode     = false;
     if (_lastMPMode) {
+        MP.clearLastRoom();
         if (MP.isHost()) {
             MP.hostReturnToMenu().catch(e => console.error('[MP] hostReturnToMenu failed:', e));
         } else {

@@ -108,6 +108,7 @@ function _stopHeartbeat() {
 
 let _guestHbWriteInterval = null;   // guest: writes own heartbeat
 let _guestHbWatchInterval = null;   // host: polls for stale guest heartbeats
+const _guestLastDetectedHb = {};    // uid → heartbeat value that last triggered playerDisconnected
 
 function _startGuestHbWrite(code) {
     _stopGuestHbWrite();
@@ -133,6 +134,10 @@ function _startGuestHbWatch() {
             if (!!player.isAI || player.connected === false) continue;
             if (!player.heartbeat) continue;
             if (now - player.heartbeat > _HB_TIMEOUT_MS) {
+                // If we already fired for this exact heartbeat value, skip — the player
+                // may have just reconnected but their new heartbeat hasn't propagated yet.
+                if (_guestLastDetectedHb[uid] === player.heartbeat) continue;
+                _guestLastDetectedHb[uid] = player.heartbeat;
                 // Locally mark disconnected to suppress immediate re-fire
                 _players = { ..._players, [uid]: { ..._players[uid], connected: false } };
                 _emit('playerDisconnected', {
@@ -330,6 +335,7 @@ export function leaveRoom() {
     _stopHeartbeat();
     _stopGuestHbWrite();
     _stopGuestHbWatch();
+    for (const k of Object.keys(_guestLastDetectedHb)) delete _guestLastDetectedHb[k];
     if (_myOnDisconnect) { _myOnDisconnect.cancel().catch(() => {}); _myOnDisconnect = null; }
     if (_roomUnsub) { _roomUnsub(); _roomUnsub = null; }
     _roomCode     = null;
@@ -647,6 +653,8 @@ function _subscribeRoom(code) {
                 const wasOffline = wasAI || !wasConn;
                 const isBackNow  = nowConn && !nowAI;
                 if (wasOffline && isBackNow) {
+                    // Clear the stale-heartbeat dedup so a future disconnect can be detected
+                    delete _guestLastDetectedHb[uid];
                     _emit('playerReconnected', {
                         uid,
                         playerIdx:   player.idx,

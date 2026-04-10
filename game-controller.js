@@ -658,6 +658,14 @@ function _handlePlayerReconnected({ uid, playerIdx, nickname, turnsMissed }) {
         delete _reconnectTimeouts[playerIdx];
         delete _disconnectedUids[playerIdx];
         _mpBotIdxs = _mpBotIdxs.filter(i => i !== playerIdx);
+
+        // If it's currently the reconnected player's turn, cancel any stale bot
+        // or remote-human timer and restart _startMPTurn so they get a fresh window.
+        if (_gameActive && _state && _state.currentPlayer === playerIdx) {
+            if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+            Update('STOP_TIMER');
+            setTimeout(_startMPTurn, 300);
+        }
     }
     Update('PLAYER_STATUS', { playerId: _mpDispId(playerIdx), disconnected: false });
     Update('SHOW_MESSAGE', { text: `${nickname} reconnected!` });

@@ -216,6 +216,14 @@ export function Update(command, payload = {}) {
             if (leftArea)  leftArea.style.display  = payload.showLeft  ? '' : 'none';
             break;
         }
+        case 'PLAYER_STATUS': {
+            const infoId = INFO_ID[payload.playerId];
+            if (!infoId) break;
+            const infoEl = document.getElementById(infoId);
+            if (!infoEl) break;
+            infoEl.classList.toggle('player-disconnected', !!payload.disconnected);
+            break;
+        }
         case 'SET_PLAYER_AVATAR': {
             const infoId = INFO_ID[payload.playerId];
             if (infoId) {
@@ -239,6 +247,12 @@ export function Update(command, payload = {}) {
 }
 
 function _setupPlayers(numPlayers, playerName, avatarIndex) {
+    // Clear disconnect indicators from any previous game
+    for (const id of Object.values(INFO_ID)) {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('player-disconnected');
+    }
+
     const nameEl = document.querySelector('#yourInfo .player-name');
     if (nameEl) nameEl.textContent = playerName;
 
@@ -1377,8 +1391,20 @@ function _buildMPPanel() {
         joinBtn.disabled = true;
         _mpSetError('');
         try {
-            await MP.joinRoom({ code, nickname: _playerName, avatarIdx: _selectedAvatar });
-            _mpShowSection('lobby');
+            const result = await MP.joinRoom({ code, nickname: _playerName, avatarIdx: _selectedAvatar });
+            if (result && result.reconnected) {
+                // Rejoin an in-progress game via the normal door animation
+                _onMPGameStart({
+                    rawState:    result.rawState,
+                    players:     result.players,
+                    myIdx:       result.playerIdx,
+                    maxPlayers:  result.maxPlayers,
+                    isReconnect: true,
+                    turnsMissed: result.turnsMissed,
+                });
+            } else {
+                _mpShowSection('lobby');
+            }
         } catch (e) {
             _mpSetError(e.message);
             joinBtn.disabled = false;

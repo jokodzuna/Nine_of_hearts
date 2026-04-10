@@ -43,6 +43,7 @@ import {
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
+const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 
 // ============================================================
 // Config
@@ -103,6 +104,13 @@ function _mpDispId(gameIdx) {
 }
 
 // ============================================================
+// Disconnect tracking  (MP only)
+// ============================================================
+
+let _disconnectedUids   = {};   // playerIdx → uid, for incrementTurnsMissed
+let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min permanent-bot)
+
+// ============================================================
 // Game State
 // ============================================================
 
@@ -136,6 +144,10 @@ onMPHostStart(_handleMPHostStart);
 onNewGame(_handleNewGame);
 onMainMenu(_handleMainMenu);
 onHostLeft(_handleHostLeft);
+
+MP.on('playerDisconnected', _handlePlayerDisconnected);
+MP.on('playerReconnected',  _handlePlayerReconnected);
+MP.on('hostChanged',        _handleHostChanged);
 
 // ============================================================
 // Game Flow
@@ -547,6 +559,47 @@ function _handleHostLeft() {
     MP.leaveRoom();
 }
 
+function _handlePlayerDisconnected({ uid, playerIdx, nickname, wasHost }) {
+    if (MP.isHost()) {
+        _mpBotIdxs.push(playerIdx);
+        _disconnectedUids[playerIdx] = uid;
+        convertToBot(uid).catch(e => console.error('[MP] convertToBot failed:', e));
+
+        // 5-minute reconnect window — after that, slot is permanently a bot
+        _reconnectTimeouts[playerIdx] = setTimeout(() => {
+            delete _reconnectTimeouts[playerIdx];
+            delete _disconnectedUids[playerIdx];
+            permanentBot(uid, `${nickname} (Bot)`)
+                .catch(e => console.error('[MP] permanentBot failed:', e));
+            Update('SHOW_MESSAGE', { text: `${nickname} timed out. AI will finish the game.` });
+        }, 5 * 60 * 1000);
+    }
+
+    if (wasHost) {
+        tryPromoteHost().catch(e => console.error('[MP] host promotion failed:', e));
+    }
+
+    Update('PLAYER_STATUS', { playerId: _mpDispId(playerIdx), disconnected: true });
+    Update('SHOW_MESSAGE', { text: `${nickname} disconnected. AI took over.` });
+}
+
+function _handlePlayerReconnected({ uid, playerIdx, nickname, turnsMissed }) {
+    if (MP.isHost()) {
+        clearTimeout(_reconnectTimeouts[playerIdx]);
+        delete _reconnectTimeouts[playerIdx];
+        delete _disconnectedUids[playerIdx];
+        _mpBotIdxs = _mpBotIdxs.filter(i => i !== playerIdx);
+    }
+    Update('PLAYER_STATUS', { playerId: _mpDispId(playerIdx), disconnected: false });
+    Update('SHOW_MESSAGE', { text: `${nickname} reconnected!` });
+}
+
+function _handleHostChanged({ isMe }) {
+    if (!isMe) return;
+    Update('SHOW_MESSAGE', { text: 'You are now the game host.' });
+    if (_gameActive) setTimeout(_startMPTurn, 500);
+}
+
 /** Called when the host clicks '▶ Start Game' in the MP lobby. */
 function _handleMPHostStart({ players, maxPlayers }) {
     const humanIdxs = Object.values(players).map(p => p.idx);
@@ -563,14 +616,24 @@ function _handleMPHostStart({ players, maxPlayers }) {
  * Called by ui-manager after the lift-door animation completes.
  * Sets up the MP game state and board for this client.
  */
-function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
+function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = false, turnsMissed = 0 }) {
     _lastMPMode = true;
     const initialState = MP.deserialiseState(rawState);
 
-    const humanIdxs = Object.values(players).map(p => p.idx);
+    // Seats that are either unoccupied or currently AI-controlled are bot seats
+    const humanIdxs = Object.values(players)
+        .filter(p => !p.isAI)
+        .map(p => p.idx);
     _mpBotIdxs = [];
     for (let i = 0; i < maxPlayers; i++) {
         if (!humanIdxs.includes(i)) _mpBotIdxs.push(i);
+    }
+
+    // Restore disconnect tracking for any already-AI seats
+    _disconnectedUids = {};
+    _reconnectTimeouts = {};
+    for (const [uid, p] of Object.entries(players)) {
+        if (p.isAI && p.wasHuman) _disconnectedUids[p.idx] = uid;
     }
 
     _mpMode     = true;
@@ -597,12 +660,27 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
 
     const ds = decodeState(_state);
     Update('CLEAR_PILE');
-    Update('ADD_TO_PILE', { card: ds.pile[0] });
 
-    const hands = {};
-    for (let p = 0; p < NUM_PLAYERS; p++) hands[_mpDispId(p)] = ds.hands[p];
-    // After rotation _myMPIdx always maps to 'yourCards'
-    Update('ANIMATE_DEAL', { hands, humanPlayerId: 'yourCards' });
+    if (isReconnect) {
+        // Restore current pile and hands without a deal animation
+        for (let i = 0; i < _state.pileSize; i++) Update('ADD_TO_PILE', { card: ds.pile[i] });
+        for (let p = 0; p < NUM_PLAYERS; p++) {
+            if (p === _myMPIdx) {
+                Update('RENDER_HAND', { playerId: _mpDispId(p), cards: ds.hands[p] });
+            } else {
+                Update('RENDER_HAND', { playerId: _mpDispId(p), count: ds.hands[p].length });
+            }
+        }
+        const missedText = turnsMissed > 0
+            ? `Welcome back! AI played ${turnsMissed} turn${turnsMissed !== 1 ? 's' : ''} for you.`
+            : 'Welcome back! You\'ve rejoined the game.';
+        Update('SHOW_MESSAGE', { text: missedText });
+    } else {
+        Update('ADD_TO_PILE', { card: ds.pile[0] });
+        const hands = {};
+        for (let p = 0; p < NUM_PLAYERS; p++) hands[_mpDispId(p)] = ds.hands[p];
+        Update('ANIMATE_DEAL', { hands, humanPlayerId: 'yourCards' });
+    }
 
     // Show/hide player areas based on actual rotated seat occupancy
     const _occupied = new Set(Array.from({ length: NUM_PLAYERS }, (_, p) => _mpDispId(p)));
@@ -618,8 +696,17 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers }) {
         Update('SET_PLAYER_AVATAR', { playerId: _mpDispId(p), avatarIdx: byIdx[p]?.avatarIdx ?? 0 });
     }
 
+    // Restore disconnect visual indicators for any already-disconnected seats
+    for (const [uid, p] of Object.entries(players)) {
+        if (p.isAI && p.wasHuman) {
+            Update('PLAYER_STATUS', { playerId: _mpDispId(p.idx), disconnected: true });
+        }
+    }
+
     MP.off('stateUpdate', _onMPStateUpdate);
     MP.on ('stateUpdate', _onMPStateUpdate);
+
+    if (isReconnect) setTimeout(_startMPTurn, 600);
 }
 
 /** Firebase 'stateUpdate' — another player made a move; sync local state. */
@@ -702,6 +789,10 @@ async function _mpBotTurn(playerIdx) {
 
     const engine = _engines[playerIdx] ?? (_engines[playerIdx] = new ISMCTSEngine('shark'));
     const move   = engine.chooseMove(_state);
+
+    // Increment counter if this seat belongs to a disconnected human
+    const dcUid = _disconnectedUids[playerIdx];
+    if (dcUid) incrementTurnsMissed(dcUid).catch(() => {});
 
     for (const eng of Object.values(_engines)) {
         eng.observeMove(_state, move);

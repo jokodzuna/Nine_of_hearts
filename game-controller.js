@@ -568,7 +568,7 @@ function _handleHostLeft() {
 }
 
 function _handlePlayerDisconnected({ uid, playerIdx, nickname, wasHost }) {
-    if (MP.isHost()) {
+    if (MP.isHost() && !_mpBotIdxs.includes(playerIdx)) {
         _mpBotIdxs.push(playerIdx);
         _disconnectedUids[playerIdx] = uid;
         convertToBot(uid).catch(e => console.error('[MP] convertToBot failed:', e));
@@ -604,12 +604,16 @@ function _handlePlayerReconnected({ uid, playerIdx, nickname, turnsMissed }) {
 }
 
 function _handleHostChanged({ isMe }) {
-    // New host found — dismiss the 'lost connection to host' overlay for everyone
-    Update('HIDE_CONNECTION_OVERLAY');
-
     if (isMe) {
+        // Keep the overlay visible for 2 s so players can read "Lost connection"
+        // before dismissing it and starting the first turn as the new host.
         Update('SHOW_MESSAGE', { text: 'You are now the game host.' });
-        if (_gameActive) setTimeout(_startMPTurn, 500);
+        setTimeout(() => {
+            Update('HIDE_CONNECTION_OVERLAY');
+            if (_gameActive) _startMPTurn();
+        }, 2000);
+    } else {
+        Update('HIDE_CONNECTION_OVERLAY');
     }
 }
 
@@ -617,8 +621,24 @@ function _handleHostHeartbeatLost({ uid, playerIdx, nickname }) {
     if (!_mpMode || !_gameActive) return;
     Update('SHOW_CONNECTION_OVERLAY', { mode: 'host' });
     if (playerIdx >= 0) Update('PLAYER_STATUS', { playerId: _mpDispId(playerIdx), disconnected: true });
-    Update('SHOW_MESSAGE', { text: `${nickname} lost connection. Attempting to resume…` });
+
     tryPromoteHost().catch(e => console.error('[MP] tryPromoteHost (heartbeat) failed:', e));
+
+    // tryPromoteHost sets _isHost synchronously before its first await.
+    // If this client was just promoted, take over the offline player's slot
+    // so _startMPTurn drives their turns as bot and the game doesn't stall.
+    if (MP.isHost() && _gameActive && playerIdx >= 0 && !_mpBotIdxs.includes(playerIdx)) {
+        _mpBotIdxs.push(playerIdx);
+        _disconnectedUids[playerIdx] = uid;
+        convertToBot(uid).catch(e => console.error('[MP] convertToBot failed:', e));
+        _reconnectTimeouts[playerIdx] = setTimeout(() => {
+            delete _reconnectTimeouts[playerIdx];
+            delete _disconnectedUids[playerIdx];
+            permanentBot(uid, `${nickname} (Bot)`)
+                .catch(e => console.error('[MP] permanentBot failed:', e));
+            Update('SHOW_MESSAGE', { text: `${nickname} timed out. AI will finish the game.` });
+        }, 5 * 60 * 1000);
+    }
 }
 
 function _handleHostHeartbeatRestored() {

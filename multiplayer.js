@@ -575,12 +575,17 @@ function _subscribeRoom(code) {
                         uid, playerIdx: player.idx, nickname: player.nickname,
                     });
                 }
-                if (wasAI && !nowAI) {
+                // Fire playerReconnected for any transition back to active:
+                //  - wasAI→!nowAI  : full bot-slot reclaim
+                //  - !wasConn→nowConn (!nowAI): quick reconnect before bot-conversion
+                const wasOffline = wasAI || !wasConn;
+                const isBackNow  = nowConn && !nowAI;
+                if (wasOffline && isBackNow) {
                     _emit('playerReconnected', {
                         uid,
                         playerIdx:   player.idx,
                         nickname:    player.nickname,
-                        turnsMissed: prev.turnsMissed ?? 0,
+                        turnsMissed: player.turnsMissed ?? 0,
                     });
                 }
             }

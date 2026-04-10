@@ -613,6 +613,8 @@ function _buildPostGameMenu(gs, isMP, isHost) {
     mainMenuBtn.textContent = 'MAIN MENU';
     mainMenuBtn.addEventListener('click', () => {
         disableAll();
+        MP.clearLastRoom();      // clear immediately — before welcome screen is pre-rendered
+        _refreshRejoinButton();  // remove button now so it never appears during transition
         _doMainMenuTransition(gs);
     });
     menu.appendChild(mainMenuBtn);

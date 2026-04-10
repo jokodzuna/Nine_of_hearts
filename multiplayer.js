@@ -74,6 +74,12 @@ function _startGuestHeartbeatWatch(_code) {
         const age = Date.now() - _lastRoomUpdateMs;
         if (age > _HB_TIMEOUT_MS && !_hbLost) {
             _hbLost = true;
+            // Locally mark the host as disconnected so tryPromoteHost's
+            // connected:false filter works before Firebase onDisconnect fires.
+            if (_prevHost && _players[_prevHost]) {
+                _players = { ..._players,
+                    [_prevHost]: { ..._players[_prevHost], connected: false } };
+            }
             _emit('hostHeartbeatLost', {
                 uid:       _prevHost,
                 playerIdx: (_prevHost && _players[_prevHost]) ? _players[_prevHost].idx  : -1,
@@ -551,8 +557,10 @@ function _subscribeRoom(code) {
                 if (wasConn && !nowConn) {
                     const wasHostPlayer = uid === (room.host ?? _prevHost);
                     if (wasHostPlayer && _hbLost) {
-                        // Already reported via heartbeat — reset flag, don't double-fire
+                        // Firebase confirmed the host is gone; reset flag and retry
+                        // promotion in case the first heartbeat attempt didn't succeed.
                         _hbLost = false;
+                        if (!_isHost) tryPromoteHost().catch(() => {});
                     } else {
                         _emit('playerDisconnected', {
                             uid,

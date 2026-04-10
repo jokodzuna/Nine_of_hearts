@@ -844,6 +844,7 @@ function _startMPTurn() {
 /** Host: run Shark bot for the given seat and push new state to Firebase. */
 async function _mpBotTurn(playerIdx) {
     if (!_state || !_gameActive || _state.currentPlayer !== playerIdx) return;
+    if (!_mpBotIdxs.includes(playerIdx)) return;   // player reclaimed slot
 
     const engine = _engines[playerIdx] ?? (_engines[playerIdx] = new ISMCTSEngine('shark'));
     const move   = engine.chooseMove(_state);

@@ -40,6 +40,60 @@ let _prevPlayers            = {};     // uid → player snapshot for diff detect
 let _prevHost               = null;   // previous room.host uid
 let _wasConnectedToFirebase = null;   // tracks true/false to detect transitions
 
+// ---- Heartbeat (fast host-offline detection for guests) ---------------------
+const _HB_WRITE_MS   = 6_000;   // host writes every 6 s
+const _HB_TIMEOUT_MS = 18_000;  // guests alert after 18 s without a write
+let _hbInterval   = null;
+let _hbUnsub      = null;
+let _hbStaleTimer = null;
+let _hbLost       = false;   // prevents duplicate 'hostHeartbeatLost' events
+
+function _startHostHeartbeat(code) {
+    _stopHeartbeat();
+    const doWrite = () => {
+        if (!_isHost || !_roomCode) return;
+        update(ref(_db, `rooms/${code}`), { hostHeartbeat: Date.now() }).catch(() => {});
+    };
+    doWrite();
+    _hbInterval = setInterval(doWrite, _HB_WRITE_MS);
+}
+
+function _startGuestHeartbeatWatch(code) {
+    _stopHeartbeat();
+    _hbLost = false;
+
+    const arm = () => {
+        clearTimeout(_hbStaleTimer);
+        _hbStaleTimer = setTimeout(() => {
+            if (_isHost || !_roomCode || _hbLost || _prevStatus !== 'playing') return;
+            _hbLost = true;
+            _emit('hostHeartbeatLost', {
+                uid:       _prevHost,
+                playerIdx: (_prevHost && _players[_prevHost]) ? _players[_prevHost].idx  : -1,
+                nickname:  (_prevHost && _players[_prevHost]) ? (_players[_prevHost].nickname ?? 'Host') : 'Host',
+            });
+        }, _HB_TIMEOUT_MS);
+    };
+
+    _hbUnsub = onValue(ref(_db, `rooms/${code}/hostHeartbeat`), snap => {
+        if (snap.val() === null) return;   // never been written yet
+        if (_hbLost) {
+            _hbLost = false;
+            _emit('hostHeartbeatRestored');
+        }
+        arm();
+    });
+
+    arm();   // start the initial stale timer immediately
+}
+
+function _stopHeartbeat() {
+    if (_hbInterval)   { clearInterval(_hbInterval);   _hbInterval   = null; }
+    if (_hbUnsub)      { _hbUnsub();                   _hbUnsub      = null; }
+    if (_hbStaleTimer) { clearTimeout(_hbStaleTimer);  _hbStaleTimer = null; }
+    _hbLost = false;
+}
+
 // ---- Lightweight event bus --------------------------------------------------
 const _listeners = {};
 
@@ -97,6 +151,7 @@ export const isHost         = () => _isHost;
 export const isInRoom       = () => _roomCode !== null;
 export const getMaxPlayers  = () => _maxPlayers;
 export const getPlayers     = () => _players;
+export const getHostUid     = () => _prevHost;
 
 /** Any player: update own avatarIdx in the lobby (real-time exclusion). */
 export async function updateAvatar(avatarIdx) {
@@ -138,6 +193,7 @@ export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
     });
 
     _setupPresence(code);
+    _startHostHeartbeat(code);
     _saveLastRoom(code);
     _subscribeRoom(code);
     return code;
@@ -181,6 +237,7 @@ export async function joinRoom({ code, nickname, avatarIdx }) {
     });
 
     _setupPresence(code);
+    _startGuestHeartbeatWatch(code);
     _saveLastRoom(code);
     _subscribeRoom(code);
     return { playerIdx: nextIdx, reconnected: false };
@@ -212,6 +269,7 @@ export async function pushMove(newState) {
 
 /** Detach listener and reset session. */
 export function leaveRoom() {
+    _stopHeartbeat();
     if (_myOnDisconnect) { _myOnDisconnect.cancel().catch(() => {}); _myOnDisconnect = null; }
     if (_roomUnsub) { _roomUnsub(); _roomUnsub = null; }
     _roomCode     = null;
@@ -285,6 +343,7 @@ async function _doReconnect(code, room, slot) {
     };
 
     _setupPresence(code);
+    _startGuestHeartbeatWatch(code);   // reconnecting as non-host
     _saveLastRoom(code);
     _subscribeRoom(code);
 
@@ -336,6 +395,8 @@ export async function tryPromoteHost() {
     const [candidateUid] = candidates[0];
     if (candidateUid !== _uid) return;
     _isHost = true;
+    _stopHeartbeat();
+    _startHostHeartbeat(_roomCode);
     await update(ref(_db, `rooms/${_roomCode}`), { host: _uid });
 }
 
@@ -437,6 +498,14 @@ function _setupConnectionMonitor() {
                         connected: true,
                     });
                 }
+                // Restart appropriate heartbeat role after reconnect
+                if (isStillHost) {
+                    _stopHeartbeat();
+                    _startHostHeartbeat(_roomCode);
+                } else {
+                    _startGuestHeartbeatWatch(_roomCode);
+                }
+
                 // Always emit selfReconnected so game-controller can resume
                 // _startMPTurn regardless of how long we were offline.
                 _emit('selfReconnected', {
@@ -482,12 +551,18 @@ function _subscribeRoom(code) {
                 const nowAI   = !!player.isAI;
 
                 if (wasConn && !nowConn) {
-                    _emit('playerDisconnected', {
-                        uid,
-                        playerIdx: player.idx,
-                        nickname:  player.nickname,
-                        wasHost:   uid === (room.host ?? _prevHost),
-                    });
+                    const wasHostPlayer = uid === (room.host ?? _prevHost);
+                    if (wasHostPlayer && _hbLost) {
+                        // Already reported via heartbeat — reset flag, don't double-fire
+                        _hbLost = false;
+                    } else {
+                        _emit('playerDisconnected', {
+                            uid,
+                            playerIdx: player.idx,
+                            nickname:  player.nickname,
+                            wasHost:   wasHostPlayer,
+                        });
+                    }
                 }
                 if (!wasAI && nowAI) {
                     _emit('playerBotTakeover', {

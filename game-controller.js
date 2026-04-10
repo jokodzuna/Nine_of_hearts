@@ -145,12 +145,14 @@ onNewGame(_handleNewGame);
 onMainMenu(_handleMainMenu);
 onHostLeft(_handleHostLeft);
 
-MP.on('playerDisconnected',  _handlePlayerDisconnected);
-MP.on('playerReconnected',   _handlePlayerReconnected);
-MP.on('hostChanged',         _handleHostChanged);
-MP.on('connectionLost',      _handleConnectionLost);
-MP.on('connectionRestored',  _handleConnectionRestored);
-MP.on('selfReconnected',     _handleSelfReconnected);
+MP.on('playerDisconnected',   _handlePlayerDisconnected);
+MP.on('playerReconnected',    _handlePlayerReconnected);
+MP.on('hostChanged',          _handleHostChanged);
+MP.on('connectionLost',       _handleConnectionLost);
+MP.on('connectionRestored',   _handleConnectionRestored);
+MP.on('selfReconnected',      _handleSelfReconnected);
+MP.on('hostHeartbeatLost',    _handleHostHeartbeatLost);
+MP.on('hostHeartbeatRestored',_handleHostHeartbeatRestored);
 
 // ============================================================
 // Game Flow
@@ -609,6 +611,19 @@ function _handleHostChanged({ isMe }) {
         Update('SHOW_MESSAGE', { text: 'You are now the game host.' });
         if (_gameActive) setTimeout(_startMPTurn, 500);
     }
+}
+
+function _handleHostHeartbeatLost({ uid, playerIdx, nickname }) {
+    if (!_mpMode || !_gameActive) return;
+    Update('SHOW_CONNECTION_OVERLAY', { mode: 'host' });
+    if (playerIdx >= 0) Update('PLAYER_STATUS', { playerId: _mpDispId(playerIdx), disconnected: true });
+    Update('SHOW_MESSAGE', { text: `${nickname} lost connection. Attempting to resume…` });
+    tryPromoteHost().catch(e => console.error('[MP] tryPromoteHost (heartbeat) failed:', e));
+}
+
+function _handleHostHeartbeatRestored() {
+    // Hide overlay whether or not a new host was promoted in the meantime
+    Update('HIDE_CONNECTION_OVERLAY');
 }
 
 function _handleConnectionLost() {

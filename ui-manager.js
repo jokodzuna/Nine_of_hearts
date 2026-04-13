@@ -482,7 +482,7 @@ function _startTimer(playerId, isHuman) {
 // ============================================================
 
 function _highlightPlayer(playerId) {
-    document.querySelectorAll('.cards.turn-active').forEach(a => a.classList.remove('turn-active', 'turn-glow'));
+    document.querySelectorAll('.active-hand').forEach(a => a.classList.remove('active-hand'));
     document.querySelectorAll('.avatar.active').forEach(a => a.classList.remove('active'));
     document.querySelectorAll('.avatar-container.active').forEach(c => {
         c.classList.remove('active');
@@ -499,11 +499,10 @@ function _highlightPlayer(playerId) {
         if (container) container.classList.add('active');
     }
 
-    const cardsEl = document.getElementById(playerId);
-    if (cardsEl) {
-        cardsEl.classList.add('turn-active');
-        if (playerId === HUMAN_ID) {
-            cardsEl.classList.add('turn-glow');
+    if (playerId === HUMAN_ID) {
+        const cardsEl = document.getElementById(playerId);
+        if (cardsEl) {
+            cardsEl.classList.add('active-hand');
             navigator.vibrate?.([100, 50, 100]);
         }
     }

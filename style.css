@@ -51,10 +51,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 
 /* ---- Turn Indicator ---- */
 @keyframes pulseGlow {
-    0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.3); }
-    50%       { box-shadow: 0 0 28px rgba(255, 215, 0, 0.85); }
+    0%, 100% { box-shadow: 0 0 10px 3px rgba(255, 215, 0, 0.45); }
+    50%       { box-shadow: 0 0 22px 8px rgba(255, 215, 0, 0.85); }
 }
-.cards.turn-glow { animation: pulseGlow 1.6s ease-in-out infinite; }
+.active-hand .card { box-shadow: 0 0 15px 5px rgba(255, 215, 0, 0.7); transition: box-shadow 0.3s ease; animation: pulseGlow 1.6s ease-in-out infinite; }
 
 .center-area { grid-row: 2; grid-column: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; position: relative; }
 .player-info { display: flex; align-items: center; gap: 10px; position: relative; }
@@ -145,8 +145,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     vertical-align: middle;
 }
 
-.cards { display: flex; align-items: center; justify-content: center; gap: 0; position: relative; outline: 3px solid transparent; outline-offset: -3px; border-radius: 6px; transition: outline-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out; }
-.cards.turn-active { outline-color: #FFD700; }
+.cards { display: flex; align-items: center; justify-content: center; gap: 0; position: relative; }
 
 .card {
     --card-w: var(--other-card-width);

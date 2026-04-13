@@ -43,11 +43,20 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 
 .game-table { width: 100%; height: 100%; display: grid; grid-template-rows: 140px 1fr 200px; grid-template-columns: 150px 1fr 150px; gap: 10px; padding: 15px; position: relative; z-index: 1; }
 
-.player-area { display: flex; align-items: center; justify-content: center; position: relative; }
+.player-area { display: flex; align-items: center; justify-content: center; position: relative; outline: 3px solid transparent; outline-offset: -3px; transition: outline-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out; }
 .player-top { grid-row: 1; grid-column: 1 / 4; flex-direction: column; gap: 10px; }
 .player-bottom { grid-row: 3; grid-column: 1 / 4; flex-direction: column; gap: 10px; }
 .player-left { grid-row: 2; grid-column: 1; flex-direction: row; align-items: center; justify-content: center; gap: 30px; }
 .player-right { grid-row: 2; grid-column: 3; flex-direction: row; align-items: center; justify-content: center; gap: 30px; }
+
+/* ---- Turn Indicator ---- */
+.player-area.turn-active { outline-color: #FFD700; }
+
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.3); }
+    50%       { box-shadow: 0 0 28px rgba(255, 215, 0, 0.85); }
+}
+.player-area.turn-glow { animation: pulseGlow 1.6s ease-in-out infinite; }
 
 .center-area { grid-row: 2; grid-column: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; position: relative; }
 .player-info { display: flex; align-items: center; gap: 10px; position: relative; }
@@ -65,13 +74,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 .avatar-container {
     --ring-progress: 0;
     --ring-color: #FFD700;
-    --ring-thickness: 5px;
+    --ring-thickness: 3.5px;
     flex: 0 0 auto;
 }
 .avatar-container::before {
     content: '';
     position: absolute;
-    inset: 0;
+    inset: -3px;  /* extend beyond container so ring sits outside the avatar circle */
     border-radius: 50%;
     background: conic-gradient(from -90deg, var(--ring-color) calc(var(--ring-progress) * 1turn), rgba(0,0,0,0) 0);
     -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring-thickness)), #000 calc(100% - var(--ring-thickness)));
@@ -81,7 +90,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.7));
 }
 .avatar.active { box-shadow: 0 0 20px 5px #F44336; }
-.avatar-container.active::before { opacity: 1; }
+.avatar-container.active { --ring-thickness: 5.5px; }  /* 2 px wider when it's this player's turn */
+.avatar-container.active::before { opacity: 1; filter: drop-shadow(0 0 5px #FFD700); }
 
 .player-name-score { display: flex; flex-direction: column; align-items: center; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); flex: 0 0 auto; }
 .player-name { font-size: 16px; font-weight: bold; }

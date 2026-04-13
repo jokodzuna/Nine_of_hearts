@@ -482,6 +482,7 @@ function _startTimer(playerId, isHuman) {
 // ============================================================
 
 function _highlightPlayer(playerId) {
+    document.querySelectorAll('.player-area.turn-active').forEach(a => a.classList.remove('turn-active', 'turn-glow'));
     document.querySelectorAll('.avatar.active').forEach(a => a.classList.remove('active'));
     document.querySelectorAll('.avatar-container.active').forEach(c => {
         c.classList.remove('active');
@@ -496,6 +497,16 @@ function _highlightPlayer(playerId) {
         avatar.classList.add('active');
         const container = avatar.closest('.avatar-container');
         if (container) container.classList.add('active');
+    }
+
+    const cardsEl = document.getElementById(playerId);
+    const playerArea = cardsEl?.closest('.player-area');
+    if (playerArea) {
+        playerArea.classList.add('turn-active');
+        if (playerId === HUMAN_ID) {
+            playerArea.classList.add('turn-glow');
+            navigator.vibrate?.([100, 50, 100]);
+        }
     }
 }
 

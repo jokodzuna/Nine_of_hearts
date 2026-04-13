@@ -446,7 +446,7 @@ function _startWelcomeSequence() {
 
 function _stopTimer() {
     if (_timer.rafId) cancelAnimationFrame(_timer.rafId);
-    if (_timer.container) _timer.container.style.removeProperty('--ring-color');
+    if (_timer.container) _timer.container.classList.remove('ring-warm', 'ring-hot');
     _timer = { rafId: null, endTime: 0, isHuman: false, lastTick: null, container: null };
 }
 
@@ -457,7 +457,6 @@ function _startTimer(playerId, isHuman) {
     if (!el) return;
 
     el.style.setProperty('--ring-progress', '1');
-    el.style.setProperty('--ring-color', '#FFD700');
     _timer.container = el;
     _timer.isHuman   = isHuman;
     _timer.endTime   = performance.now() + TURN_DURATION_MS;
@@ -468,8 +467,15 @@ function _startTimer(playerId, isHuman) {
         const progress = rem / TURN_DURATION_MS;
         if (_timer.container) {
             _timer.container.style.setProperty('--ring-progress', String(progress));
-            const color = progress >= 0.6 ? '#FFD700' : progress >= 0.33 ? '#FFA500' : '#FF0000';
-            _timer.container.style.setProperty('--ring-color', color);
+            if (progress < 0.33) {
+                _timer.container.classList.remove('ring-warm');
+                _timer.container.classList.add('ring-hot');
+            } else if (progress < 0.6) {
+                _timer.container.classList.remove('ring-hot');
+                _timer.container.classList.add('ring-warm');
+            } else {
+                _timer.container.classList.remove('ring-warm', 'ring-hot');
+            }
         }
 
         if (_timer.isHuman) {

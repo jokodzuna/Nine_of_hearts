@@ -62,11 +62,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 .draw-button:hover { background: #2563eb; transform: translateY(-1px); }
 .draw-button:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
 
-@property --ring-color {
-    syntax: '<color>';
-    inherits: false;
-    initial-value: #FFD700;
-}
 .avatar-container { width: 60px; height: 60px; position: relative; }
 .avatar { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 3px solid white; transition: box-shadow 0.3s; }
 .avatar-container {
@@ -74,7 +69,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     --ring-color: #FFD700;
     --ring-thickness: 3.5px;
     flex: 0 0 auto;
-    transition: --ring-color 0.3s ease;
 }
 .avatar-container::before {
     content: '';
@@ -90,6 +84,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
 }
 .avatar-container.active { --ring-thickness: 5.5px; }  /* 2 px wider when it's this player's turn */
 .avatar-container.active::before { opacity: 1; filter: drop-shadow(0 0 5px #FFD700); }
+.avatar-container.ring-warm::before { --ring-color: #FFA500; filter: drop-shadow(0 0 5px #FFA500); }
+.avatar-container.ring-hot::before  { --ring-color: #FF0000; filter: drop-shadow(0 0 5px #FF0000); }
 
 .player-name-score { display: flex; flex-direction: column; align-items: center; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); flex: 0 0 auto; }
 .player-name { font-size: 16px; font-weight: bold; }

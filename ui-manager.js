@@ -1193,7 +1193,7 @@ function _updateSideHandLayout(playerId) {
 
     const maxStep = (areaH - wrapH) / (n - 1);  // step that exactly fills container
     const defStep = wrapH * 0.558;               // CSS default ratio (10.6u / 19u)
-    const step    = Math.min(defStep, Math.max(4, maxStep));
+    const step    = Math.min(defStep, Math.max(0, maxStep));
     const neg     = -(wrapH - step);
 
     wraps[0].style.marginTop = '0';

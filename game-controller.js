@@ -52,7 +52,6 @@ const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 let   NUM_PLAYERS   = 4;   // updated from welcome config each game
 const HUMAN         = 0;
 const POST_MOVE_MS  = 350;    // pause after each move before next turn
-const TURBO_AI_MS   = 300;    // AI delay during turbo mode
 const HUMAN_TURN_MS = 15000;  // must match TURN_DURATION_MS in ui-manager.js
 
 /** Random 2–4 s delay so AI turns feel natural, not robotic. */
@@ -116,8 +115,6 @@ let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min perman
 
 let _state          = null;
 let _gameActive     = false;
-let _turboMode      = false;   // true once human player is safe
-let _turboTurnsLeft = 0;       // countdown of AI turns after human exits
 let _humanTimer     = null;    // setTimeout handle for human auto-move
 
 // Multiplayer state
@@ -129,8 +126,6 @@ let _abandonTimer = null;      // host: fires when all human guests have been go
 // Post-game restart data
 let _lastMPMode     = false;
 let _lastLocalConfig = null;
-
-const TURBO_TURNS   = 10;
 
 // ============================================================
 // Bridge — register callbacks with ui-manager
@@ -181,8 +176,6 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[0] = cfg.playerName || 'Player';
 
     _gameActive     = true;
-    _turboMode      = false;
-    _turboTurnsLeft = 0;
 
     for (const engine of Object.values(_engines)) engine.resetKnowledge();
 
@@ -213,15 +206,6 @@ function _startTurn() {
         return;
     }
 
-    // Turbo countdown: each AI turn after human exits counts down
-    if (_turboMode) {
-        if (_turboTurnsLeft <= 0) {
-            _forceEndGame();
-            return;
-        }
-        _turboTurnsLeft--;
-    }
-
     const ds = decodeState(_state);
     const p  = _state.currentPlayer;
 
@@ -232,9 +216,7 @@ function _startTurn() {
 
     Update('HIGHLIGHT_PLAYER', { playerId: PLAYER_IDS[p] });
 
-    const turnMsg = _turboMode
-        ? `⚡ TURBO  ·  ${_turboTurnsLeft + 1} turns left  ·  ${PLAYER_NAMES[p]}: ${ds.topCard.rank}${ds.topCard.suit}`
-        : `${PLAYER_NAMES[p]}'s turn  ·  Top: ${ds.topCard.rank}${ds.topCard.suit}`;
+    const turnMsg = `${PLAYER_NAMES[p]}'s turn  ·  Top: ${ds.topCard.rank}${ds.topCard.suit}`;
     Update('SHOW_MESSAGE', { text: turnMsg });
 
     if (p === HUMAN) {
@@ -247,8 +229,7 @@ function _startTurn() {
         Update('ENABLE_PLAY', { enabled: false });
         Update('ENABLE_DRAW', { enabled: false });
         Update('START_TIMER', { playerId: PLAYER_IDS[p], isHuman: false });
-        const delay = _turboMode ? TURBO_AI_MS : _aiDelay();
-        setTimeout(() => _aiTurn(p), delay);
+        setTimeout(() => _aiTurn(p), _aiDelay());
     }
 }
 
@@ -326,11 +307,9 @@ function _applyAndAdvance(move) {
 
     _state = applyMove(_state, move);
 
-    // Activate turbo mode the moment the human player empties their hand
-    if (!_turboMode && (_state.eliminated & (1 << HUMAN))) {
-        _turboMode      = true;
-        _turboTurnsLeft = TURBO_TURNS;
-        Update('SHOW_MESSAGE', { text: `⚡ You're safe! TURBO MODE — ${TURBO_TURNS} turns left for the AIs!` });
+    if (_allHumansEliminated()) {
+        setTimeout(_forceEndGame, POST_MOVE_MS);
+        return;
     }
 
     setTimeout(_startTurn, POST_MOVE_MS);
@@ -416,6 +395,20 @@ async function _remoteHumanTimerExpired(playerIdx) {
     try   { await MP.pushMove(newState); }
     catch (e) { console.error('[MP] remoteHumanTimerExpired pushMove failed:', e); }
     setTimeout(_startMPTurn, POST_MOVE_MS);
+}
+
+/**
+ * Returns true when every human seat has cleared their hand.
+ * Local: only seat 0 is human. MP: every seat not in _mpBotIdxs.
+ */
+function _allHumansEliminated() {
+    if (_mpMode) {
+        for (let i = 0; i < NUM_PLAYERS; i++) {
+            if (!_mpBotIdxs.includes(i) && !(_state.eliminated & (1 << i))) return false;
+        }
+        return true;
+    }
+    return !!(_state.eliminated & (1 << HUMAN));
 }
 
 function _endGame() {
@@ -808,7 +801,6 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = fals
     NUM_PLAYERS = maxPlayers;
     _state      = initialState;
     _gameActive = true;
-    _turboMode  = false;
 
     const byIdx = {};
     for (const p of Object.values(players)) byIdx[p.idx] = p;
@@ -918,6 +910,7 @@ function _startMPTurn() {
     if (!_state || !_gameActive) return;
 
     if (isGameOver(_state)) { _endGame(); return; }
+    if (_allHumansEliminated()) { _forceEndGame(); return; }
 
     const ds = decodeState(_state);
     const p  = _state.currentPlayer;

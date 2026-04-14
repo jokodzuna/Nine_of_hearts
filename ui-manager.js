@@ -893,12 +893,9 @@ function _renderHand(playerId, cards, count) {
             container.appendChild(isSide ? _createSideWrap(el) : el);
         }
         if (isSide) {
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    _updateSideHandLayout(playerId);
-                    container.classList.remove('no-anim');
-                });
-            });
+            container.getBoundingClientRect(); // force synchronous layout so margins are set before first paint
+            _updateSideHandLayout(playerId);
+            container.classList.remove('no-anim');
         } else {
             requestAnimationFrame(() => {
                 container.classList.remove('no-anim');
@@ -1197,9 +1194,9 @@ function _updateSideHandLayout(playerId) {
     const areaH = container.clientHeight;                   // available height in px
     if (wrapH <= 0 || areaH <= 0) return;
 
-    const maxStep = (areaH - wrapH) / (n - 1);  // step that exactly fills container
-    const defStep = wrapH * 0.558;               // CSS default ratio (10.6u / 19u)
-    const step    = Math.min(defStep, Math.max(0, maxStep));
+    const maxStep    = (areaH - wrapH) / (n - 1);  // step that exactly fills container
+    const maxNatural = wrapH * 0.95;               // max spread: slight overlap (5%), no gaps
+    const step       = Math.min(maxNatural, Math.max(0, maxStep));
     const neg     = -(wrapH - step);
 
     wraps[0].style.marginTop = '0';

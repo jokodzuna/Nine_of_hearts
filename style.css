@@ -192,8 +192,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     text-shadow: 0 0 5px rgba(0,0,0,0.5);
 }
 
-/* TEMP DEBUG */ #yourCards, #player1Cards, #player2Cards, #player3Cards { outline: 1px solid red; }
-
 /* Suppress card entrance transitions during re-renders to prevent blink */
 #yourCards.no-anim .card, #player2Cards.no-anim .card,
 #player3Cards.no-anim .card, #player1Cards.no-anim .card {

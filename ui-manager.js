@@ -561,9 +561,10 @@ function _selectFourOfAKind(card) {
     const hand = document.getElementById(HUMAN_ID);
     if (!hand) return;
     const sameRank = Array.from(hand.querySelectorAll('.card')).filter(c => c.dataset.rank === card.dataset.rank);
-    if (sameRank.length < 4) return;
+    const isTripleNine = card.dataset.rank === '9' && sameRank.length === 3;
+    if (sameRank.length < 4 && !isTripleNine) return;
     _deselectAll();
-    const picked = sameRank.slice(0, 4);
+    const picked = sameRank.slice(0, isTripleNine ? 3 : 4);
     picked.forEach(c => c.classList.add('selected'));
     _selectedCards = picked;
 }

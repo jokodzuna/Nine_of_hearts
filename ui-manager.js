@@ -892,15 +892,21 @@ function _renderHand(playerId, cards, count) {
             el.classList.add('dealt');
             container.appendChild(isSide ? _createSideWrap(el) : el);
         }
-        requestAnimationFrame(() => {
-            container.classList.remove('no-anim');
-            if (playerId === 'player2Cards') {
-                requestAnimationFrame(_updateTopHandLayout);
-            }
-            if (isSide) {
-                requestAnimationFrame(() => requestAnimationFrame(() => _updateSideHandLayout(playerId)));
-            }
-        });
+        if (isSide) {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    _updateSideHandLayout(playerId);
+                    container.classList.remove('no-anim');
+                });
+            });
+        } else {
+            requestAnimationFrame(() => {
+                container.classList.remove('no-anim');
+                if (playerId === 'player2Cards') {
+                    requestAnimationFrame(_updateTopHandLayout);
+                }
+            });
+        }
     }
 }
 

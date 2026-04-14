@@ -786,7 +786,7 @@ body.welcome-active #tapToStart {
         bottom: calc(var(--offset-y) + (var(--u) * 95));
         width: calc(var(--u) * 27);
         height: calc(var(--u) * 112);
-        overflow: hidden;
+        overflow: visible;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -799,7 +799,7 @@ body.welcome-active #tapToStart {
         bottom: calc(var(--offset-y) + (var(--u) * 135));
         width: calc(var(--u) * 27);
         height: calc(var(--u) * 107);
-        overflow: hidden;
+        overflow: visible;
         display: flex;
         flex-direction: column;
         align-items: center;

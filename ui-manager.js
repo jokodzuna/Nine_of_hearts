@@ -898,7 +898,7 @@ function _renderHand(playerId, cards, count) {
                 requestAnimationFrame(_updateTopHandLayout);
             }
             if (isSide) {
-                requestAnimationFrame(() => _updateSideHandLayout(playerId));
+                requestAnimationFrame(() => requestAnimationFrame(() => _updateSideHandLayout(playerId)));
             }
         });
     }
@@ -1882,14 +1882,18 @@ function _setupListeners() {
     window.addEventListener('resize', () => {
         _updateHandLayout();
         _updateTopHandLayout();
+        _updateSideHandLayout('player1Cards');
+        _updateSideHandLayout('player3Cards');
         _updateLayoutDebug();
     });
     window.addEventListener('orientationchange', () => {
-        requestAnimationFrame(() => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
             _updateHandLayout();
             _updateTopHandLayout();
+            _updateSideHandLayout('player1Cards');
+            _updateSideHandLayout('player3Cards');
             _updateLayoutDebug();
-        });
+        }));
     });
 }
 

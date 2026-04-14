@@ -1202,11 +1202,7 @@ function _updateSideHandLayout(playerId) {
     const step    = Math.min(defStep, Math.max(0, maxStep));
     const neg     = -(wrapH - step);
 
-    const packToEnd = playerId === 'player1Cards';
-    const groupH    = wrapH + (n - 1) * step;
-    const topOffset = packToEnd ? Math.max(0, areaH - groupH) : 0;
-
-    wraps[0].style.marginTop = topOffset > 0 ? `${topOffset}px` : '0';
+    wraps[0].style.marginTop = '0';
     for (let i = 1; i < n; i++) wraps[i].style.marginTop = `${neg}px`;
 }
 

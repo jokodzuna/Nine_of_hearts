@@ -758,7 +758,7 @@ body.welcome-active #tapToStart {
 
     #yourCards {
         position: absolute;
-        left: calc(var(--offset-x) + (var(--u) * 1));
+        left: calc(var(--offset-x) + (var(--u) * 5));
         bottom: calc(var(--offset-y) + (var(--u) * 55));
         width: calc(var(--u) * 127);
         height: calc(var(--u) * 35);

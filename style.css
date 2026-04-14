@@ -783,7 +783,7 @@ body.welcome-active #tapToStart {
     #player3Cards {
         position: absolute;
         left: calc(var(--offset-x) + (var(--u) * 5));
-        bottom: calc(var(--offset-y) + (var(--u) * 95));
+        bottom: calc(var(--offset-y) + (var(--u) * 100));
         width: calc(var(--u) * 27);
         height: calc(var(--u) * 112);
         overflow: visible;
@@ -796,7 +796,7 @@ body.welcome-active #tapToStart {
     #player1Cards {
         position: absolute;
         left: calc(var(--offset-x) + (var(--u) * 105));
-        bottom: calc(var(--offset-y) + (var(--u) * 135));
+        bottom: calc(var(--offset-y) + (var(--u) * 130));
         width: calc(var(--u) * 27);
         height: calc(var(--u) * 107);
         overflow: visible;

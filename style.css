@@ -440,7 +440,7 @@ body.welcome-active #tapToStart {
     width: 50%;
     height: 100%;
     overflow: hidden;
-    z-index: 5;
+    z-index: 25;
     will-change: transform;
     transition: transform 1.2s cubic-bezier(0.77, 0, 0.18, 1);
 }

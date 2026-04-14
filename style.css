@@ -730,6 +730,10 @@ body.welcome-active #tapToStart {
     .player-area { position: static; display: block; }
     .player-top, .player-left, .player-right, .player-bottom, .center-area { position: static; width: 100%; height: 100%; grid-row: auto; grid-column: auto; gap: 0; }
 
+    .player-left .cards, .player-right .cards { padding-top: 0; padding-bottom: 0; }
+    .player-bottom .cards { padding-left: 0; }
+    .player-top .cards { padding-left: 0; }
+
     #pile {
         position: absolute;
         left: calc(var(--offset-x) + (var(--u) * 46));

@@ -1548,6 +1548,13 @@ body.welcome-active #tapToStart {
     flex-shrink: 0;
     line-height: 1;
 }
+.ach-item-progress {
+    color: rgba(255,255,255,0.55);
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
 
 /* ============================================================
    Coin Widget (main menu)

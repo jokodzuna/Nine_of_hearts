@@ -780,8 +780,6 @@ function _refreshStatsPanel() {
         row('\u{1F4C8}', 'Survival Rate',    `${s.survivalRate}%`, s.survivalRate),
         row('\u{1F525}', 'Current Streak',   s.currentSurvivalStreak),
         row('\u2B50',    'Best Streak',       s.longestSurvivalStreak),
-        row('\u{1F0CF}', 'Fours Played',     `${s.foursPlayed} / 10`,
-            Math.min(100, s.foursPlayed * 10)),
     ].join('');
 }
 
@@ -814,8 +812,14 @@ function _refreshAchievementsPanel() {
     const list = document.querySelector('#welcomePanel-achievements .ach-list');
     if (!list) return;
     const unlocked = Economy.isEconomyReady() ? Economy.getUnlockedAchievements() : {};
+    const s = Economy.isEconomyReady() ? Economy.getStats() : { currentSurvivalStreak: 0, foursPlayed: 0 };
     list.innerHTML = _ACH_DISPLAY.map(a => {
         const on = !!unlocked[a.id];
+        let progress = '';
+        if (!on) {
+            if (a.id === 'streak_master') progress = `<span class="ach-item-progress">${s.currentSurvivalStreak}\u200a/\u200a10</span>`;
+            if (a.id === 'quad_squad')    progress = `<span class="ach-item-progress">${s.foursPlayed}\u200a/\u200a10</span>`;
+        }
         return `<div class="ach-item ${on ? 'ach-item--on' : 'ach-item--off'}">
             <span class="ach-item-icon">${on ? a.icon : '\u{1F512}'}</span>
             <div class="ach-item-body">
@@ -823,7 +827,7 @@ function _refreshAchievementsPanel() {
                 <div class="ach-item-desc">${a.desc}</div>
                 <div class="ach-item-coins">+${a.coins} \u{1FA99}</div>
             </div>
-            ${on ? '<span class="ach-item-check">&#10003;</span>' : ''}
+            ${on ? '<span class="ach-item-check">&#10003;</span>' : progress}
         </div>`;
     }).join('');
 }

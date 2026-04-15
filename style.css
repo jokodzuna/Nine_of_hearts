@@ -68,7 +68,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     initial-value: #FFD700;
 }
 .avatar-container { width: 60px; height: 60px; position: relative; }
-.avatar { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 3px solid white; transition: box-shadow 0.3s; overflow: hidden; }
+.avatar { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 3px solid white; transition: box-shadow 0.3s; overflow: hidden; }
 .avatar-container {
     --ring-progress: 0;
     --ring-color: #FFD700;
@@ -583,11 +583,9 @@ body.welcome-active #tapToStart {
     height: 120px;
     border-radius: 50%;
     object-fit: cover;
-    background: rgba(255,255,255,0.18);
     border: 3px solid rgba(255,255,255,0.55);
     box-shadow: 0 3px 12px rgba(0,0,0,0.45);
     display: block;
-    overflow: hidden;
 }
 .profile-widget-name {
     color: #f4f1e6;
@@ -601,31 +599,29 @@ body.welcome-active #tapToStart {
 .avatar-player-img {
     width: 100%;
     height: 100%;
-    border-radius: 50%;
     object-fit: cover;
     display: block;
-    background: rgba(255,255,255,0.18);
 }
 
 /* ---- Avatar selection grid (profile panel) ---- */
 .avatar-select-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: clamp(8px, 1.8vw, 16px);
-    justify-items: center;
+    grid-template-columns: repeat(3, 80px);
+    gap: clamp(10px, 2vw, 18px);
+    justify-content: center;
 }
 .avatar-preview {
     width: 80px;
     height: 80px;
+    min-width: 80px;
+    min-height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    background: rgba(255,255,255,0.18);
     cursor: pointer;
     border: 3px solid transparent;
     transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
     display: block;
-    overflow: hidden;
 }
 .avatar-preview:hover   { transform: scale(1.08); }
 .avatar-preview.taken {
@@ -650,11 +646,9 @@ body.welcome-active #tapToStart {
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    background: rgba(255,255,255,0.18);
     border: 3px solid rgba(255,255,255,0.45);
     box-shadow: 0 4px 14px rgba(0,0,0,0.45);
     display: block;
-    overflow: hidden;
 }
 .profile-field-label {
     color: rgba(255,255,255,0.65);

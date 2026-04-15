@@ -68,7 +68,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     initial-value: #FFD700;
 }
 .avatar-container { width: 60px; height: 60px; position: relative; }
-.avatar { width: 50px; height: 50px; border-radius: 50%; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 3px solid white; transition: box-shadow 0.3s; overflow: hidden; }
+.avatar { width: 50px; height: 50px; border-radius: 50%; background: #f0ede6; display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: box-shadow 0.3s; overflow: hidden; }
 .avatar-container {
     --ring-progress: 0;
     --ring-color: #FFD700;
@@ -583,8 +583,8 @@ body.welcome-active #tapToStart {
     height: 120px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid rgba(255,255,255,0.55);
-    box-shadow: 0 3px 12px rgba(0,0,0,0.45);
+    background: #f0ede6;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 3px 12px rgba(0,0,0,0.45);
     display: block;
 }
 .profile-widget-name {
@@ -617,9 +617,10 @@ body.welcome-active #tapToStart {
     min-height: 80px;
     border-radius: 50%;
     object-fit: cover;
+    background: #f0ede6;
     cursor: pointer;
-    border: 3px solid transparent;
-    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+    border: none;
+    transition: transform 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
     display: block;
 }
@@ -630,8 +631,7 @@ body.welcome-active #tapToStart {
     transform: none !important;
 }
 .avatar-preview.selected {
-    border-color: #f4f1e6;
-    box-shadow: 0 0 0 3px #e11d48;
+    box-shadow: 0 0 0 4px #e11d48;
     transform: scale(1.05);
 }
 
@@ -646,8 +646,8 @@ body.welcome-active #tapToStart {
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid rgba(255,255,255,0.45);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    background: #f0ede6;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.45), 0 4px 14px rgba(0,0,0,0.45);
     display: block;
 }
 .profile-field-label {
@@ -1266,8 +1266,9 @@ body.welcome-active #tapToStart {
     height: 36px;
     border-radius: 50%;
     object-fit: cover;
+    background: #f0ede6;
     flex-shrink: 0;
-    border: 2px solid rgba(255,255,255,0.3);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
     cursor: default;
 }
 

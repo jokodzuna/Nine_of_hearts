@@ -121,7 +121,7 @@ function _openWelcomePanel(id) {
     ov.classList.remove('hidden');
     if (id === 'profile') {
         const inp = panel.querySelector('.profile-name-input');
-        if (inp) { inp.value = _playerName; requestAnimationFrame(() => { inp.focus(); inp.select(); }); }
+        if (inp) inp.value = _playerName;
         const prev = panel.querySelector('.profile-current-avatar');
         if (prev) prev.src = _avatarPath;
     }

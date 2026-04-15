@@ -133,6 +133,8 @@ function _openWelcomePanel(id) {
             el.classList.toggle('taken',    _mpTakenAvatars.has(el.dataset.path));
         });
     }
+    if (id === 'stats')        _refreshStatsPanel();
+    if (id === 'achievements') _refreshAchievementsPanel();
 }
 
 function _closeWelcomePanel() {
@@ -698,6 +700,18 @@ function _buildProfilePanel() {
     changeAvBtn.addEventListener('click', () => _openWelcomePanel('avatar-select'));
     panel.appendChild(changeAvBtn);
 
+    const statsBtn = document.createElement('button');
+    statsBtn.className = 'menu-btn';
+    statsBtn.textContent = '\u{1F4CA}  Stats';
+    statsBtn.addEventListener('click', () => _openWelcomePanel('stats'));
+    panel.appendChild(statsBtn);
+
+    const achBtn = document.createElement('button');
+    achBtn.className = 'menu-btn';
+    achBtn.textContent = '\u{1F3C6}  Achievements';
+    achBtn.addEventListener('click', () => _openWelcomePanel('achievements'));
+    panel.appendChild(achBtn);
+
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'menu-btn coming-soon';
     settingsBtn.textContent = 'Settings';
@@ -720,6 +734,98 @@ function _buildProfilePanel() {
 
     panel.appendChild(_makePanelCloseBtn('Close'));
     return panel;
+}
+
+// ============================================================
+// Stats panel
+// ============================================================
+
+function _buildStatsPanel() {
+    const panel = _makePanelBase('stats', 'Stats');
+    const content = document.createElement('div');
+    content.className = 'stats-content';
+    panel.appendChild(content);
+    const backBtn = document.createElement('button');
+    backBtn.className = 'menu-btn';
+    backBtn.textContent = '\u2190 Back to Profile';
+    backBtn.addEventListener('click', () => _openWelcomePanel('profile'));
+    panel.appendChild(backBtn);
+    return panel;
+}
+
+function _refreshStatsPanel() {
+    const content = document.querySelector('#welcomePanel-stats .stats-content');
+    if (!content) return;
+    const s = Economy.isEconomyReady() ? Economy.getStats() : {
+        gamesPlayed: 0, gamesSurvived: 0, gamesLost: 0,
+        survivalRate: 0, currentSurvivalStreak: 0,
+        longestSurvivalStreak: 0, foursPlayed: 0,
+    };
+
+    const row = (icon, label, value, barPct = null) => {
+        const bar = barPct !== null
+            ? `<div class="stat-bar-track"><div class="stat-bar-fill" style="width:${barPct}%"></div></div>`
+            : '';
+        return `<div class="stat-row">
+            <span class="stat-row-icon">${icon}</span>
+            <div class="stat-row-body"><div class="stat-row-label">${label}</div>${bar}</div>
+            <span class="stat-row-value">${value}</span>
+        </div>`;
+    };
+
+    content.innerHTML = [
+        row('\u{1F3AE}', 'Games Played',    s.gamesPlayed),
+        row('\u{1F3C6}', 'Survived',         s.gamesSurvived, s.survivalRate),
+        row('\u{1F480}', 'Lost',              s.gamesLost),
+        row('\u{1F4C8}', 'Survival Rate',    `${s.survivalRate}%`, s.survivalRate),
+        row('\u{1F525}', 'Current Streak',   s.currentSurvivalStreak),
+        row('\u2B50',    'Best Streak',       s.longestSurvivalStreak),
+        row('\u{1F0CF}', 'Fours Played',     `${s.foursPlayed} / 10`,
+            Math.min(100, s.foursPlayed * 10)),
+    ].join('');
+}
+
+// ============================================================
+// Achievements panel
+// ============================================================
+
+const _ACH_DISPLAY = [
+    { id: 'first_survival', icon: '\u{1F947}', title: 'First Survival',  desc: 'Survive your first game',                  coins: 50  },
+    { id: 'comeback_king',  icon: '\u2694\uFE0F',  title: 'Comeback King',   desc: 'Survive after holding 15+ cards at once',  coins: 100 },
+    { id: 'speed_demon',    icon: '\u26A1',    title: 'Speed Demon',     desc: 'Clear your hand in under 3 minutes',        coins: 100 },
+    { id: 'streak_master',  icon: '\u{1F525}', title: 'Streak Master',   desc: 'Survive 10 games in a row',                 coins: 75  },
+    { id: 'quad_squad',     icon: '\u{1F0CF}', title: 'Quad Squad',      desc: 'Play a four-of-a-kind 10 times total',      coins: 125 },
+];
+
+function _buildAchievementsPanel() {
+    const panel = _makePanelBase('achievements', 'Achievements');
+    const list = document.createElement('div');
+    list.className = 'ach-list';
+    panel.appendChild(list);
+    const backBtn = document.createElement('button');
+    backBtn.className = 'menu-btn';
+    backBtn.textContent = '\u2190 Back to Profile';
+    backBtn.addEventListener('click', () => _openWelcomePanel('profile'));
+    panel.appendChild(backBtn);
+    return panel;
+}
+
+function _refreshAchievementsPanel() {
+    const list = document.querySelector('#welcomePanel-achievements .ach-list');
+    if (!list) return;
+    const unlocked = Economy.isEconomyReady() ? Economy.getUnlockedAchievements() : {};
+    list.innerHTML = _ACH_DISPLAY.map(a => {
+        const on = !!unlocked[a.id];
+        return `<div class="ach-item ${on ? 'ach-item--on' : 'ach-item--off'}">
+            <span class="ach-item-icon">${on ? a.icon : '\u{1F512}'}</span>
+            <div class="ach-item-body">
+                <div class="ach-item-title">${a.title}</div>
+                <div class="ach-item-desc">${a.desc}</div>
+                <div class="ach-item-coins">+${a.coins} \u{1FA99}</div>
+            </div>
+            ${on ? '<span class="ach-item-check">&#10003;</span>' : ''}
+        </div>`;
+    }).join('');
 }
 
 function _buildAvatarSelectPanel() {
@@ -810,7 +916,9 @@ function _buildWelcomeOverlay() {
     // ---- Multiplayer ----
     const mpPanel = _buildMPPanel();
 
-    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel);
+    const statsPanel = _buildStatsPanel();
+    const achPanel   = _buildAchievementsPanel();
+    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel, statsPanel, achPanel);
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 

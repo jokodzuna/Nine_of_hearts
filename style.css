@@ -1432,6 +1432,124 @@ body.welcome-active #tapToStart {
 }
 
 /* ============================================================
+   Stats Panel
+   ============================================================ */
+
+.stats-content {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+.stat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0,0,0,0.22);
+    border-radius: 10px;
+    padding: 10px 14px;
+}
+.stat-row-icon {
+    font-size: 20px;
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.stat-row-body {
+    flex: 1;
+    min-width: 0;
+}
+.stat-row-label {
+    color: rgba(255,255,255,0.68);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+.stat-bar-track {
+    margin-top: 5px;
+    height: 5px;
+    background: rgba(255,255,255,0.14);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.stat-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+    border-radius: 3px;
+    transition: width 0.7s cubic-bezier(0.34,1.56,0.64,1);
+    min-width: 2px;
+}
+.stat-row-value {
+    color: #fff;
+    font-weight: 800;
+    font-size: 20px;
+    min-width: 38px;
+    text-align: right;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Achievements Panel
+   ============================================================ */
+
+.ach-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ach-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+.ach-item--on {
+    background: rgba(255,215,0,0.10);
+    border: 1px solid rgba(255,215,0,0.28);
+}
+.ach-item--off {
+    background: rgba(0,0,0,0.22);
+    border: 1px solid rgba(255,255,255,0.07);
+    opacity: 0.60;
+}
+.ach-item-icon {
+    font-size: 28px;
+    width: 36px;
+    text-align: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.ach-item-body { flex: 1; min-width: 0; }
+.ach-item-title {
+    font-weight: 800;
+    font-size: 14px;
+    color: #FFD700;
+}
+.ach-item--off .ach-item-title { color: rgba(255,255,255,0.65); }
+.ach-item-desc {
+    color: rgba(255,255,255,0.62);
+    font-size: 11px;
+    margin-top: 2px;
+    line-height: 1.4;
+}
+.ach-item-coins {
+    color: #4ade80;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+}
+.ach-item-check {
+    color: #4ade80;
+    font-size: 22px;
+    font-weight: 900;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+/* ============================================================
    Coin Widget (main menu)
    ============================================================ */
 

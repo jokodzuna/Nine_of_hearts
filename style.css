@@ -68,7 +68,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Arial', 
     initial-value: #FFD700;
 }
 .avatar-container { width: 60px; height: 60px; position: relative; }
-.avatar { width: 50px; height: 50px; border-radius: 50%; background: #f0ede6; display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: box-shadow 0.3s; overflow: hidden; }
+.avatar { width: 50px; height: 50px; border-radius: 50%; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 36px; position: absolute; top: 5px; left: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: box-shadow 0.3s; overflow: hidden; }
 .avatar-container {
     --ring-progress: 0;
     --ring-color: #FFD700;
@@ -574,16 +574,17 @@ body.welcome-active #tapToStart {
     gap: 6px;
     cursor: pointer;
     padding: clamp(6px, 1vh, 10px) 0;
+    margin-top: -60px;
     user-select: none;
     transition: opacity 0.15s;
 }
 .profile-widget:hover { opacity: 0.85; }
 .profile-widget-img {
-    width: 120px;
-    height: 120px;
+    width: 180px;
+    height: 180px;
     border-radius: 50%;
     object-fit: cover;
-    background: #f0ede6;
+    background: transparent;
     box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 3px 12px rgba(0,0,0,0.45);
     display: block;
 }
@@ -617,7 +618,7 @@ body.welcome-active #tapToStart {
     min-height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    background: #f0ede6;
+    background: transparent;
     cursor: pointer;
     border: none;
     transition: transform 0.15s, box-shadow 0.15s;
@@ -646,7 +647,7 @@ body.welcome-active #tapToStart {
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    background: #f0ede6;
+    background: transparent;
     box-shadow: 0 0 0 3px rgba(255,255,255,0.45), 0 4px 14px rgba(0,0,0,0.45);
     display: block;
 }
@@ -1266,7 +1267,7 @@ body.welcome-active #tapToStart {
     height: 36px;
     border-radius: 50%;
     object-fit: cover;
-    background: #f0ede6;
+    background: transparent;
     flex-shrink: 0;
     box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
     cursor: default;

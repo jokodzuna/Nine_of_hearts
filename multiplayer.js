@@ -206,6 +206,7 @@ export async function initAuth() {
 }
 
 // ---- Getters ----------------------------------------------------------------
+export const getDB          = () => _db;
 export const getUID         = () => _uid;
 export const getPlayerIndex = () => _playerIndex;
 export const getRoomCode    = () => _roomCode;

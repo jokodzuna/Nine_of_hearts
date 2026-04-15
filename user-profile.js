@@ -33,6 +33,15 @@ export function getProfile() {
 export function isReady() { return _ready; }
 
 /**
+ * Register a callback that fires as soon as the profile is ready.
+ * If already ready, fires synchronously on the next microtask.
+ */
+export function onReady(cb) {
+    if (_ready) { Promise.resolve().then(() => cb(getProfile())); return; }
+    window.addEventListener('profileReady', e => cb(e.detail), { once: true });
+}
+
+/**
  * Persist a profile field update to /users/{uid}/.
  * Pass any subset of { displayName, avatarPath }.
  */
@@ -71,6 +80,7 @@ async function _initProfile() {
 
     _ready = true;
     console.log(`[UserProfile] uid=${_uid}  name=${_displayName}  avatar=${_avatarPath}`);
+    window.dispatchEvent(new CustomEvent('profileReady', { detail: getProfile() }));
 }
 
 // Auto-run on module load — silently retries nothing; errors are logged only.

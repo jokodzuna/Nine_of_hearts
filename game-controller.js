@@ -45,6 +45,8 @@ import {
 import * as MP from './multiplayer.js';
 const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 
+import { AI_AVATARS, DEFAULT_AVATAR } from './constants.js';
+
 // ============================================================
 // Config
 // ============================================================
@@ -182,10 +184,13 @@ function _startGame(cfgOverride = null) {
     const ds = decodeState(_state);
 
     Update('SETUP_PLAYERS', {
-        numPlayers:  cfg.numPlayers,
-        playerName:  PLAYER_NAMES[0],
-        avatarIndex: cfg.avatarIndex,
+        numPlayers: cfg.numPlayers,
+        playerName: PLAYER_NAMES[0],
+        avatarPath: cfg.avatarPath,
     });
+    for (let p = 1; p < 4; p++) {
+        Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+    }
 
     const hands = {};
     for (let p = 0; p < NUM_PLAYERS; p++) {
@@ -812,9 +817,9 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = fals
     for (const engine of Object.values(_engines)) engine.resetKnowledge();
 
     Update('SETUP_PLAYERS', {
-        numPlayers:  NUM_PLAYERS,
-        playerName:  byIdx[myIdx]?.nickname ?? 'You',
-        avatarIndex: byIdx[myIdx]?.avatarIdx ?? 0,
+        numPlayers: NUM_PLAYERS,
+        playerName: byIdx[myIdx]?.nickname ?? 'You',
+        avatarPath: byIdx[myIdx]?.avatarPath ?? DEFAULT_AVATAR,
     });
 
     const ds = decodeState(_state);
@@ -852,7 +857,7 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = fals
     // Set player names and avatars at each display position
     for (let p = 0; p < NUM_PLAYERS; p++) {
         Update('SET_PLAYER_NAME',   { playerId: _mpDispId(p), name: PLAYER_NAMES[p] });
-        Update('SET_PLAYER_AVATAR', { playerId: _mpDispId(p), avatarIdx: byIdx[p]?.avatarIdx ?? 0 });
+        Update('SET_PLAYER_AVATAR', { playerId: _mpDispId(p), avatarPath: byIdx[p]?.avatarPath ?? DEFAULT_AVATAR });
     }
 
     // Restore disconnect visual indicators for any already-disconnected seats

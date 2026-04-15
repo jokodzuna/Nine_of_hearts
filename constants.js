@@ -55,15 +55,35 @@ export const SUIT_IMG = {
 
 // ---- Avatar -----------------------------------------------------------------
 
-/**
- * CSS background-position values for the 9-slot avatar sprite grid.
- * Index 0 = top-left, index 8 = bottom-right.
- */
-export const AVATAR_BG_POS = [
-    '14% 15%', '50% 15%', '86% 15%',
-    '14% 50%', '50% 50%', '86% 50%',
-    '14% 85%', '50% 85%', '86% 85%',
+/** Default avatar path for new users. */
+export const DEFAULT_AVATAR = 'Images/user-avatars/default-man_result.webp';
+
+/** All selectable player avatar image paths. */
+export const USER_AVATARS = [
+    'Images/user-avatars/default-man_result.webp',
+    'Images/user-avatars/punk-girl_result.webp',
+    'Images/user-avatars/rainbow-hair_result.webp',
+    'Images/user-avatars/biker_result.webp',
+    'Images/user-avatars/alien_result.webp',
+    'Images/user-avatars/fox_result.webp',
+    'Images/user-avatars/witch_result.webp',
+    'Images/user-avatars/pirate_result.webp',
+    'Images/user-avatars/police-woman_result.webp',
+    'Images/user-avatars/grumpy-girl_result.webp',
+    'Images/user-avatars/girl-glasses_result.webp',
+    'Images/user-avatars/big-smile_result.webp',
+    'Images/user-avatars/black-boy_result.webp',
+    'Images/user-avatars/cute-boy_result.webp',
+    'Images/user-avatars/monkey_result.webp',
+    'Images/user-avatars/old-lady_result.webp',
+    'Images/user-avatars/toddler_result.webp',
+    'Images/user-avatars/troll_result.webp',
 ];
 
-/** Shared avatar image source used for all player avatars. */
-export const AVATAR_IMG_SRC = "url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg')";
+/** Fixed avatar paths assigned to the three AI players in local games. */
+export const AI_AVATARS = [
+    null,
+    'Images/user-avatars/grumpy-girl_result.webp',
+    'Images/user-avatars/biker_result.webp',
+    'Images/user-avatars/fox_result.webp',
+];

@@ -5,14 +5,15 @@
 
 import * as MP    from './multiplayer.js';
 import * as Audio from './audio.js';
-import { AVATAR_BG_POS, AVATAR_IMG_SRC } from './constants.js';
+import { USER_AVATARS, DEFAULT_AVATAR } from './constants.js';
+import { getProfile, updateProfile, onReady } from './user-profile.js';
 
 // ============================================================
 // State
 // ============================================================
 
 let _playerName     = 'Player';
-let _selectedAvatar = 0;
+let _avatarPath     = DEFAULT_AVATAR;
 let _numPlayers     = 4;
 let _difficulty     = 'easy';
 let _gameMode       = 'bots';
@@ -50,7 +51,7 @@ export function setCallbacks(cbs) {
 export function getPlayerConfig() {
     return {
         playerName:  _playerName,
-        avatarIndex: _selectedAvatar,
+        avatarPath: _avatarPath,
         numPlayers:  _numPlayers,
         difficulty:  _difficulty,
         gameMode:    _gameMode,
@@ -118,9 +119,18 @@ function _openWelcomePanel(id) {
     if (!panel) return;
     panel.classList.remove('hidden');
     ov.classList.remove('hidden');
-    if (id === 'nickname') {
-        const inp = panel.querySelector('.nickname-input');
+    if (id === 'profile') {
+        const inp = panel.querySelector('.profile-name-input');
         if (inp) { inp.value = _playerName; requestAnimationFrame(() => { inp.focus(); inp.select(); }); }
+        const prev = panel.querySelector('.profile-current-avatar');
+        if (prev) prev.src = _avatarPath;
+    }
+    if (id === 'avatar-select') {
+        const grid = panel.querySelector('.avatar-select-grid');
+        if (grid) grid.querySelectorAll('.avatar-preview').forEach(el => {
+            el.classList.toggle('selected', el.dataset.path === _avatarPath);
+            el.classList.toggle('taken',    _mpTakenAvatars.has(el.dataset.path));
+        });
     }
 }
 
@@ -187,7 +197,7 @@ function _buildMPPanel() {
         try {
             await MP.createRoom({
                 nickname:   _playerName,
-                avatarIdx:  _selectedAvatar,
+                avatarPath: _avatarPath,
                 maxPlayers: _numPlayers,
             });
             _mpShowSection('lobby');
@@ -218,7 +228,11 @@ function _buildMPPanel() {
         joinBtn.disabled = true;
         _mpSetError('');
         try {
-            const result = await MP.joinRoom({ code, nickname: _playerName, avatarIdx: _selectedAvatar });
+            const result = await MP.joinRoom({
+                code:      code,
+                nickname:   _playerName,
+                avatarPath: _avatarPath,
+            });
             if (result && result.reconnected) {
                 _onMPGameStart({
                     rawState:    result.rawState,
@@ -310,7 +324,7 @@ function _buildMPPanel() {
     backBtn.addEventListener('click', () => {
         MP.leaveRoom();
         _mpTakenAvatars = new Set();
-        const avGrid = document.querySelector('#welcomePanel-avatar .avatar-grid');
+        const avGrid = document.querySelector('#welcomePanel-avatar-select .avatar-select-grid');
         if (avGrid) avGrid.querySelectorAll('.avatar-preview').forEach(el => el.classList.remove('taken'));
         _mpShowSection('choice');
     });
@@ -371,8 +385,9 @@ function _onMPLobby(data) {
             row.className = 'mp-player-row';
             const p = sorted.find(x => x.idx === i);
             if (p) {
-                const av = document.createElement('div');
-                av.className = `mp-player-avatar avatar-pos-${p.avatarIdx ?? 0}`;
+                const av = document.createElement('img');
+                av.src = p.avatarPath ?? DEFAULT_AVATAR;
+                av.className = 'mp-player-avatar-img';
                 const name = document.createElement('span');
                 name.textContent = (p.idx === data.myIdx ? '(You) ' : '') + (p.nickname || `Player ${i + 1}`);
                 row.append(av, name);
@@ -392,12 +407,12 @@ function _onMPLobby(data) {
     _mpTakenAvatars = new Set(
         Object.values(data.players)
             .filter(p => p.idx !== data.myIdx)
-            .map(p => p.avatarIdx)
+            .map(p => p.avatarPath)
     );
-    const avGrid = document.querySelector('#welcomePanel-avatar .avatar-grid');
+    const avGrid = document.querySelector('#welcomePanel-avatar-select .avatar-select-grid');
     if (avGrid) {
-        avGrid.querySelectorAll('.avatar-preview').forEach((el, i) => {
-            el.classList.toggle('taken', _mpTakenAvatars.has(i));
+        avGrid.querySelectorAll('.avatar-preview').forEach(el => {
+            el.classList.toggle('taken', _mpTakenAvatars.has(el.dataset.path));
         });
     }
 }
@@ -529,7 +544,7 @@ export function prepareMainMenuScreen(openDoors = true) {
     _gameMode = 'bots';
     _mpTakenAvatars = new Set();
     _updateMenuBtnLabels();
-    document.querySelector('#welcomePanel-avatar .avatar-grid')
+    document.querySelector('#welcomePanel-avatar-select .avatar-select-grid')
         ?.querySelectorAll('.avatar-preview').forEach(el => el.classList.remove('taken'));
     const ov = document.getElementById('welcomeOverlay');
     if (ov) { ov.classList.add('hidden'); ov.style.removeProperty('display'); }
@@ -582,8 +597,8 @@ export function refreshRejoinButton() {
             await MP.initAuth();
             const result = await MP.joinRoom({
                 code:      saved.code,
-                nickname:  _playerName,
-                avatarIdx: _selectedAvatar,
+                nickname:   _playerName,
+                avatarPath: _avatarPath,
             });
             if (result && result.reconnected) {
                 _onMPGameStart({
@@ -616,10 +631,16 @@ export function refreshRejoinButton() {
 // Menu label sync
 // ============================================================
 
+function _updateProfileWidget() {
+    const img = document.getElementById('profileWidgetImg');
+    if (img) img.src = _avatarPath;
+    const nameEl = document.getElementById('profileWidgetName');
+    if (nameEl) nameEl.textContent = _playerName;
+}
+
 function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
-    const nb = document.getElementById('nicknameBtn');
-    if (nb) nb.textContent = `Nickname: ${_playerName}`;
+    _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
     const db = document.getElementById('difficultyBtn');
@@ -630,6 +651,97 @@ function _updateMenuBtnLabels() {
         mb.textContent = on ? '\u2713 Multiplayer ON' : 'Multiplayer';
         mb.classList.toggle('menu-btn-toggled', on);
     }
+}
+
+// ============================================================
+// Profile panel builders
+// ============================================================
+
+function _buildProfilePanel() {
+    const panel = _makePanelBase('profile', 'Profile');
+
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'profile-panel-avatar-wrap';
+    const avatarImg = document.createElement('img');
+    avatarImg.className = 'profile-current-avatar';
+    avatarImg.src = _avatarPath;
+    avatarWrap.appendChild(avatarImg);
+    panel.appendChild(avatarWrap);
+
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'profile-field-label';
+    nameLabel.textContent = 'Player Name';
+    const nameInp = document.createElement('input');
+    nameInp.type = 'text';
+    nameInp.className = 'nickname-input profile-name-input';
+    nameInp.maxLength = 20;
+    nameInp.placeholder = 'Enter name…';
+    nameInp.value = _playerName;
+    nameInp.addEventListener('input', () => { _playerName = nameInp.value.trim() || 'Player'; });
+    panel.append(nameLabel, nameInp);
+
+    const saveNameBtn = document.createElement('button');
+    saveNameBtn.className = 'menu-btn';
+    saveNameBtn.textContent = 'Save Name';
+    saveNameBtn.addEventListener('click', async () => {
+        _playerName = nameInp.value.trim() || 'Player';
+        _updateProfileWidget();
+        try { await updateProfile({ displayName: _playerName }); }
+        catch (e) { console.error('[Profile] save name failed:', e); }
+    });
+    panel.appendChild(saveNameBtn);
+
+    const changeAvBtn = document.createElement('button');
+    changeAvBtn.className = 'menu-btn';
+    changeAvBtn.textContent = 'Change Avatar';
+    changeAvBtn.addEventListener('click', () => _openWelcomePanel('avatar-select'));
+    panel.appendChild(changeAvBtn);
+
+    for (const label of ['Stats', 'Achievements', 'Settings']) {
+        const btn = document.createElement('button');
+        btn.className = 'menu-btn coming-soon';
+        btn.textContent = label;
+        btn.disabled = true;
+        panel.appendChild(btn);
+    }
+
+    panel.appendChild(_makePanelCloseBtn('Close'));
+    return panel;
+}
+
+function _buildAvatarSelectPanel() {
+    const panel = _makePanelBase('avatar-select', 'Choose Avatar');
+
+    const grid = document.createElement('div');
+    grid.className = 'avatar-select-grid';
+
+    for (const path of USER_AVATARS) {
+        const img = document.createElement('img');
+        img.src = path;
+        img.dataset.path = path;
+        img.className = 'avatar-preview' + (path === _avatarPath ? ' selected' : '');
+        img.addEventListener('click', async () => {
+            if (img.classList.contains('taken')) return;
+            _avatarPath = path;
+            grid.querySelectorAll('.avatar-preview').forEach(el => el.classList.toggle('selected', el.dataset.path === path));
+            const prev = document.querySelector('.profile-current-avatar');
+            if (prev) prev.src = path;
+            _updateProfileWidget();
+            try { await updateProfile({ avatarPath: path }); }
+            catch (e) { console.error('[Profile] save avatar failed:', e); }
+            if (MP.isInRoom()) MP.updateAvatar(path).catch(console.error);
+        });
+        grid.appendChild(img);
+    }
+
+    panel.appendChild(grid);
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'menu-btn';
+    backBtn.textContent = '← Back to Profile';
+    backBtn.addEventListener('click', () => _openWelcomePanel('profile'));
+    panel.appendChild(backBtn);
+    return panel;
 }
 
 // ============================================================
@@ -662,32 +774,11 @@ function _buildWelcomeOverlay() {
     howPanel.appendChild(body);
     howPanel.appendChild(_makePanelCloseBtn('Close'));
 
-    // ---- Nickname ----
-    const nickPanel = _makePanelBase('nickname', 'Your Nickname');
-    const inp = document.createElement('input');
-    inp.type = 'text'; inp.id = 'nicknameInput'; inp.className = 'nickname-input';
-    inp.maxLength = 20; inp.placeholder = 'Enter nickname\u2026'; inp.value = _playerName;
-    inp.addEventListener('input', () => { _playerName = inp.value.trim() || 'Player'; _updateMenuBtnLabels(); });
-    nickPanel.appendChild(inp);
-    nickPanel.appendChild(_makePanelCloseBtn('Save'));
+    // ---- Profile ----
+    const profilePanel = _buildProfilePanel();
 
-    // ---- Avatar ----
-    const avPanel = _makePanelBase('avatar', 'Choose Avatar');
-    const grid = document.createElement('div');
-    grid.className = 'avatar-grid';
-    for (let i = 0; i < 9; i++) {
-        const av = document.createElement('div');
-        av.className = `avatar-preview avatar-pos-${i}${i === _selectedAvatar ? ' selected' : ''}`;
-        av.addEventListener('click', () => {
-            if (_mpTakenAvatars.has(i)) return;
-            _selectedAvatar = i;
-            grid.querySelectorAll('.avatar-preview').forEach((el, idx) => el.classList.toggle('selected', idx === i));
-            if (MP.isInRoom()) MP.updateAvatar(i).catch(console.error);
-        });
-        grid.appendChild(av);
-    }
-    avPanel.appendChild(grid);
-    avPanel.appendChild(_makePanelCloseBtn('Done'));
+    // ---- Avatar Select ----
+    const avatarSelectPanel = _buildAvatarSelectPanel();
 
     // ---- Number of Players ----
     const playersPanel = _buildOptionPanel('players', 'Number of Players',
@@ -706,7 +797,7 @@ function _buildWelcomeOverlay() {
     // ---- Multiplayer ----
     const mpPanel = _buildMPPanel();
 
-    ov.append(howPanel, nickPanel, avPanel, playersPanel, diffPanel, mpPanel);
+    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel);
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 
@@ -723,8 +814,6 @@ export function setup() {
     _buildWelcomeOverlay();
 
     document.getElementById('howToPlayBtn') ?.addEventListener('click', () => _openWelcomePanel('how-to-play'));
-    document.getElementById('nicknameBtn')  ?.addEventListener('click', () => _openWelcomePanel('nickname'));
-    document.getElementById('avatarBtn')    ?.addEventListener('click', () => _openWelcomePanel('avatar'));
     document.getElementById('playersBtn')   ?.addEventListener('click', () => _openWelcomePanel('players'));
     document.getElementById('difficultyBtn')?.addEventListener('click', () => _openWelcomePanel('difficulty'));
     document.getElementById('exitButton')   ?.addEventListener('click', () => { /* no-op on web */ });
@@ -733,6 +822,15 @@ export function setup() {
         _gameMode = _gameMode === 'multi' ? 'bots' : 'multi';
         _updateMenuBtnLabels();
         if (_gameMode === 'multi') _openMPPanel();
+    });
+
+    const profileWidget = document.getElementById('profileWidget');
+    if (profileWidget) profileWidget.addEventListener('click', () => _openWelcomePanel('profile'));
+
+    onReady(({ displayName, avatarPath }) => {
+        _playerName = displayName;
+        _avatarPath = avatarPath;
+        _updateMenuBtnLabels();
     });
 
     refreshRejoinButton();

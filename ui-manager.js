@@ -17,7 +17,7 @@
 //   - Animations (see animations.js)
 // ============================================================
 
-import { HUMAN_ID, SIDE_IDS, INFO_ID, TURN_DURATION_MS, AVATAR_BG_POS, AVATAR_IMG_SRC } from './constants.js';
+import { HUMAN_ID, SIDE_IDS, INFO_ID, TURN_DURATION_MS, DEFAULT_AVATAR } from './constants.js';
 import * as Audio        from './audio.js';
 import * as CardHelpers  from './card-helpers.js';
 import * as Animations   from './animations.js';
@@ -165,7 +165,7 @@ export function Update(command, payload = {}) {
             _deselectAll();
             break;
         case 'SETUP_PLAYERS':
-            _setupPlayers(payload.numPlayers ?? 4, payload.playerName ?? 'Player', payload.avatarIndex ?? 0);
+            _setupPlayers(payload.numPlayers ?? 4, payload.playerName ?? 'Player', payload.avatarPath ?? DEFAULT_AVATAR);
             break;
         case 'SET_PLAYER_NAME': {
             const infoId = INFO_ID[payload.playerId];
@@ -202,19 +202,7 @@ export function Update(command, payload = {}) {
         }
         case 'SET_PLAYER_AVATAR': {
             const infoId = INFO_ID[payload.playerId];
-            if (infoId) {
-                const avatarEl = document.querySelector(`#${infoId} .avatar`);
-                if (avatarEl) {
-                    avatarEl.textContent = '';
-                    const pos = AVATAR_BG_POS[payload.avatarIdx] ?? AVATAR_BG_POS[0];
-                    Object.assign(avatarEl.style, {
-                        backgroundImage:    AVATAR_IMG_SRC,
-                        backgroundSize:     '435% 435%',
-                        backgroundPosition: pos,
-                        backgroundRepeat:   'no-repeat',
-                    });
-                }
-            }
+            if (infoId) _setAvatarImg(`#${infoId} .avatar`, payload.avatarPath);
             break;
         }
         default:
@@ -252,7 +240,17 @@ function _hideConnectionOverlay() {
 
 // ---- Player setup -----------------------------------------------------------
 
-function _setupPlayers(numPlayers, playerName, avatarIndex) {
+function _setAvatarImg(selector, path) {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.textContent = '';
+    el.style.backgroundImage = 'none';
+    let img = el.querySelector('img.avatar-player-img');
+    if (!img) { img = document.createElement('img'); img.className = 'avatar-player-img'; el.appendChild(img); }
+    img.src = path ?? DEFAULT_AVATAR;
+}
+
+function _setupPlayers(numPlayers, playerName, avatarPath) {
     // Clear disconnect indicators from any previous game
     for (const id of Object.values(INFO_ID)) {
         const el = document.getElementById(id);
@@ -262,17 +260,7 @@ function _setupPlayers(numPlayers, playerName, avatarIndex) {
     const nameEl = document.querySelector('#yourInfo .player-name');
     if (nameEl) nameEl.textContent = playerName;
 
-    const avatarEl = document.querySelector('#yourInfo .avatar');
-    if (avatarEl) {
-        avatarEl.textContent = '';
-        const pos = AVATAR_BG_POS[avatarIndex] ?? AVATAR_BG_POS[0];
-        Object.assign(avatarEl.style, {
-            backgroundImage:    AVATAR_IMG_SRC,
-            backgroundSize:     '435% 435%',
-            backgroundPosition: pos,
-            backgroundRepeat:   'no-repeat',
-        });
-    }
+    _setAvatarImg('#yourInfo .avatar', avatarPath);
 
     const topArea  = document.querySelector('.player-area.player-top');
     const leftArea = document.querySelector('.player-area.player-left');

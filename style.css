@@ -566,18 +566,61 @@ body.welcome-active #tapToStart {
 #welcomeScreen.doors-open .lift-door-left  { transform: translateX(-100%); }
 #welcomeScreen.doors-open .lift-door-right { transform: translateX(100%); }
 
-/* ---- Avatar Sprite Sheet (3×3 grid in 155153-OUMT5G-397.jpg) ---- */
+/* ---- Profile widget (main menu) ---- */
+.profile-widget {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: clamp(6px, 1vh, 10px) 0;
+    user-select: none;
+    transition: opacity 0.15s;
+}
+.profile-widget:hover { opacity: 0.85; }
+.profile-widget-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(255,255,255,0.55);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.45);
+    display: block;
+}
+.profile-widget-name {
+    color: #f4f1e6;
+    font-size: clamp(13px, 2.2vw, 16px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+/* ---- In-game avatar image (replaces emoji inside .avatar) ---- */
+.avatar-player-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+/* ---- Avatar selection grid (profile panel) ---- */
+.avatar-select-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(8px, 1.8vw, 16px);
+    justify-items: center;
+}
 .avatar-preview {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background-image: url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg');
-    background-size: 435% 435%;   /* 1.45× zoom */
-    background-repeat: no-repeat;
+    object-fit: cover;
     cursor: pointer;
     border: 3px solid transparent;
     transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
     flex-shrink: 0;
+    display: block;
 }
 .avatar-preview:hover   { transform: scale(1.08); }
 .avatar-preview.taken {
@@ -590,17 +633,30 @@ body.welcome-active #tapToStart {
     box-shadow: 0 0 0 3px #e11d48;
     transform: scale(1.05);
 }
-/* Faces in the sprite are offset inward toward the sheet centre,
-   so outer positions are shifted toward 50% to compensate.          */
-.avatar-pos-0 { background-position: 14% 15%; }
-.avatar-pos-1 { background-position: 50% 15%; }
-.avatar-pos-2 { background-position: 86% 15%; }
-.avatar-pos-3 { background-position: 14% 50%; }
-.avatar-pos-4 { background-position: 50% 50%; }
-.avatar-pos-5 { background-position: 86% 50%; }
-.avatar-pos-6 { background-position: 14% 85%; }
-.avatar-pos-7 { background-position: 50% 85%; }
-.avatar-pos-8 { background-position: 86% 85%; }
+
+/* ---- Profile panel internals ---- */
+.profile-panel-avatar-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+}
+.profile-current-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(255,255,255,0.45);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    display: block;
+}
+.profile-field-label {
+    color: rgba(255,255,255,0.65);
+    font-size: clamp(11px, 1.7vw, 13px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+}
 
 /* ---- Welcome Overlay ---- */
 .welcome-overlay {
@@ -1204,17 +1260,14 @@ body.welcome-active #tapToStart {
     background: transparent;
 }
 
-.mp-player-avatar {
-    width: 32px;
-    height: 32px;
+.mp-player-avatar-img {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background-image: url('Images/avatars/cartoon-pack-workers-avatars/155153-OUMT5G-397.jpg');
-    background-size: 435% 435%;
-    background-repeat: no-repeat;
+    object-fit: cover;
     flex-shrink: 0;
     border: 2px solid rgba(255,255,255,0.3);
     cursor: default;
-    transform: none !important;
 }
 
 .mp-host-ctrl {

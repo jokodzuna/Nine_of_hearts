@@ -216,19 +216,19 @@ export const getMaxPlayers  = () => _maxPlayers;
 export const getPlayers     = () => _players;
 export const getHostUid     = () => _prevHost;
 
-/** Any player: update own avatarIdx in the lobby (real-time exclusion). */
-export async function updateAvatar(avatarIdx) {
+/** Any player: update own avatarPath in the lobby (real-time exclusion). */
+export async function updateAvatar(avatarPath) {
     if (!_roomCode || !_uid) return;
-    await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), { avatarIdx });
+    await update(ref(_db, `rooms/${_roomCode}/players/${_uid}`), { avatarPath });
 }
 
 // ---- Room management --------------------------------------------------------
 
 /**
  * Create a room as host. Returns the 4-digit code.
- * @param {{ nickname:string, avatarIdx:number, maxPlayers?:number }} opts
+ * @param {{ nickname:string, avatarPath:string, maxPlayers?:number }} opts
  */
-export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
+export async function createRoom({ nickname, avatarPath, maxPlayers = 4 }) {
     if (!_uid) throw new Error('Not authenticated');
 
     // Pick an unused 4-digit code
@@ -250,7 +250,7 @@ export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
         status:     'lobby',
         createdAt:  Date.now(),
         players: {
-            [_uid]: { nickname, avatarIdx, idx: 0, isBot: false, connected: true,
+            [_uid]: { nickname, avatarPath, idx: 0, isBot: false, connected: true,
                       isAI: false, wasHuman: false, disconnectedAt: null, turnsMissed: 0 },
         },
     });
@@ -265,9 +265,9 @@ export async function createRoom({ nickname, avatarIdx, maxPlayers = 4 }) {
 
 /**
  * Join an existing room as guest. Returns assigned player index.
- * @param {{ code:string, nickname:string, avatarIdx:number }} opts
+ * @param {{ code:string, nickname:string, avatarPath:string }} opts
  */
-export async function joinRoom({ code, nickname, avatarIdx }) {
+export async function joinRoom({ code, nickname, avatarPath }) {
     if (!_uid) throw new Error('Not authenticated');
 
     const snap = await get(ref(_db, `rooms/${code}`));
@@ -296,7 +296,7 @@ export async function joinRoom({ code, nickname, avatarIdx }) {
     _maxPlayers  = room.maxPlayers;
 
     await update(ref(_db, `rooms/${code}/players/${_uid}`), {
-        nickname, avatarIdx, idx: nextIdx, isBot: false, connected: true,
+        nickname, avatarPath, idx: nextIdx, isBot: false, connected: true,
         isAI: false, wasHuman: false, disconnectedAt: null, turnsMissed: 0,
     });
 

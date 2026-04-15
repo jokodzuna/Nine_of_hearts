@@ -7,6 +7,7 @@ import * as MP    from './multiplayer.js';
 import * as Audio from './audio.js';
 import { USER_AVATARS, DEFAULT_AVATAR } from './constants.js';
 import { getProfile, updateProfile, onReady } from './user-profile.js';
+import * as Economy from './economy.js';
 
 // ============================================================
 // State
@@ -697,13 +698,25 @@ function _buildProfilePanel() {
     changeAvBtn.addEventListener('click', () => _openWelcomePanel('avatar-select'));
     panel.appendChild(changeAvBtn);
 
-    for (const label of ['Stats', 'Achievements', 'Settings']) {
-        const btn = document.createElement('button');
-        btn.className = 'menu-btn coming-soon';
-        btn.textContent = label;
-        btn.disabled = true;
-        panel.appendChild(btn);
-    }
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'menu-btn coming-soon';
+    settingsBtn.textContent = 'Settings';
+    settingsBtn.disabled = true;
+    panel.appendChild(settingsBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'menu-btn menu-btn-danger';
+    resetBtn.textContent = 'Reset All Data';
+    resetBtn.addEventListener('click', () => {
+        const confirmed = window.confirm('Reset ALL progress?\nCoins, stats, and achievements will be wiped. This cannot be undone.');
+        if (!confirmed) return;
+        Economy.resetAllData().then(() => {
+            const el = document.getElementById('coinBalance');
+            if (el) el.textContent = '0';
+            window.alert('All data has been reset.');
+        }).catch(console.error);
+    });
+    panel.appendChild(resetBtn);
 
     panel.appendChild(_makePanelCloseBtn('Close'));
     return panel;
@@ -834,6 +847,10 @@ export function setup() {
     };
     window.addEventListener('profileCached', e => _applyProfile(e.detail), { once: true });
     onReady(_applyProfile);
+    Economy.onEconomyReady(() => {
+        const el = document.getElementById('coinBalance');
+        if (el) el.textContent = Economy.getCoins();
+    });
 
     refreshRejoinButton();
 

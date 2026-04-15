@@ -96,6 +96,25 @@ export function playTickSound() {
     osc.start(now); osc.stop(now + 0.14);
 }
 
+export function playAchievementSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now   = _audioCtx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+    freqs.forEach((f, i) => {
+        const osc = _audioCtx.createOscillator();
+        const g   = _audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, now + i * 0.11);
+        g.gain.setValueAtTime(0.0001, now + i * 0.11);
+        g.gain.exponentialRampToValueAtTime(0.09, now + i * 0.11 + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.11 + 0.38);
+        osc.connect(g); g.connect(_audioCtx.destination);
+        osc.start(now + i * 0.11);
+        osc.stop(now + i * 0.11 + 0.42);
+    });
+}
+
 export function playDealSound() {
     if (!_audioCtx) return;
     const nowMs = performance.now();

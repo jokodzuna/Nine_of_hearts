@@ -46,6 +46,7 @@ import * as MP from './multiplayer.js';
 const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 
 import { AI_AVATARS, DEFAULT_AVATAR } from './constants.js';
+import * as Economy from './economy.js';
 
 // ============================================================
 // Config
@@ -129,6 +130,11 @@ let _abandonTimer = null;      // host: fires when all human guests have been go
 let _lastMPMode     = false;
 let _lastLocalConfig = null;
 
+// Economy tracking (reset each game)
+let _gameStartTime       = 0;
+let _humanMaxCards       = 0;
+let _humanFoursThisGame  = 0;
+
 // ============================================================
 // Bridge — register callbacks with ui-manager
 // ============================================================
@@ -178,6 +184,9 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[0] = cfg.playerName || 'Player';
 
     _gameActive     = true;
+    _gameStartTime      = Date.now();
+    _humanMaxCards      = 0;
+    _humanFoursThisGame = 0;
 
     for (const engine of Object.values(_engines)) engine.resetKnowledge();
 
@@ -294,6 +303,7 @@ function _applyAndAdvance(move) {
     // Sync visuals: for AI plays, remove card from hand first then add to pile
     const dm  = decodeMove(move);
     const _cp = _state.currentPlayer;
+    if (_cp === HUMAN && dm.type !== 'draw' && dm.cards.length === 4) _humanFoursThisGame++;
     if (dm.type === 'draw') {
         Update('REMOVE_FROM_PILE', { count: dm.count });
     } else if (_cp !== HUMAN) {
@@ -426,6 +436,14 @@ function _endGame() {
 
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (!(_state.eliminated & (1 << p))) {
+            const humanSeat = _mpMode ? _myMPIdx : HUMAN;
+            const survived  = p !== humanSeat;
+            Economy.recordGameResult({
+                survived,
+                foursPlayedThisGame: _humanFoursThisGame,
+                gameTimeMs:          Date.now() - _gameStartTime,
+                maxCardsHeld:        _humanMaxCards,
+            }).catch(console.error);
             const text   = _bannerText(p);
             const isMP   = _mpMode;
             const isHost = MP.isHost();
@@ -452,6 +470,14 @@ function _forceEndGame() {
     Update('ENABLE_DRAW', { enabled: false });
 
     _renderHands(decodeState(_state));
+
+    // In _forceEndGame all humans cleared their hands — human always survived
+    Economy.recordGameResult({
+        survived:            true,
+        foursPlayedThisGame: _humanFoursThisGame,
+        gameTimeMs:          Date.now() - _gameStartTime,
+        maxCardsHeld:        _humanMaxCards,
+    }).catch(console.error);
 
     const loserIdx = _findForcedLoser();
     const text     = _bannerText(loserIdx);
@@ -504,6 +530,10 @@ function _findForcedLoser() {
 
 function _renderHands(ds) {
     const humanIdx = _mpMode ? _myMPIdx : HUMAN;
+    if (_gameActive && ds.hands[humanIdx]) {
+        const cnt = ds.hands[humanIdx].length;
+        if (cnt > _humanMaxCards) _humanMaxCards = cnt;
+    }
     for (let p = 0; p < NUM_PLAYERS; p++) {
         const dispId = _mpDispId(p);
         if (p === humanIdx) {
@@ -806,6 +836,9 @@ function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = fals
     NUM_PLAYERS = maxPlayers;
     _state      = initialState;
     _gameActive = true;
+    _gameStartTime      = Date.now();
+    _humanMaxCards      = 0;
+    _humanFoursThisGame = 0;
 
     const byIdx = {};
     for (const p of Object.values(players)) byIdx[p.idx] = p;
@@ -1011,6 +1044,7 @@ async function _applyMPMove(move) {
 
     const dm        = decodeMove(move);
     const prevState = _state;              // pre-move state needed by engines
+    if (dm.type !== 'draw' && dm.cards.length === 4) _humanFoursThisGame++;
     const newState  = applyMove(_state, move);
     _state = newState;
 

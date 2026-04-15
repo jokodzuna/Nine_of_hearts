@@ -8,7 +8,7 @@
 //   - Expose uid, displayName, avatarPath to all other modules
 // ============================================================
 
-import { ref, get, set }   from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js';
+import { ref, get, set, update } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js';
 import { initAuth, getDB } from './multiplayer.js';
 
 // ============================================================
@@ -65,7 +65,7 @@ export async function updateProfile(changes) {
     if (changes.avatarPath  !== undefined) { _avatarPath  = changes.avatarPath;  allowed.avatarPath  = _avatarPath;  }
     if (Object.keys(allowed).length === 0) return;
     _saveCache();
-    await set(ref(db, `users/${_uid}`), {
+    await update(ref(db, `users/${_uid}`), {
         displayName: _displayName,
         avatarPath:  _avatarPath,
     });
@@ -87,6 +87,7 @@ async function _initProfile() {
         await set(ref(db, `users/${_uid}`), {
             displayName: _displayName,
             avatarPath:  _avatarPath,
+            coins:       0,
             createdAt:   { '.sv': 'timestamp' },
         });
     }

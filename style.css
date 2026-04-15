@@ -585,7 +585,7 @@ body.welcome-active #tapToStart {
     border-radius: 50%;
     object-fit: cover;
     background: transparent;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 3px 12px rgba(0,0,0,0.45);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.45);
     display: block;
 }
 .profile-widget-name {

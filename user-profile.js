@@ -16,11 +16,23 @@ import { initAuth, getDB } from './multiplayer.js';
 // ============================================================
 
 const DEFAULT_AVATAR_PATH = 'Images/user-avatars/default-man_result.webp';
+const _LS_KEY             = 'nhProfile';
 
 let _uid         = null;
 let _displayName = null;
 let _avatarPath  = null;
 let _ready       = false;
+
+function _saveCache() {
+    try { localStorage.setItem(_LS_KEY, JSON.stringify({ displayName: _displayName, avatarPath: _avatarPath })); } catch {}
+}
+
+function _loadCache() {
+    try {
+        const c = JSON.parse(localStorage.getItem(_LS_KEY) || 'null');
+        if (c) { _displayName = c.displayName || null; _avatarPath = c.avatarPath || null; }
+    } catch {}
+}
 
 // ---- Public API -------------------------------------------------------------
 
@@ -52,6 +64,7 @@ export async function updateProfile(changes) {
     if (changes.displayName !== undefined) { _displayName = changes.displayName; allowed.displayName = _displayName; }
     if (changes.avatarPath  !== undefined) { _avatarPath  = changes.avatarPath;  allowed.avatarPath  = _avatarPath;  }
     if (Object.keys(allowed).length === 0) return;
+    _saveCache();
     await set(ref(db, `users/${_uid}`), {
         displayName: _displayName,
         avatarPath:  _avatarPath,
@@ -84,6 +97,12 @@ async function _initProfile() {
 }
 
 // Auto-run on module load — silently retries nothing; errors are logged only.
+// Immediately fire a cached event so the UI can show the right avatar before Firebase.
+_loadCache();
+if (_avatarPath) {
+    window.dispatchEvent(new CustomEvent('profileCached', { detail: { displayName: _displayName, avatarPath: _avatarPath } }));
+}
+
 (async () => {
     try {
         _uid = await initAuth();

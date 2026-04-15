@@ -827,11 +827,13 @@ export function setup() {
     const profileWidget = document.getElementById('profileWidget');
     if (profileWidget) profileWidget.addEventListener('click', () => _openWelcomePanel('profile'));
 
-    onReady(({ displayName, avatarPath }) => {
-        _playerName = displayName;
-        _avatarPath = avatarPath;
+    const _applyProfile = ({ displayName, avatarPath }) => {
+        if (displayName) _playerName = displayName;
+        if (avatarPath)  _avatarPath = avatarPath;
         _updateMenuBtnLabels();
-    });
+    };
+    window.addEventListener('profileCached', e => _applyProfile(e.detail), { once: true });
+    onReady(_applyProfile);
 
     refreshRejoinButton();
 

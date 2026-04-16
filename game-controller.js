@@ -288,7 +288,7 @@ function _humanDraw() {
     if (drawMove === undefined) return;
 
     const hasPlayMoves = moves.some(m => !(m & DRAW_FLAG));
-    Audio.triggerHaptic(hasPlayMoves ? 'error' : 'light');
+    if (hasPlayMoves) Audio.triggerHaptic('error');
 
     if (_mpMode) _applyMPMove(drawMove);
     else         _applyAndAdvance(drawMove);

@@ -152,11 +152,25 @@ export function playCardSound() {
     src.start(now); src.stop(now + 0.14);
 }
 
+function _createReverb(decaySec = 1.4) {
+    const sRate  = _audioCtx.sampleRate;
+    const length = Math.floor(sRate * decaySec);
+    const ir     = _audioCtx.createBuffer(2, length, sRate);
+    for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch);
+        for (let i = 0; i < length; i++)
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.2);
+    }
+    const conv = _audioCtx.createConvolver();
+    conv.buffer = ir;
+    return conv;
+}
+
 export function playDrawSound() {
     if (!_audioCtx) return;
     if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
     const now    = _audioCtx.currentTime;
-    const dur    = 0.36;
+    const dur    = 0.55;
     const sRate  = _audioCtx.sampleRate;
     const bufLen = Math.floor(sRate * dur);
     const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
@@ -166,15 +180,20 @@ export function playDrawSound() {
     src.buffer = buf;
     const bp = _audioCtx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(350, now);
-    bp.frequency.exponentialRampToValueAtTime(2200, now + 0.18);
-    bp.frequency.exponentialRampToValueAtTime(600, now + dur);
+    bp.frequency.setValueAtTime(300, now);
+    bp.frequency.exponentialRampToValueAtTime(2000, now + 0.30);
+    bp.frequency.exponentialRampToValueAtTime(550, now + dur);
     bp.Q.value = 0.65;
     const g = _audioCtx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.09, now + 0.07);
+    g.gain.exponentialRampToValueAtTime(0.09, now + 0.13);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(bp); bp.connect(g); g.connect(_audioCtx.destination);
+    src.connect(bp); bp.connect(g);
+    const dry = _audioCtx.createGain(); dry.gain.value = 0.55;
+    const wet = _audioCtx.createGain(); wet.gain.value = 0.45;
+    const rev = _createReverb();
+    g.connect(dry); dry.connect(_audioCtx.destination);
+    g.connect(rev); rev.connect(wet); wet.connect(_audioCtx.destination);
     src.start(now); src.stop(now + dur);
 }
 

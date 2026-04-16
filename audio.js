@@ -115,6 +115,64 @@ export function playAchievementSound() {
     });
 }
 
+export function playPurchaseSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now   = _audioCtx.currentTime;
+    const freqs = [659.25, 783.99, 1046.50, 1318.51]; // E5 G5 C6 E6
+    freqs.forEach((f, i) => {
+        const osc = _audioCtx.createOscillator();
+        const g   = _audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + i * 0.07);
+        g.gain.setValueAtTime(0.0001, now + i * 0.07);
+        g.gain.exponentialRampToValueAtTime(0.07, now + i * 0.07 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.07 + 0.28);
+        osc.connect(g); g.connect(_audioCtx.destination);
+        osc.start(now + i * 0.07);
+        osc.stop(now + i * 0.07 + 0.32);
+    });
+}
+
+export function playBuzzerSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now = _audioCtx.currentTime;
+    const osc = _audioCtx.createOscillator();
+    const g   = _audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(110, now + 0.22);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.09, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    osc.connect(g); g.connect(_audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.32);
+}
+
+export function playVIPFanfareSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now = _audioCtx.currentTime;
+    const seq = [
+        [523.25, 0.00], [659.25, 0.10], [783.99, 0.20],
+        [1046.50, 0.32], [1318.51, 0.44], [1046.50, 0.56],
+        [1318.51, 0.66], [1567.98, 0.78],
+    ];
+    seq.forEach(([f, t]) => {
+        const osc = _audioCtx.createOscillator();
+        const g   = _audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, now + t);
+        g.gain.setValueAtTime(0.0001, now + t);
+        g.gain.exponentialRampToValueAtTime(0.10, now + t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.28);
+        osc.connect(g); g.connect(_audioCtx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + 0.32);
+    });
+}
+
 export function playDealSound() {
     if (!_audioCtx) return;
     const nowMs = performance.now();

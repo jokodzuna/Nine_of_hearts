@@ -126,15 +126,9 @@ function _openWelcomePanel(id) {
         const prev = panel.querySelector('.profile-current-avatar');
         if (prev) prev.src = _avatarPath;
     }
-    if (id === 'avatar-select') {
-        const grid = panel.querySelector('.avatar-select-grid');
-        if (grid) grid.querySelectorAll('.avatar-preview').forEach(el => {
-            el.classList.toggle('selected', el.dataset.path === _avatarPath);
-            el.classList.toggle('taken',    _mpTakenAvatars.has(el.dataset.path));
-        });
-    }
-    if (id === 'stats')        _refreshStatsPanel();
-    if (id === 'achievements') _refreshAchievementsPanel();
+    if (id === 'avatar-select') _refreshAvatarShopGrid();
+    if (id === 'stats')          _refreshStatsPanel();
+    if (id === 'achievements')   _refreshAchievementsPanel();
 }
 
 function _closeWelcomePanel() {
@@ -713,9 +707,9 @@ function _buildProfilePanel() {
     panel.appendChild(achBtn);
 
     const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'menu-btn coming-soon';
-    settingsBtn.textContent = 'Settings';
-    settingsBtn.disabled = true;
+    settingsBtn.className = 'menu-btn';
+    settingsBtn.textContent = '\u2699\uFE0F  Settings';
+    settingsBtn.addEventListener('click', () => _openWelcomePanel('settings'));
     panel.appendChild(settingsBtn);
 
     const resetBtn = document.createElement('button');
@@ -834,37 +828,216 @@ function _refreshAchievementsPanel() {
 
 function _buildAvatarSelectPanel() {
     const panel = _makePanelBase('avatar-select', 'Choose Avatar');
-
     const grid = document.createElement('div');
-    grid.className = 'avatar-select-grid';
-
-    for (const path of USER_AVATARS) {
-        const img = document.createElement('img');
-        img.src = path;
-        img.dataset.path = path;
-        img.className = 'avatar-preview' + (path === _avatarPath ? ' selected' : '');
-        img.addEventListener('click', async () => {
-            if (img.classList.contains('taken')) return;
-            _avatarPath = path;
-            grid.querySelectorAll('.avatar-preview').forEach(el => el.classList.toggle('selected', el.dataset.path === path));
-            const prev = document.querySelector('.profile-current-avatar');
-            if (prev) prev.src = path;
-            _updateProfileWidget();
-            try { await updateProfile({ avatarPath: path }); }
-            catch (e) { console.error('[Profile] save avatar failed:', e); }
-            if (MP.isInRoom()) MP.updateAvatar(path).catch(console.error);
-        });
-        grid.appendChild(img);
-    }
-
+    grid.id = 'avatarShopGrid';
+    grid.className = 'avatar-shop-grid';
     panel.appendChild(grid);
-
     const backBtn = document.createElement('button');
     backBtn.className = 'menu-btn';
-    backBtn.textContent = '← Back to Profile';
+    backBtn.textContent = '\u2190 Back to Profile';
     backBtn.addEventListener('click', () => _openWelcomePanel('profile'));
     panel.appendChild(backBtn);
     return panel;
+}
+
+function _refreshAvatarShopGrid() {
+    const grid = document.getElementById('avatarShopGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const vip = Economy.isPremium();
+    for (const path of USER_AVATARS) {
+        const owned      = Economy.isAvatarUnlocked(path);
+        const isTaken    = _mpTakenAvatars.has(path);
+        const price      = Economy.AVATAR_PRICES.get(path) ?? 0;
+        const isSelected = path === _avatarPath;
+
+        const item = document.createElement('div');
+        item.className = 'avatar-shop-item ' + (owned ? 'avatar-shop-item--owned' : 'avatar-shop-item--locked');
+
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'avatar-shop-img-wrap';
+
+        const img = document.createElement('img');
+        img.src = path;
+        img.className = 'avatar-shop-img' + (!owned ? ' avatar-shop-img--locked' : '');
+        imgWrap.appendChild(img);
+
+        if (!owned && !vip) {
+            const lockOv = document.createElement('div');
+            lockOv.className = 'avatar-shop-lock-overlay';
+            lockOv.innerHTML = `<span class="avatar-shop-lock-icon">\u{1F512}</span><span class="avatar-shop-price-tag">${price} \u{1FA99}</span>`;
+            imgWrap.appendChild(lockOv);
+        }
+
+        if (isSelected) {
+            const badge = document.createElement('div');
+            badge.className = 'avatar-shop-selected-badge';
+            badge.textContent = '\u2713';
+            imgWrap.appendChild(badge);
+        }
+
+        item.appendChild(imgWrap);
+
+        const btn = document.createElement('button');
+        if (owned) {
+            btn.className = 'avatar-shop-btn'
+                + (isSelected ? ' avatar-shop-btn--active' : '')
+                + (isTaken   ? ' avatar-shop-btn--taken'  : '');
+            btn.textContent = isSelected ? '\u2713 In Use' : (isTaken ? 'Taken' : 'Select');
+            btn.disabled = isSelected || isTaken;
+            btn.addEventListener('click', async () => {
+                _avatarPath = path;
+                _refreshAvatarShopGrid();
+                const prev = document.querySelector('.profile-current-avatar');
+                if (prev) prev.src = path;
+                _updateProfileWidget();
+                try { await updateProfile({ avatarPath: path }); }
+                catch (e) { console.error('[Profile] save avatar failed:', e); }
+                if (MP.isInRoom()) MP.updateAvatar(path).catch(console.error);
+            });
+        } else {
+            btn.className = 'avatar-shop-btn avatar-shop-btn--buy';
+            btn.textContent = `${price} \u{1FA99}`;
+            btn.addEventListener('click', () => _showBuyConfirm(path, price));
+        }
+        item.appendChild(btn);
+        grid.appendChild(item);
+    }
+}
+
+function _showBuyConfirm(path, price) {
+    const panel = document.getElementById('welcomePanel-avatar-select');
+    if (!panel) return;
+    const existing = panel.querySelector('.buy-confirm-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'buy-confirm-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'buy-confirm-box';
+
+    const img = document.createElement('img');
+    img.src = path;
+    img.className = 'buy-confirm-avatar';
+
+    const msg = document.createElement('p');
+    msg.className = 'buy-confirm-msg';
+    msg.innerHTML = `Purchase for <strong>${price} \u{1FA99}</strong>?`;
+
+    const btns = document.createElement('div');
+    btns.className = 'buy-confirm-btns';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'menu-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => overlay.remove());
+
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'menu-btn menu-btn-start';
+    buyBtn.textContent = `Buy: ${price} \u{1FA99}`;
+    buyBtn.addEventListener('click', async () => {
+        overlay.remove();
+        const result = await Economy.buyAvatar(path);
+        if (result.success) {
+            _refreshAvatarShopGrid();
+        } else if (result.reason === 'not_enough_coins') {
+            Audio.playBuzzerSound();
+            _showToast(`Not enough coins! Need ${price} \u{1FA99}`, 'error');
+        }
+    });
+
+    btns.append(cancelBtn, buyBtn);
+    box.append(img, msg, btns);
+    overlay.appendChild(box);
+    panel.appendChild(overlay);
+}
+
+function _showToast(msg, type = 'info') {
+    const existing = document.getElementById('shopToast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'shopToast';
+    el.className = `shop-toast shop-toast--${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('shop-toast--in')));
+    setTimeout(() => {
+        el.classList.remove('shop-toast--in');
+        setTimeout(() => el.remove(), 400);
+    }, 2800);
+}
+
+// ============================================================
+// Settings panel
+// ============================================================
+
+const _VIP_CODE = 'VIP';
+
+function _buildSettingsPanel() {
+    const panel = _makePanelBase('settings', 'Settings');
+
+    const section = document.createElement('div');
+    section.className = 'settings-section';
+
+    const label = document.createElement('div');
+    label.className = 'settings-label';
+    label.textContent = 'Secret Code';
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'settings-input-row';
+
+    const codeInp = document.createElement('input');
+    codeInp.type = 'text';
+    codeInp.className = 'nickname-input settings-code-input';
+    codeInp.placeholder = 'Enter code\u2026';
+    codeInp.maxLength = 30;
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'menu-btn settings-apply-btn';
+    applyBtn.textContent = 'Apply';
+    applyBtn.addEventListener('click', async () => {
+        const code = codeInp.value.trim().toUpperCase();
+        if (code === _VIP_CODE) {
+            if (Economy.isPremium()) {
+                _showToast('You already have VIP access!', 'info');
+                return;
+            }
+            await Economy.grantVIP();
+            Audio.playVIPFanfareSound();
+            _showVIPNotification();
+            codeInp.value = '';
+            _refreshAvatarShopGrid();
+        } else {
+            Audio.playBuzzerSound();
+            _showToast('Invalid code.', 'error');
+        }
+    });
+    codeInp.addEventListener('keydown', e => { if (e.key === 'Enter') applyBtn.click(); });
+
+    inputRow.append(codeInp, applyBtn);
+    section.append(label, inputRow);
+    panel.appendChild(section);
+    panel.appendChild(_makePanelCloseBtn('Close'));
+    return panel;
+}
+
+function _showVIPNotification() {
+    const el = document.createElement('div');
+    el.className = 'achievement-popup';
+    el.innerHTML =
+        `<span class="ach-icon">\u{1F451}</span>` +
+        `<div class="ach-body">` +
+        `<div class="ach-unlocked">VIP Access Granted!</div>` +
+        `<div class="ach-title">All avatars unlocked</div>` +
+        `<div class="ach-desc">You now have access to all content.</div>` +
+        `</div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('achievement-popup--in')));
+    setTimeout(() => {
+        el.classList.remove('achievement-popup--in');
+        setTimeout(() => el.remove(), 500);
+    }, 4500);
 }
 
 // ============================================================
@@ -920,9 +1093,10 @@ function _buildWelcomeOverlay() {
     // ---- Multiplayer ----
     const mpPanel = _buildMPPanel();
 
-    const statsPanel = _buildStatsPanel();
-    const achPanel   = _buildAchievementsPanel();
-    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel, statsPanel, achPanel);
+    const statsPanel    = _buildStatsPanel();
+    const achPanel      = _buildAchievementsPanel();
+    const settingsPanel = _buildSettingsPanel();
+    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel, statsPanel, achPanel, settingsPanel);
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 

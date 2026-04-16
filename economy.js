@@ -5,7 +5,32 @@
 
 import { ref, get, update } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js';
 import { getDB }             from './multiplayer.js';
-import { playAchievementSound } from './audio.js';
+import { playAchievementSound, playPurchaseSound } from './audio.js';
+
+// ============================================================
+// Avatar Shop
+// ============================================================
+
+export const AVATAR_PRICES = new Map([
+    ['Images/user-avatars/default-man_result.webp',    0],
+    ['Images/user-avatars/punk-girl_result.webp',      0],
+    ['Images/user-avatars/rainbow-hair_result.webp',   0],
+    ['Images/user-avatars/biker_result.webp',          0],
+    ['Images/user-avatars/alien_result.webp',          0],
+    ['Images/user-avatars/fox_result.webp',           50],
+    ['Images/user-avatars/witch_result.webp',          75],
+    ['Images/user-avatars/pirate_result.webp',        100],
+    ['Images/user-avatars/police-woman_result.webp',  125],
+    ['Images/user-avatars/grumpy-girl_result.webp',   150],
+    ['Images/user-avatars/girl-glasses_result.webp',  175],
+    ['Images/user-avatars/big-smile_result.webp',     200],
+    ['Images/user-avatars/black-boy_result.webp',     225],
+    ['Images/user-avatars/cute-boy_result.webp',      250],
+    ['Images/user-avatars/monkey_result.webp',        275],
+    ['Images/user-avatars/old-lady_result.webp',      300],
+    ['Images/user-avatars/toddler_result.webp',       300],
+    ['Images/user-avatars/troll_result.webp',         300],
+]);
 
 // ============================================================
 // Achievement Definitions
@@ -65,12 +90,14 @@ function _defaultStats() {
     };
 }
 
-let _uid          = null;
-let _coins        = 0;
-let _stats        = _defaultStats();
-let _achievements = {};
-let _ready        = false;
-let _readyCbs     = [];
+let _uid            = null;
+let _coins          = 0;
+let _stats          = _defaultStats();
+let _achievements   = {};
+let _unlockedItems  = new Set();
+let _isPremium      = false;
+let _ready          = false;
+let _readyCbs       = [];
 
 // ============================================================
 // Public API
@@ -80,6 +107,41 @@ export function getCoins()                { return _coins; }
 export function getStats()                { return { ..._stats }; }
 export function getUnlockedAchievements() { return { ..._achievements }; }
 export function isEconomyReady()          { return _ready; }
+export function isPremium()               { return _isPremium; }
+export function getUnlockedItems()        { return new Set(_unlockedItems); }
+
+export function isAvatarUnlocked(path) {
+    if (_isPremium) return true;
+    const price = AVATAR_PRICES.get(path);
+    if (price === 0 || price === undefined) return true;
+    return _unlockedItems.has(path);
+}
+
+export async function buyAvatar(path) {
+    if (!_uid) return { success: false, reason: 'not_ready' };
+    if (isAvatarUnlocked(path)) return { success: true };
+    const price = AVATAR_PRICES.get(path) ?? 0;
+    if (_coins < price) return { success: false, reason: 'not_enough_coins' };
+    _coins -= price;
+    _unlockedItems.add(path);
+    _updateCoinDisplay();
+    try {
+        await update(ref(getDB(), `users/${_uid}`), {
+            coins:         _coins,
+            unlockedItems: Array.from(_unlockedItems),
+        });
+    } catch (e) { console.error('[Economy] buyAvatar failed:', e); }
+    playPurchaseSound();
+    return { success: true };
+}
+
+export async function grantVIP() {
+    if (!_uid) return;
+    _isPremium = true;
+    try {
+        await update(ref(getDB(), `users/${_uid}`), { isPremium: true });
+    } catch (e) { console.error('[Economy] grantVIP failed:', e); }
+}
 
 export function onEconomyReady(cb) {
     if (_ready) { Promise.resolve().then(cb); return; }
@@ -218,10 +280,12 @@ async function _initEconomy(uid) {
     try {
         const snap = await get(ref(getDB(), `users/${uid}`));
         if (snap.exists()) {
-            const d       = snap.val();
-            _coins        = d.coins                             ?? 0;
-            _stats        = { ..._defaultStats(), ...(d.stats        ?? {}) };
-            _achievements = { ...(d.achievements ?? {}) };
+            const d        = snap.val();
+            _coins         = d.coins                             ?? 0;
+            _stats         = { ..._defaultStats(), ...(d.stats        ?? {}) };
+            _achievements  = { ...(d.achievements ?? {}) };
+            _unlockedItems = new Set(Array.isArray(d.unlockedItems) ? d.unlockedItems : []);
+            _isPremium     = d.isPremium ?? false;
         }
     } catch (e) { console.error('[Economy] load failed:', e); }
     _ready = true;

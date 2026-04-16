@@ -1124,7 +1124,11 @@ export function setup() {
     });
 
     const profileWidget = document.getElementById('profileWidget');
-    if (profileWidget) profileWidget.addEventListener('click', () => _openWelcomePanel('profile'));
+    if (profileWidget) profileWidget.addEventListener('click', () => {
+        Audio.triggerHaptic('light');
+        Audio.playClickSound();
+        _openWelcomePanel('profile');
+    });
 
     const _applyProfile = ({ displayName, avatarPath }) => {
         if (displayName) _playerName = displayName;
@@ -1146,6 +1150,8 @@ export function setup() {
             e.stopPropagation();
             startBtn.blur();
             Audio.initAudio();
+            Audio.triggerHaptic('light');
+            Audio.playClickSound();
             if (Audio.isWelcomeSoundPending()) {
                 Audio.setWelcomeSoundPending(false);
                 Audio.playWelcomeSound();

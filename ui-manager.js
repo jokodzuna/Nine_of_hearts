@@ -345,7 +345,7 @@ function _highlightPlayer(playerId) {
         const cardsEl = document.getElementById(playerId);
         if (cardsEl) {
             cardsEl.classList.add('active-hand');
-            navigator.vibrate?.([100, 50, 100]);
+            Audio.triggerHaptic('turn');
         }
     }
 }

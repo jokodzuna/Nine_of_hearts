@@ -22,9 +22,10 @@ export function setHapticEnabled(v) {
 export function triggerHaptic(type) {
     if (!_hapticEnabled || !navigator.vibrate) return;
     switch (type) {
-        case 'light':   navigator.vibrate(10);           break;
+        case 'light':   navigator.vibrate([1, 5, 1]);    break;
         case 'success': navigator.vibrate(30);           break;
         case 'error':   navigator.vibrate([50, 30, 50]); break;
+        case 'turn':    navigator.vibrate([100, 50, 100]); break;
     }
 }
 
@@ -35,7 +36,6 @@ export function initAudio() {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     _audioCtx = new Ctx();
-    _getCardAudio();
 }
 
 // ---- Welcome-sound pending flag ---------------------------------------------
@@ -137,40 +137,69 @@ export function playAchievementSound() {
     });
 }
 
-// ---- MP3 card sound -------------------------------------------------------
-
-let _cardAudioEl = null;
-
-function _getCardAudio() {
-    if (!_cardAudioEl) {
-        _cardAudioEl = new window.Audio('Sounds/freesound_community-card-sounds-35956.mp3');
-        _cardAudioEl.volume = 0.55;
-    }
-    return _cardAudioEl;
-}
+// ---- Synthesised card-snap sound ------------------------------------------
 
 export function playCardSound() {
-    try {
-        const a = _getCardAudio();
-        a.currentTime = 0;
-        a.play().catch(() => {});
-    } catch {}
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now    = _audioCtx.currentTime;
+    const sRate  = _audioCtx.sampleRate;
+    const bufLen = Math.floor(sRate * 0.09);
+    const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf;
+    const bp = _audioCtx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 3800;
+    bp.Q.value = 0.7;
+    const g = _audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.4, now + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    src.connect(bp); bp.connect(g); g.connect(_audioCtx.destination);
+    src.start(now); src.stop(now + 0.09);
 }
+
+// ---- Hydraulic whoosh (4-of-a-kind long-press) ----------------------------
 
 export function playLongSelectSound() {
     if (!_audioCtx) return;
     const _play = () => {
-        const now = _audioCtx.currentTime;
+        const now   = _audioCtx.currentTime;
+        const sRate = _audioCtx.sampleRate;
+        const dur   = 0.38;
+        // Filtered noise — rising lowpass sweep (the whoosh)
+        const bufLen = Math.floor(sRate * dur);
+        const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
+        const data   = buf.getChannelData(0);
+        for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+        const src = _audioCtx.createBufferSource();
+        src.buffer = buf;
+        const lp = _audioCtx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(180, now);
+        lp.frequency.exponentialRampToValueAtTime(3200, now + dur * 0.65);
+        lp.frequency.exponentialRampToValueAtTime(700, now + dur);
+        lp.Q.value = 4;
+        const ng = _audioCtx.createGain();
+        ng.gain.setValueAtTime(0.0001, now);
+        ng.gain.exponentialRampToValueAtTime(0.45, now + 0.05);
+        ng.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        src.connect(lp); lp.connect(ng); ng.connect(_audioCtx.destination);
+        src.start(now); src.stop(now + dur);
+        // Heavy low sine for the "weight / pressure" feel
         const osc = _audioCtx.createOscillator();
-        const g   = _audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(280, now);
-        osc.frequency.exponentialRampToValueAtTime(160, now + 0.20);
-        g.gain.setValueAtTime(0.0001, now);
-        g.gain.exponentialRampToValueAtTime(0.28, now + 0.025);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
-        osc.connect(g); g.connect(_audioCtx.destination);
-        osc.start(now); osc.stop(now + 0.28);
+        const og  = _audioCtx.createGain();
+        osc.type  = 'sine';
+        osc.frequency.setValueAtTime(55, now);
+        osc.frequency.exponentialRampToValueAtTime(130, now + 0.18);
+        og.gain.setValueAtTime(0.0001, now);
+        og.gain.exponentialRampToValueAtTime(0.30, now + 0.04);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+        osc.connect(og); og.connect(_audioCtx.destination);
+        osc.start(now); osc.stop(now + dur);
     };
     if (_audioCtx.state === 'suspended') _audioCtx.resume().then(_play).catch(() => {});
     else _play();

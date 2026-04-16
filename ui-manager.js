@@ -125,6 +125,7 @@ export function Update(command, payload = {}) {
             _addCardToPile(payload.card);
             break;
         case 'REMOVE_FROM_PILE':
+            Audio.playDrawSound();
             _removeFromPile(payload.count ?? 1);
             break;
         case 'CLEAR_PILE':
@@ -502,10 +503,11 @@ function _renderHand(playerId, cards, count) {
 function _addCardToPile(cardData) {
     const pile = document.getElementById('pile');
     if (!pile || !cardData) return;
+    const isBase = pile.children.length === 0;
     const card = CardHelpers.createFaceUpCard(cardData, false);
     card.classList.add('dealt');
     pile.appendChild(card);
-    setTimeout(() => Audio.playCardSound(), 60);
+    if (!isBase) setTimeout(() => Audio.playCardSound(), 60);
 }
 
 function _removeFromPile(count) {
@@ -517,7 +519,6 @@ function _removeFromPile(count) {
     for (let i = 0; i < n; i++) {
         if (pile.lastElementChild !== pile.firstElementChild) pile.lastElementChild.remove();
     }
-    if (n > 0) Audio.playDrawSound();
 }
 
 function _clearPile() {

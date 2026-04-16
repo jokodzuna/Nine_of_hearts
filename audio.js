@@ -91,16 +91,6 @@ export function playWelcomeSound() {
     noise.connect(filt); filt.connect(g); g.connect(_audioCtx.destination);
     noise.start(now); noise.stop(now + dur);
 
-    const osc = _audioCtx.createOscillator();
-    const og  = _audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now + 0.06);
-    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.24);
-    og.gain.setValueAtTime(0.0001, now + 0.06);
-    og.gain.exponentialRampToValueAtTime(0.035, now + 0.09);
-    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
-    osc.connect(og); og.connect(_audioCtx.destination);
-    osc.start(now + 0.06); osc.stop(now + 0.35);
 }
 
 export function playTickSound() {

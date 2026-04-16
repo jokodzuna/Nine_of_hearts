@@ -706,12 +706,6 @@ function _buildProfilePanel() {
     achBtn.addEventListener('click', () => _openWelcomePanel('achievements'));
     panel.appendChild(achBtn);
 
-    const settingsBtn = document.createElement('button');
-    settingsBtn.className = 'menu-btn';
-    settingsBtn.textContent = '\u2699\uFE0F  Settings';
-    settingsBtn.addEventListener('click', () => _openWelcomePanel('settings'));
-    panel.appendChild(settingsBtn);
-
     const resetBtn = document.createElement('button');
     resetBtn.className = 'menu-btn menu-btn-danger';
     resetBtn.textContent = 'Reset All Data';
@@ -964,25 +958,15 @@ const _VIP_CODE = 'VIP';
 function _buildSettingsPanel() {
     const panel = _makePanelBase('settings', 'Settings');
 
-    const section = document.createElement('div');
-    section.className = 'settings-section';
-
-    const label = document.createElement('div');
-    label.className = 'settings-label';
-    label.textContent = 'Secret Code';
-
-    const inputRow = document.createElement('div');
-    inputRow.className = 'settings-input-row';
-
     const codeInp = document.createElement('input');
     codeInp.type = 'text';
-    codeInp.className = 'nickname-input settings-code-input';
-    codeInp.placeholder = 'Enter code\u2026';
+    codeInp.className = 'nickname-input';
+    codeInp.placeholder = 'Enter secret code\u2026';
     codeInp.maxLength = 30;
 
     const applyBtn = document.createElement('button');
-    applyBtn.className = 'menu-btn settings-apply-btn';
-    applyBtn.textContent = 'Apply';
+    applyBtn.className = 'menu-btn';
+    applyBtn.textContent = 'Apply Code';
     applyBtn.addEventListener('click', async () => {
         const code = codeInp.value.trim().toUpperCase();
         if (code === _VIP_CODE) {
@@ -1002,9 +986,8 @@ function _buildSettingsPanel() {
     });
     codeInp.addEventListener('keydown', e => { if (e.key === 'Enter') applyBtn.click(); });
 
-    inputRow.append(codeInp, applyBtn);
-    section.append(label, inputRow);
-    panel.appendChild(section);
+    panel.appendChild(codeInp);
+    panel.appendChild(applyBtn);
     panel.appendChild(_makePanelCloseBtn('Close'));
     return panel;
 }
@@ -1109,6 +1092,8 @@ export function setup() {
         _updateMenuBtnLabels();
         if (_gameMode === 'multi') _openMPPanel();
     });
+
+    document.getElementById('settingsBtn')?.addEventListener('click', () => _openWelcomePanel('settings'));
 
     const profileWidget = document.getElementById('profileWidget');
     if (profileWidget) profileWidget.addEventListener('click', () => _openWelcomePanel('profile'));

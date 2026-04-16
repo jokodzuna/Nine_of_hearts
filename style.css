@@ -1557,26 +1557,7 @@ body.welcome-active #tapToStart {
 .shop-toast--error { border: 1px solid rgba(255,80,80,0.5); }
 .shop-toast--info  { border: 1px solid rgba(255,255,255,0.18); }
 
-/* Settings Panel */
-.settings-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.settings-label {
-    color: rgba(255,255,255,0.65);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-.settings-input-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-.settings-code-input { flex: 1; font-size: 14px !important; }
-.settings-apply-btn  { flex-shrink: 0; }
+/* Settings Panel — input and button inherit panel's flex-column layout (full width) */
 
 /* ============================================================
    Stats Panel

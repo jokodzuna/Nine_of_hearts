@@ -844,7 +844,6 @@ function _refreshAvatarShopGrid() {
     const grid = document.getElementById('avatarShopGrid');
     if (!grid) return;
     grid.innerHTML = '';
-    const vip = Economy.isPremium();
     for (const path of USER_AVATARS) {
         const owned      = Economy.isAvatarUnlocked(path);
         const isTaken    = _mpTakenAvatars.has(path);
@@ -852,7 +851,10 @@ function _refreshAvatarShopGrid() {
         const isSelected = path === _avatarPath;
 
         const item = document.createElement('div');
-        item.className = 'avatar-shop-item ' + (owned ? 'avatar-shop-item--owned' : 'avatar-shop-item--locked');
+        item.className = 'avatar-shop-item'
+            + (owned      ? ' avatar-shop-item--owned'    : ' avatar-shop-item--locked')
+            + (isSelected ? ' avatar-shop-item--selected' : '')
+            + (isTaken    ? ' avatar-shop-item--taken'    : '');
 
         const imgWrap = document.createElement('div');
         imgWrap.className = 'avatar-shop-img-wrap';
@@ -861,31 +863,18 @@ function _refreshAvatarShopGrid() {
         img.src = path;
         img.className = 'avatar-shop-img' + (!owned ? ' avatar-shop-img--locked' : '');
         imgWrap.appendChild(img);
-
-        if (!owned && !vip) {
-            const lockOv = document.createElement('div');
-            lockOv.className = 'avatar-shop-lock-overlay';
-            lockOv.innerHTML = `<span class="avatar-shop-lock-icon">\u{1F512}</span><span class="avatar-shop-price-tag">${price} \u{1FA99}</span>`;
-            imgWrap.appendChild(lockOv);
-        }
-
-        if (isSelected) {
-            const badge = document.createElement('div');
-            badge.className = 'avatar-shop-selected-badge';
-            badge.textContent = '\u2713';
-            imgWrap.appendChild(badge);
-        }
-
         item.appendChild(imgWrap);
 
-        const btn = document.createElement('button');
-        if (owned) {
-            btn.className = 'avatar-shop-btn'
-                + (isSelected ? ' avatar-shop-btn--active' : '')
-                + (isTaken   ? ' avatar-shop-btn--taken'  : '');
-            btn.textContent = isSelected ? '\u2713 In Use' : (isTaken ? 'Taken' : 'Select');
-            btn.disabled = isSelected || isTaken;
-            btn.addEventListener('click', async () => {
+        if (!owned) {
+            const priceRow = document.createElement('div');
+            priceRow.className = 'avatar-shop-price-row';
+            priceRow.innerHTML = `\u{1F512} ${price} \u{1FA99}`;
+            item.appendChild(priceRow);
+        }
+
+        if (owned && !isTaken) {
+            item.addEventListener('click', async () => {
+                if (isSelected) return;
                 _avatarPath = path;
                 _refreshAvatarShopGrid();
                 const prev = document.querySelector('.profile-current-avatar');
@@ -895,12 +884,10 @@ function _refreshAvatarShopGrid() {
                 catch (e) { console.error('[Profile] save avatar failed:', e); }
                 if (MP.isInRoom()) MP.updateAvatar(path).catch(console.error);
             });
-        } else {
-            btn.className = 'avatar-shop-btn avatar-shop-btn--buy';
-            btn.textContent = `${price} \u{1FA99}`;
-            btn.addEventListener('click', () => _showBuyConfirm(path, price));
+        } else if (!owned) {
+            item.addEventListener('click', () => _showBuyConfirm(path, price));
         }
-        item.appendChild(btn);
+
         grid.appendChild(item);
     }
 }

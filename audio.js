@@ -144,22 +144,47 @@ export function playCardSound() {
     if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
     const now    = _audioCtx.currentTime;
     const sRate  = _audioCtx.sampleRate;
-    const bufLen = Math.floor(sRate * 0.09);
+    const bufLen = Math.floor(sRate * 0.14);
     const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
     const data   = buf.getChannelData(0);
     for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
     const src = _audioCtx.createBufferSource();
     src.buffer = buf;
-    const bp = _audioCtx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 3800;
-    bp.Q.value = 0.7;
+    const lp = _audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1100;
+    lp.Q.value = 0.4;
     const g = _audioCtx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.4, now + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
-    src.connect(bp); bp.connect(g); g.connect(_audioCtx.destination);
-    src.start(now); src.stop(now + 0.09);
+    g.gain.exponentialRampToValueAtTime(0.08, now + 0.010);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    src.connect(lp); lp.connect(g); g.connect(_audioCtx.destination);
+    src.start(now); src.stop(now + 0.14);
+}
+
+export function playDrawSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now    = _audioCtx.currentTime;
+    const dur    = 0.28;
+    const sRate  = _audioCtx.sampleRate;
+    const bufLen = Math.floor(sRate * dur);
+    const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf;
+    const lp = _audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3000, now);
+    lp.frequency.exponentialRampToValueAtTime(280, now + dur);
+    lp.Q.value = 2.5;
+    const g = _audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.20, now + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(g); g.connect(_audioCtx.destination);
+    src.start(now); src.stop(now + dur);
 }
 
 // ---- Hydraulic whoosh (4-of-a-kind long-press) ----------------------------
@@ -208,17 +233,24 @@ export function playLongSelectSound() {
 export function playClickSound() {
     if (!_audioCtx) return;
     if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
-    const now = _audioCtx.currentTime;
-    const osc = _audioCtx.createOscillator();
-    const g   = _audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(820, now);
-    osc.frequency.exponentialRampToValueAtTime(600, now + 0.045);
+    const now    = _audioCtx.currentTime;
+    const sRate  = _audioCtx.sampleRate;
+    const bufLen = Math.floor(sRate * 0.028);
+    const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf;
+    const bp = _audioCtx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800;
+    bp.Q.value = 1.2;
+    const g = _audioCtx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.022, now + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
-    osc.connect(g); g.connect(_audioCtx.destination);
-    osc.start(now); osc.stop(now + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.011, now + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+    src.connect(bp); bp.connect(g); g.connect(_audioCtx.destination);
+    src.start(now); src.stop(now + 0.028);
 }
 
 export function playPurchaseSound() {

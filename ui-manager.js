@@ -505,7 +505,7 @@ function _addCardToPile(cardData) {
     const card = CardHelpers.createFaceUpCard(cardData, false);
     card.classList.add('dealt');
     pile.appendChild(card);
-    Audio.playCardSound();
+    setTimeout(() => Audio.playCardSound(), 60);
 }
 
 function _removeFromPile(count) {
@@ -517,6 +517,7 @@ function _removeFromPile(count) {
     for (let i = 0; i < n; i++) {
         if (pile.lastElementChild !== pile.firstElementChild) pile.lastElementChild.remove();
     }
+    if (n > 0) Audio.playDrawSound();
 }
 
 function _clearPile() {

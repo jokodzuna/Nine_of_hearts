@@ -33,9 +33,10 @@ let _dragPreview      = null;
 let _isDragInProgress = false;
 let _humanCanPlay     = false;
 
-let _lastTap  = { time: 0, card: null };
-let _touchTap = { time: 0, card: null, startX: 0, startY: 0 };
-let _mouseTap = { card: null, startX: 0, startY: 0 };
+let _lastTap       = { time: 0, card: null };
+let _touchTap      = { time: 0, card: null, startX: 0, startY: 0 };
+let _mouseTap      = { card: null, startX: 0, startY: 0 };
+let _longPressTimer = null;
 
 let _connOverlay = null;  // full-screen connection-lost overlay element
 
@@ -504,6 +505,7 @@ function _addCardToPile(cardData) {
     const card = CardHelpers.createFaceUpCard(cardData, false);
     card.classList.add('dealt');
     pile.appendChild(card);
+    Audio.playCardSound();
 }
 
 function _removeFromPile(count) {
@@ -563,8 +565,19 @@ function _selectFourOfAKind(card) {
 
 function _onCardTouchStart(e) {
     e.preventDefault();
-    const t = e.touches[0];
-    _touchTap = { time: Date.now(), card: e.currentTarget, startX: t.clientX, startY: t.clientY };
+    const t    = e.touches[0];
+    const card = e.currentTarget;
+    _touchTap = { time: Date.now(), card, startX: t.clientX, startY: t.clientY };
+    clearTimeout(_longPressTimer);
+    _longPressTimer = setTimeout(() => {
+        _longPressTimer = null;
+        _touchTap.card  = null;
+        _selectFourOfAKind(card);
+        if (_selectedCards.length >= 3 && _selectedCards.every(c => c.dataset.rank === card.dataset.rank)) {
+            Audio.playLongSelectSound();
+            Audio.triggerHaptic('success');
+        }
+    }, 1000);
 }
 
 function _onCardTouchMove(e) {
@@ -573,6 +586,8 @@ function _onCardTouchMove(e) {
     const dx = t.clientX - _touchTap.startX;
     const dy = t.clientY - _touchTap.startY;
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        clearTimeout(_longPressTimer);
+        _longPressTimer = null;
         const card = _touchTap.card;
         _touchTap.card = null;
         _beginDrag(card, t.clientX, t.clientY);
@@ -580,7 +595,10 @@ function _onCardTouchMove(e) {
 }
 
 function _onCardTouchEnd(e) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
     if (_isDragInProgress) return;
+    if (!_touchTap.card) return;
     const card = e.currentTarget;
     const now  = Date.now();
     const isDouble = _lastTap.card === card && (now - _lastTap.time) < 320;

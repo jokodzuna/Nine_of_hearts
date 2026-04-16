@@ -22,7 +22,7 @@ export function setHapticEnabled(v) {
 export function triggerHaptic(type) {
     if (!_hapticEnabled || !navigator.vibrate) return;
     switch (type) {
-        case 'light':   navigator.vibrate(15);           break;
+        case 'light':   navigator.vibrate(10);           break;
         case 'success': navigator.vibrate(30);           break;
         case 'error':   navigator.vibrate([50, 30, 50]); break;
     }
@@ -134,6 +134,42 @@ export function playAchievementSound() {
         osc.start(now + i * 0.11);
         osc.stop(now + i * 0.11 + 0.42);
     });
+}
+
+// ---- MP3 card sound -------------------------------------------------------
+
+let _cardAudioEl = null;
+
+function _getCardAudio() {
+    if (!_cardAudioEl) {
+        _cardAudioEl = new window.Audio('sounds/freesound_community-card-sounds-35956.mp3');
+        _cardAudioEl.volume = 0.55;
+    }
+    return _cardAudioEl;
+}
+
+export function playCardSound() {
+    try {
+        const a = _getCardAudio();
+        a.currentTime = 0;
+        a.play().catch(() => {});
+    } catch {}
+}
+
+export function playLongSelectSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now = _audioCtx.currentTime;
+    const osc = _audioCtx.createOscillator();
+    const g   = _audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.18, now + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc.connect(g); g.connect(_audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.25);
 }
 
 export function playClickSound() {

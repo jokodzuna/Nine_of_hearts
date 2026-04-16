@@ -16,6 +16,7 @@
 
 import {
     createInitialState,
+    createBotfatherState,
     getPossibleMoves,
     applyMove,
     isGameOver,
@@ -165,47 +166,57 @@ MP.on('hostHeartbeatRestored',_handleHostHeartbeatRestored);
 
 function _startGame(cfgOverride = null) {
     const cfg = cfgOverride ?? getPlayerConfig();
-    _lastMPMode     = false;
+    _lastMPMode      = false;
     _lastLocalConfig = { ...cfg };
 
-    // ---- Difficulty: one 'strong' bot leads, others fill ----
+    // Reset any per-game overrides from a previous run
+    PLAYER_IDS[1] = 'player1Cards';
+    PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
+
+    const isBotfather = cfg.difficulty === 'botfather';
+
+    // ---- Engines ----
     const DIFF_PROFILES = {
-        easy:   [null, 'gambler', 'newbie',  'newbie' ],
-        medium: [null, 'shark',  'gambler', 'gambler'],
-        hard:   [null, 'shark',  'shark',   'shark'  ],
+        easy:      [null, 'gambler', 'newbie',  'newbie' ],
+        medium:    [null, 'shark',  'gambler', 'gambler'],
+        hard:      [null, 'shark',  'shark',   'shark'  ],
+        botfather: [null, 'shark',  null,       null    ],
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
-    for (let p = 1; p < 4; p++) _engines[p] = new ISMCTSEngine(profiles[p]);
+    for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
 
-    // ---- Deal with correct card distribution ----
-    NUM_PLAYERS = cfg.numPlayers;
-    _state      = createInitialState(NUM_PLAYERS);
+    // ---- Players ----
+    NUM_PLAYERS = isBotfather ? 2 : cfg.numPlayers;
+    if (isBotfather) {
+        PLAYER_IDS[1]   = 'player2Cards';   // Botfather sits at top
+        PLAYER_NAMES[1] = 'The Botfather';
+    }
+    _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS);
 
-    // ---- Nickname ----
-    PLAYER_NAMES[0] = cfg.playerName || 'Player';
-
-    _gameActive     = true;
+    PLAYER_NAMES[0]     = cfg.playerName || 'Player';
+    _gameActive         = true;
     _gameStartTime      = Date.now();
     _humanMaxCards      = 0;
     _humanFoursThisGame = 0;
 
-    for (const engine of Object.values(_engines)) engine.resetKnowledge();
+    for (const engine of Object.values(_engines)) engine?.resetKnowledge();
 
     const ds = decodeState(_state);
 
-    Update('SETUP_PLAYERS', {
-        numPlayers: cfg.numPlayers,
-        playerName: PLAYER_NAMES[0],
-        avatarPath: cfg.avatarPath,
-    });
-    for (let p = 1; p < 4; p++) {
-        Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+    if (isBotfather) {
+        Update('SETUP_PLAYERS',      { numPlayers: 3, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
+        Update('SETUP_PLAYER_AREAS', { showRight: false, showTop: true, showLeft: false });
+        Update('SET_PLAYER_AVATAR',  { playerId: 'player2Cards', avatarPath: 'Images/bot-avatars/botfather.webp' });
+        Update('SET_PLAYER_NAME',    { playerId: 'player2Cards', name: 'The Botfather' });
+    } else {
+        Update('SETUP_PLAYERS', { numPlayers: cfg.numPlayers, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
+        for (let p = 1; p < 4; p++) {
+            Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+        }
     }
 
     const hands = {};
-    for (let p = 0; p < NUM_PLAYERS; p++) {
-        hands[PLAYER_IDS[p]] = ds.hands[p];
-    }
+    for (let p = 0; p < NUM_PLAYERS; p++) hands[PLAYER_IDS[p]] = ds.hands[p];
 
     Update('CLEAR_PILE');
     Update('ADD_TO_PILE', { card: ds.pile[0] });
@@ -296,6 +307,7 @@ function _applyAndAdvance(move) {
 
     // Notify all AI engines of this move (before state changes so pile is intact)
     for (const engine of Object.values(_engines)) {
+        if (!engine) continue;
         engine.observeMove(_state, move);
         engine.advanceTree(move);
     }

@@ -197,6 +197,62 @@ export function playDrawSound() {
     src.start(now); src.stop(now + dur);
 }
 
+// ---- Botfather door open: hydraulic hiss + metallic clunk ------------------
+
+export function playDoorOpenSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now   = _audioCtx.currentTime;
+    const sRate = _audioCtx.sampleRate;
+    // Hydraulic hiss — noise falling from 4 kHz to 180 Hz
+    const dur    = 1.2;
+    const bufLen = Math.floor(sRate * dur);
+    const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf;
+    const lp = _audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(4000, now);
+    lp.frequency.exponentialRampToValueAtTime(180, now + 0.9);
+    lp.Q.value = 0.5;
+    const hg = _audioCtx.createGain();
+    hg.gain.setValueAtTime(0.0001, now);
+    hg.gain.exponentialRampToValueAtTime(0.35, now + 0.03);
+    hg.gain.exponentialRampToValueAtTime(0.18, now + 0.5);
+    hg.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(lp); lp.connect(hg); hg.connect(_audioCtx.destination);
+    src.start(now); src.stop(now + dur);
+    // Metal clunk at 120 ms — sawtooth pitch drop 90→28 Hz
+    const ct = now + 0.12;
+    const osc = _audioCtx.createOscillator();
+    const og  = _audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(90, ct);
+    osc.frequency.exponentialRampToValueAtTime(28, ct + 0.18);
+    og.gain.setValueAtTime(0.0001, ct);
+    og.gain.exponentialRampToValueAtTime(0.55, ct + 0.008);
+    og.gain.exponentialRampToValueAtTime(0.0001, ct + 0.22);
+    osc.connect(og); og.connect(_audioCtx.destination);
+    osc.start(ct); osc.stop(ct + 0.28);
+    // Low-pass noise burst to add body to the clunk
+    const cLen  = Math.floor(sRate * 0.06);
+    const cbuf  = _audioCtx.createBuffer(1, cLen, sRate);
+    const cdata = cbuf.getChannelData(0);
+    for (let i = 0; i < cLen; i++) cdata[i] = Math.random() * 2 - 1;
+    const csrc = _audioCtx.createBufferSource();
+    csrc.buffer = cbuf;
+    const clp = _audioCtx.createBiquadFilter();
+    clp.type = 'lowpass'; clp.frequency.value = 500;
+    const cg = _audioCtx.createGain();
+    cg.gain.setValueAtTime(0.0001, ct);
+    cg.gain.exponentialRampToValueAtTime(0.45, ct + 0.005);
+    cg.gain.exponentialRampToValueAtTime(0.0001, ct + 0.055);
+    csrc.connect(clp); clp.connect(cg); cg.connect(_audioCtx.destination);
+    csrc.start(ct); csrc.stop(ct + 0.06);
+}
+
 // ---- Hydraulic whoosh (4-of-a-kind long-press) ----------------------------
 
 export function playLongSelectSound() {

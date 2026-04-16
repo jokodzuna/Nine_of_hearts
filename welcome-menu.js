@@ -636,7 +636,7 @@ function _updateProfileWidget() {
 }
 
 function _updateMenuBtnLabels() {
-    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather' };
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1072,7 +1072,7 @@ function _buildWelcomeOverlay() {
 
     // ---- Difficulty ----
     const diffPanel = _buildOptionPanel('difficulty', 'Difficulty',
-        [['easy','Easy'],['medium','Medium'],['hard','Hard']],
+        [['easy','Easy'],['medium','Medium'],['hard','Hard'],['botfather','The Botfather']],
         () => _difficulty,
         v => { _difficulty = v; _updateMenuBtnLabels(); }
     );
@@ -1090,6 +1090,61 @@ function _buildWelcomeOverlay() {
     MP.on('lobby',     _onMPLobby);
     MP.on('gameStart', _onMPGameStart);
     MP.on('hostLeft',  _onMPHostLeft);
+}
+
+// ============================================================
+// Botfather intro sequence
+// ============================================================
+
+function _showBotfatherIntro(onComplete) {
+    const overlay   = document.getElementById('botfatherOverlay');
+    const video     = document.getElementById('botfatherVideo');
+    const door      = document.getElementById('botfatherDoor');
+    const doorLeft  = document.getElementById('doorLeft');
+    const doorRight = document.getElementById('doorRight');
+    if (!overlay || !video || !door) { onComplete(); return; }
+
+    // Compute SVG clip-paths from live screen size
+    const W = window.innerWidth, H = window.innerHeight;
+    const cx = W / 2, cy = H / 2;
+    const r  = Math.min(W, H) * 0.10;  // eye-circle radius
+    // left door: left half + circular bulge toward the right
+    const lp = `M 0,0 L ${cx},0 L ${cx},${cy - r} ` +
+               `A ${r},${r} 0 0,1 ${cx},${cy + r} ` +
+               `L ${cx},${H} L 0,${H} Z`;
+    // right door: right half + matching hollow
+    const rp = `M ${cx},0 L ${W},0 L ${W},${H} ` +
+               `L ${cx},${H} L ${cx},${cy + r} ` +
+               `A ${r},${r} 0 0,0 ${cx},${cy - r} ` +
+               `L ${cx},0 Z`;
+    if (doorLeft)  doorLeft.style.clipPath  = `path('${lp}')`;
+    if (doorRight) doorRight.style.clipPath = `path('${rp}')`;
+
+    overlay.style.display = '';
+    video.src = 'video/botfather-intro.mp4';
+    video.play().catch(() => {});
+
+    const _crossfade = () => {
+        video.classList.add('bf-fade-out');
+        door.classList.add('bf-visible');
+    };
+    const timer = setTimeout(_crossfade, 9800);
+    video.addEventListener('ended', () => { clearTimeout(timer); _crossfade(); }, { once: true });
+    video.addEventListener('error',  () => { clearTimeout(timer); _crossfade(); }, { once: true });
+
+    function _onDoorTap() {
+        door.removeEventListener('click', _onDoorTap);
+        Audio.playDoorOpenSound();
+        door.classList.add('bf-doors-open');
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            video.src = '';
+            door.classList.remove('bf-visible', 'bf-doors-open');
+            video.classList.remove('bf-fade-out');
+            onComplete();
+        }, 1500);
+    }
+    door.addEventListener('click', _onDoorTap);
 }
 
 /**
@@ -1163,8 +1218,13 @@ export function setup() {
                 return;
             }
 
-            const ws = document.getElementById('welcomeScreen');
-            if (!ws) { if (_cbGameStart) _cbGameStart(); return; }
+            const ws           = document.getElementById('welcomeScreen');
+            const isBotfather  = _difficulty === 'botfather';
+            if (!ws) {
+                if (isBotfather) _showBotfatherIntro(() => { if (_cbGameStart) _cbGameStart(); });
+                else if (_cbGameStart) _cbGameStart();
+                return;
+            }
 
             ws.style.zIndex = '21000';
             ws.classList.remove('doors-open');
@@ -1172,8 +1232,13 @@ export function setup() {
                 ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
                 ws.classList.add('doors-open');
                 setTimeout(() => {
-                    if (_cbGameStart) _cbGameStart();
-                    setTimeout(() => { ws.style.display = 'none'; }, 1300);
+                    if (isBotfather) {
+                        ws.style.display = 'none';
+                        _showBotfatherIntro(() => { if (_cbGameStart) _cbGameStart(); });
+                    } else {
+                        if (_cbGameStart) _cbGameStart();
+                        setTimeout(() => { ws.style.display = 'none'; }, 1300);
+                    }
                 }, 500);
             }, 1300);
         });

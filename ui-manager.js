@@ -264,10 +264,12 @@ function _setupPlayers(numPlayers, playerName, avatarPath) {
 
     _setAvatarImg('#yourInfo .avatar', avatarPath);
 
-    const topArea  = document.querySelector('.player-area.player-top');
-    const leftArea = document.querySelector('.player-area.player-left');
-    if (topArea)  topArea.style.display  = numPlayers >= 3 ? '' : 'none';
-    if (leftArea) leftArea.style.display = numPlayers >= 4 ? '' : 'none';
+    const topArea   = document.querySelector('.player-area.player-top');
+    const leftArea  = document.querySelector('.player-area.player-left');
+    const rightArea = document.querySelector('.player-area.player-right');
+    if (topArea)   topArea.style.display   = numPlayers >= 3 ? '' : 'none';
+    if (leftArea)  leftArea.style.display  = numPlayers >= 4 ? '' : 'none';
+    if (rightArea) rightArea.style.display = '';
 }
 
 // ============================================================

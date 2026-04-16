@@ -1785,3 +1785,59 @@ body.welcome-active #tapToStart {
     margin-top: 10px;
 }
 .menu-btn-danger:hover { background: rgba(220,40,40,0.9) !important; }
+
+/* ---- Botfather intro overlay -------------------------------------------- */
+
+.botfather-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    background: #000;
+    overflow: hidden;
+}
+
+#botfatherVideo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.8s ease;
+}
+
+#botfatherVideo.bf-fade-out {
+    opacity: 0;
+}
+
+/* Door container — hidden (opacity 0, no pointer events) until crossfade */
+.botfather-door {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+}
+
+.botfather-door.bf-visible {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Both panels fill the overlay; background is positioned identically so
+   the image is seamless across the clip boundary */
+.door-panel {
+    position: absolute;
+    inset: 0;
+    background: url('Images/botfather-door.jpg') center / cover no-repeat;
+    transition: transform 1.3s cubic-bezier(0.45, 0, 0.15, 1);
+    will-change: transform;
+}
+
+/* Left door (carries the eye bulge) sits above the right */
+.door-left  { z-index: 2; }
+.door-right { z-index: 1; }
+
+/* Slide apart when bf-doors-open is added to the container */
+.botfather-door.bf-doors-open .door-left  { transform: translateX(-110%); }
+.botfather-door.bf-doors-open .door-right { transform: translateX(110%); }

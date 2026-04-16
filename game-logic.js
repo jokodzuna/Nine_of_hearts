@@ -193,6 +193,26 @@ export function createInitialState(numPlayers = 4) {
     return state;
 }
 
+/**
+ * Fixed deal for The Botfather (2-player only).
+ * Player 0 (human) gets all red cards (♥ + ♦) minus 9♥.
+ * Player 1 (Botfather) gets all black cards (♠ + ♣).
+ * 9♥ goes to the pile base as usual; Botfather goes first.
+ */
+export function createBotfatherState() {
+    const state      = createState(2);
+    // Suit 1=♥, 2=♦ → bits (n*4+1) and (n*4+2), n=0..5  → 0x666666
+    // Suit 0=♠, 3=♣ → bits (n*4+0) and (n*4+3), n=0..5  → 0x999999
+    state.hands[0] = 0x666666 & ~NINE_HEARTS_BIT;  // red cards, 9♥ removed
+    state.hands[1] = 0x999999;                       // all black cards
+    state.pile[0]    = 1;   // 9♥ bit index
+    state.pileSize   = 1;
+    state.topRankIdx = 0;
+    state.currentPlayer = 1;   // player 0 held 9♥ → Botfather goes first
+    state.eliminated    = 0;
+    return state;
+}
+
 // ============================================================
 // Core Pure Function 1 — getPossibleMoves
 // ============================================================

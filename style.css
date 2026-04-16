@@ -1525,6 +1525,14 @@ body.welcome-active #tapToStart {
     display: flex;
     gap: 10px;
 }
+.buy-confirm-btns .menu-btn,
+.buy-confirm-btns .menu-btn-start {
+    width: 110px;
+    min-width: 0;
+    margin-top: 0;
+    padding: 10px 8px;
+    font-size: 13px;
+}
 
 /* Toast */
 .shop-toast {

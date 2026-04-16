@@ -156,7 +156,7 @@ export function playDrawSound() {
     if (!_audioCtx) return;
     if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
     const now    = _audioCtx.currentTime;
-    const dur    = 0.28;
+    const dur    = 0.36;
     const sRate  = _audioCtx.sampleRate;
     const bufLen = Math.floor(sRate * dur);
     const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
@@ -164,16 +164,17 @@ export function playDrawSound() {
     for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
     const src = _audioCtx.createBufferSource();
     src.buffer = buf;
-    const lp = _audioCtx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(3000, now);
-    lp.frequency.exponentialRampToValueAtTime(280, now + dur);
-    lp.Q.value = 2.5;
+    const bp = _audioCtx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(350, now);
+    bp.frequency.exponentialRampToValueAtTime(2200, now + 0.18);
+    bp.frequency.exponentialRampToValueAtTime(600, now + dur);
+    bp.Q.value = 0.65;
     const g = _audioCtx.createGain();
     g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.20, now + 0.018);
+    g.gain.exponentialRampToValueAtTime(0.09, now + 0.07);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(lp); lp.connect(g); g.connect(_audioCtx.destination);
+    src.connect(bp); bp.connect(g); g.connect(_audioCtx.destination);
     src.start(now); src.stop(now + dur);
 }
 

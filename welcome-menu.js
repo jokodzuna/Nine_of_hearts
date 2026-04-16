@@ -958,6 +958,23 @@ const _VIP_CODE = 'VIP';
 function _buildSettingsPanel() {
     const panel = _makePanelBase('settings', 'Settings');
 
+    const vibRow = document.createElement('div');
+    vibRow.className = 'settings-toggle-row';
+    const vibLabel = document.createElement('span');
+    vibLabel.textContent = '\u{1F4F3} Vibration';
+    const vibToggle = document.createElement('button');
+    vibToggle.className = 'settings-toggle-btn' + (Audio.isHapticEnabled() ? ' settings-toggle-btn--on' : '');
+    vibToggle.textContent = Audio.isHapticEnabled() ? 'ON' : 'OFF';
+    vibToggle.addEventListener('click', () => {
+        const newVal = !Audio.isHapticEnabled();
+        Audio.setHapticEnabled(newVal);
+        vibToggle.textContent = newVal ? 'ON' : 'OFF';
+        vibToggle.classList.toggle('settings-toggle-btn--on', newVal);
+        if (newVal) Audio.triggerHaptic('light');
+    });
+    vibRow.append(vibLabel, vibToggle);
+    panel.appendChild(vibRow);
+
     const codeInp = document.createElement('input');
     codeInp.type = 'text';
     codeInp.className = 'nickname-input';
@@ -1094,6 +1111,17 @@ export function setup() {
     });
 
     document.getElementById('settingsBtn')?.addEventListener('click', () => _openWelcomePanel('settings'));
+
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('.menu-btn, .nav-btn');
+        if (btn && !btn.disabled) {
+            Audio.triggerHaptic('light');
+            Audio.playClickSound();
+        } else if (e.target.closest('.avatar-shop-item')) {
+            Audio.triggerHaptic('light');
+            Audio.playClickSound();
+        }
+    });
 
     const profileWidget = document.getElementById('profileWidget');
     if (profileWidget) profileWidget.addEventListener('click', () => _openWelcomePanel('profile'));

@@ -47,6 +47,7 @@ const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 
 import { AI_AVATARS, DEFAULT_AVATAR } from './constants.js';
 import * as Economy from './economy.js';
+import * as Audio  from './audio.js';
 
 // ============================================================
 // Config
@@ -265,13 +266,15 @@ function _humanPlayCards(cards) {
 
     const move = _matchPlay(cards);
     if (move === null) {
+        Audio.triggerHaptic('error');
         Update('SHOW_MESSAGE', {
-            text: "\u274C  Can't play those cards — select 1, 4-of-a-kind, or triple 9s",
+            text: "\u274C  Can't play those cards \u2014 select 1, 4-of-a-kind, or triple 9s",
         });
         Update('DESELECT_ALL');
         return;
     }
 
+    Audio.triggerHaptic('light');
     if (_mpMode) _applyMPMove(move);
     else         _applyAndAdvance(move);
 }
@@ -280,8 +283,12 @@ function _humanDraw() {
     const hi = _mpMode ? _myMPIdx : HUMAN;
     if (!_state || !_gameActive || _state.currentPlayer !== hi) return;
 
-    const drawMove = getPossibleMoves(_state).find(m => !!(m & DRAW_FLAG));
+    const moves        = getPossibleMoves(_state);
+    const drawMove     = moves.find(m => !!(m & DRAW_FLAG));
     if (drawMove === undefined) return;
+
+    const hasPlayMoves = moves.some(m => !(m & DRAW_FLAG));
+    Audio.triggerHaptic(hasPlayMoves ? 'error' : 'light');
 
     if (_mpMode) _applyMPMove(drawMove);
     else         _applyAndAdvance(drawMove);

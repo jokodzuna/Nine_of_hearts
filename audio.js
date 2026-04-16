@@ -7,6 +7,27 @@ let _audioCtx = null;
 let _welcomeSoundPending = false;
 let _lastDealSoundAt = 0;
 
+// ---- Haptic state -----------------------------------------------------------
+
+const _LS_HAPTIC_KEY = 'nhHapticEnabled';
+let _hapticEnabled = localStorage.getItem(_LS_HAPTIC_KEY) !== 'false';
+
+export function isHapticEnabled() { return _hapticEnabled; }
+
+export function setHapticEnabled(v) {
+    _hapticEnabled = !!v;
+    try { localStorage.setItem(_LS_HAPTIC_KEY, String(_hapticEnabled)); } catch {}
+}
+
+export function triggerHaptic(type) {
+    if (!_hapticEnabled || !navigator.vibrate) return;
+    switch (type) {
+        case 'light':   navigator.vibrate(15);           break;
+        case 'success': navigator.vibrate(30);           break;
+        case 'error':   navigator.vibrate([50, 30, 50]); break;
+    }
+}
+
 // ---- Init -------------------------------------------------------------------
 
 export function initAudio() {
@@ -113,6 +134,22 @@ export function playAchievementSound() {
         osc.start(now + i * 0.11);
         osc.stop(now + i * 0.11 + 0.42);
     });
+}
+
+export function playClickSound() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const now = _audioCtx.currentTime;
+    const osc = _audioCtx.createOscillator();
+    const g   = _audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(820, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.045);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.022, now + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
+    osc.connect(g); g.connect(_audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.06);
 }
 
 export function playPurchaseSound() {

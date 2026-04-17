@@ -1802,6 +1802,7 @@ body.welcome-active #tapToStart {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 2;  /* above door (no z-idx), below veil (z-idx 3) */
     transition: opacity 0.3s ease;
 }
 
@@ -1810,15 +1811,15 @@ body.welcome-active #tapToStart {
     pointer-events: none;
 }
 
-/* Dark veil — sits above video, below door panels */
+/* Dark veil — sits above video (z-idx 2), fades on door open */
 .bf-dark-veil {
     position: absolute;
     inset: 0;
     background: #000;
-    opacity: 0.7;
+    opacity: 0.8;
     pointer-events: none;
-    transition: opacity 1s ease;
-    z-index: 1;
+    transition: opacity 3s ease;
+    z-index: 3;
 }
 .bf-dark-veil.veil-clear {
     opacity: 0;
@@ -1840,6 +1841,13 @@ body.welcome-active #tapToStart {
     cursor: pointer;
 }
 
+/* Instantly visible (no fade) behind the video during glitch transition */
+.botfather-door.bf-preshow {
+    opacity: 1;
+    pointer-events: none;
+    transition: none;
+}
+
 /* Both panels fill the overlay; background is positioned identically so
    the image is seamless across the clip boundary */
 .door-panel {
@@ -1857,3 +1865,35 @@ body.welcome-active #tapToStart {
 /* Slide apart when bf-doors-open is added to the container */
 .botfather-door.bf-doors-open .door-left  { transform: translateX(-110%); }
 .botfather-door.bf-doors-open .door-right { transform: translateX(110%); }
+
+/* Cyberpunk glitch: applied to the video at the video→door crossfade */
+@keyframes glitch-flicker {
+    0%   { opacity: 1;   transform: scale(1);    filter: hue-rotate(0deg); }
+    10%  { opacity: 0;   transform: scale(1.02); filter: hue-rotate(80deg); }
+    22%  { opacity: 1;   transform: scale(1);    filter: hue-rotate(-30deg); }
+    35%  { opacity: 0;   transform: scale(1.02); filter: hue-rotate(140deg); }
+    48%  { opacity: 1;   transform: scale(1.01); filter: hue-rotate(-60deg); }
+    60%  { opacity: 0;   transform: scale(1);    filter: hue-rotate(200deg); }
+    72%  { opacity: 1;   transform: scale(1.02); filter: hue-rotate(-90deg); }
+    85%  { opacity: 0;   transform: scale(1);    filter: hue-rotate(0deg); }
+    100% { opacity: 0;   transform: scale(1);    filter: hue-rotate(0deg); }
+}
+#botfatherVideo.bf-glitch {
+    animation: glitch-flicker 0.4s linear forwards;
+    pointer-events: none;
+}
+
+/* Reveal veil: covers game arena after door opens, fades to 0 over 2s */
+.bf-reveal-veil {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 19000;
+    transition: opacity 2s ease;
+}
+.bf-reveal-veil.clearing {
+    opacity: 0;
+    pointer-events: none;
+}

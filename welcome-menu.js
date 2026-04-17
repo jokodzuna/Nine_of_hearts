@@ -1129,12 +1129,17 @@ function _setupBotfatherCrossfade(onReady) {
         if (crossed) return;
         crossed = true;
         clearTimeout(timer);
-        video.classList.add('bf-fade-out');
-        door.classList.add('bf-visible');
-        // Enable tap once 300 ms crossfade is done; game starts after door fully open
+        // Show door instantly behind the video (no opacity transition)
+        door.classList.add('bf-preshow');
+        // Glitch the video — flickers and ends at opacity 0 after 400 ms
+        video.classList.add('bf-glitch');
         setTimeout(() => {
+            video.classList.remove('bf-glitch');
+            video.classList.add('bf-fade-out');   // lock video opacity at 0
+            door.classList.remove('bf-preshow');
+            door.classList.add('bf-visible');     // now properly tappable
             door.addEventListener('click', _onDoorTap);
-        }, 350);
+        }, 430);
     };
 
     // Calculate remaining play time from current video position
@@ -1150,6 +1155,18 @@ function _setupBotfatherCrossfade(onReady) {
         Audio.playDoorOpenSound();
         door.classList.add('bf-doors-open');
         setTimeout(() => {
+            // Reveal veil fades 0.6 → 0 over 2s as the game initialises
+            const revealVeil = document.getElementById('bfRevealVeil');
+            if (revealVeil) {
+                revealVeil.style.display = '';
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    revealVeil.classList.add('clearing');
+                    setTimeout(() => {
+                        revealVeil.style.display = 'none';
+                        revealVeil.classList.remove('clearing');
+                    }, 2100);
+                }));
+            }
             onReady();  // game starts only after door is fully open
             overlay.style.display = 'none';
             video.pause();

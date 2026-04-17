@@ -1122,7 +1122,7 @@ function _showBotfatherIntro(onComplete) {
 
     overlay.style.display = '';
     video.src = 'video/botfather-intro.mp4';
-    video.play().catch(() => {});
+    video.play().catch(() => { clearTimeout(timer); _crossfade(); });
 
     const _crossfade = () => {
         video.classList.add('bf-fade-out');

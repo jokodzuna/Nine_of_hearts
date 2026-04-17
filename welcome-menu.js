@@ -1131,9 +1131,8 @@ function _setupBotfatherCrossfade(onReady) {
         clearTimeout(timer);
         video.classList.add('bf-fade-out');
         door.classList.add('bf-visible');
-        // 300 ms crossfade completes; then start game and enable tap
+        // Enable tap once 300 ms crossfade is done; game starts after door fully open
         setTimeout(() => {
-            onReady();
             door.addEventListener('click', _onDoorTap);
         }, 350);
     };
@@ -1151,12 +1150,15 @@ function _setupBotfatherCrossfade(onReady) {
         Audio.playDoorOpenSound();
         door.classList.add('bf-doors-open');
         setTimeout(() => {
+            onReady();  // game starts only after door is fully open
             overlay.style.display = 'none';
             video.pause();
             video.currentTime = 0;
             video.classList.remove('bf-fade-out');
             door.classList.remove('bf-visible', 'bf-doors-open');
-        }, 1500);
+            const veil = document.getElementById('bfDarkVeil');
+            if (veil) veil.classList.remove('veil-clear');
+        }, 2600);  // 2.5s door animation + 100ms buffer
     }
 }
 
@@ -1259,6 +1261,9 @@ export function setup() {
                 setTimeout(() => {
                     ws.style.display = 'none';   // welcome screen fully gone
                     if (isBotfather) {
+                        // Fade the dark veil to reveal the video already in progress
+                        const veil = document.getElementById('bfDarkVeil');
+                        if (veil) veil.classList.add('veil-clear');
                         _setupBotfatherCrossfade(() => { if (_cbGameStart) _cbGameStart(); });
                     } else {
                         if (_cbGameStart) _cbGameStart();

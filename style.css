@@ -1807,6 +1807,22 @@ body.welcome-active #tapToStart {
 
 #botfatherVideo.bf-fade-out {
     opacity: 0;
+    pointer-events: none;
+}
+
+/* Dark veil — sits above video, below door panels */
+.bf-dark-veil {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: 0.7;
+    pointer-events: none;
+    transition: opacity 1s ease;
+    z-index: 1;
+}
+.bf-dark-veil.veil-clear {
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* Door container — hidden (opacity 0, no pointer events) until crossfade */
@@ -1830,7 +1846,7 @@ body.welcome-active #tapToStart {
     position: absolute;
     inset: 0;
     background: url('Images/botfather-door.jpg') center / cover no-repeat;
-    transition: transform 1.3s cubic-bezier(0.45, 0, 0.15, 1);
+    transition: transform 2.5s cubic-bezier(0.8, 0, 0.1, 1);
     will-change: transform;
 }
 

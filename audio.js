@@ -197,60 +197,116 @@ export function playDrawSound() {
     src.start(now); src.stop(now + dur);
 }
 
-// ---- Botfather door open: hydraulic hiss + metallic clunk ------------------
+// ---- Botfather door open: clunk → hiss → whine → thud (2.5 s, with reverb) -
 
 export function playDoorOpenSound() {
     if (!_audioCtx) return;
     if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
-    const now   = _audioCtx.currentTime;
-    const sRate = _audioCtx.sampleRate;
-    // Hydraulic hiss — noise falling from 4 kHz to 180 Hz
-    const dur    = 1.2;
-    const bufLen = Math.floor(sRate * dur);
-    const buf    = _audioCtx.createBuffer(1, bufLen, sRate);
-    const data   = buf.getChannelData(0);
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-    const src = _audioCtx.createBufferSource();
-    src.buffer = buf;
-    const lp = _audioCtx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(4000, now);
-    lp.frequency.exponentialRampToValueAtTime(180, now + 0.9);
-    lp.Q.value = 0.5;
-    const hg = _audioCtx.createGain();
-    hg.gain.setValueAtTime(0.0001, now);
-    hg.gain.exponentialRampToValueAtTime(0.35, now + 0.03);
-    hg.gain.exponentialRampToValueAtTime(0.18, now + 0.5);
-    hg.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(lp); lp.connect(hg); hg.connect(_audioCtx.destination);
-    src.start(now); src.stop(now + dur);
-    // Metal clunk at 120 ms — sawtooth pitch drop 90→28 Hz
-    const ct = now + 0.12;
-    const osc = _audioCtx.createOscillator();
-    const og  = _audioCtx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(90, ct);
-    osc.frequency.exponentialRampToValueAtTime(28, ct + 0.18);
-    og.gain.setValueAtTime(0.0001, ct);
-    og.gain.exponentialRampToValueAtTime(0.55, ct + 0.008);
-    og.gain.exponentialRampToValueAtTime(0.0001, ct + 0.22);
-    osc.connect(og); og.connect(_audioCtx.destination);
-    osc.start(ct); osc.stop(ct + 0.28);
-    // Low-pass noise burst to add body to the clunk
-    const cLen  = Math.floor(sRate * 0.06);
-    const cbuf  = _audioCtx.createBuffer(1, cLen, sRate);
-    const cdata = cbuf.getChannelData(0);
-    for (let i = 0; i < cLen; i++) cdata[i] = Math.random() * 2 - 1;
-    const csrc = _audioCtx.createBufferSource();
-    csrc.buffer = cbuf;
-    const clp = _audioCtx.createBiquadFilter();
-    clp.type = 'lowpass'; clp.frequency.value = 500;
-    const cg = _audioCtx.createGain();
-    cg.gain.setValueAtTime(0.0001, ct);
-    cg.gain.exponentialRampToValueAtTime(0.45, ct + 0.005);
-    cg.gain.exponentialRampToValueAtTime(0.0001, ct + 0.055);
-    csrc.connect(clp); clp.connect(cg); cg.connect(_audioCtx.destination);
-    csrc.start(ct); csrc.stop(ct + 0.06);
+    const ctx = _audioCtx;
+    const now = ctx.currentTime;
+    const sr  = ctx.sampleRate;
+    const out = ctx.destination;
+
+    // ---------- Light convolution reverb ----------
+    const revLen = Math.floor(sr * 1.4);
+    const revBuf = ctx.createBuffer(2, revLen, sr);
+    for (let c = 0; c < 2; c++) {
+        const ch = revBuf.getChannelData(c);
+        for (let i = 0; i < revLen; i++)
+            ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / revLen, 2.5);
+    }
+    const conv = ctx.createConvolver(); conv.buffer = revBuf;
+    const revSend = ctx.createGain(); revSend.gain.value = 0.22;
+    conv.connect(revSend); revSend.connect(out);
+
+    // Helper: connect a gain node to both dry out and reverb input
+    function send(gainNode) { gainNode.connect(out); gainNode.connect(conv); }
+
+    // ---- 1. Metallic unlock clunk at T=0 ----
+    // Oscillator: sawtooth pitch drop (bolt hitting frame)
+    const clkOsc = ctx.createOscillator();
+    clkOsc.type = 'sawtooth';
+    clkOsc.frequency.setValueAtTime(115, now);
+    clkOsc.frequency.exponentialRampToValueAtTime(30, now + 0.14);
+    const clkG = ctx.createGain();
+    clkG.gain.setValueAtTime(0.0001, now);
+    clkG.gain.exponentialRampToValueAtTime(0.65, now + 0.006);
+    clkG.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+    clkOsc.connect(clkG); send(clkG);
+    clkOsc.start(now); clkOsc.stop(now + 0.22);
+
+    // Noise burst for clunk body
+    const cnLen = Math.floor(sr * 0.08);
+    const cnBuf = ctx.createBuffer(1, cnLen, sr);
+    const cnDat = cnBuf.getChannelData(0);
+    for (let i = 0; i < cnLen; i++) cnDat[i] = Math.random() * 2 - 1;
+    const cnSrc = ctx.createBufferSource(); cnSrc.buffer = cnBuf;
+    const cnF = ctx.createBiquadFilter(); cnF.type = 'bandpass'; cnF.frequency.value = 700; cnF.Q.value = 0.7;
+    const cnG = ctx.createGain();
+    cnG.gain.setValueAtTime(0.0001, now);
+    cnG.gain.exponentialRampToValueAtTime(0.55, now + 0.004);
+    cnG.gain.exponentialRampToValueAtTime(0.0001, now + 0.075);
+    cnSrc.connect(cnF); cnF.connect(cnG); send(cnG);
+    cnSrc.start(now); cnSrc.stop(now + 0.08);
+
+    // ---- 2. Hydraulic hiss T=0.08 → T=2.5 ----
+    const hLen = Math.floor(sr * 2.5);
+    const hBuf = ctx.createBuffer(1, hLen, sr);
+    const hDat = hBuf.getChannelData(0);
+    for (let i = 0; i < hLen; i++) hDat[i] = Math.random() * 2 - 1;
+    const hSrc = ctx.createBufferSource(); hSrc.buffer = hBuf;
+    const hLP = ctx.createBiquadFilter(); hLP.type = 'lowpass'; hLP.Q.value = 0.4;
+    hLP.frequency.setValueAtTime(4000, now + 0.08);
+    hLP.frequency.exponentialRampToValueAtTime(1200, now + 1.0);
+    hLP.frequency.exponentialRampToValueAtTime(300,  now + 2.3);
+    const hG = ctx.createGain();
+    hG.gain.setValueAtTime(0.0001, now + 0.08);
+    hG.gain.exponentialRampToValueAtTime(0.28, now + 0.18);
+    hG.gain.setValueAtTime(0.28, now + 1.9);
+    hG.gain.exponentialRampToValueAtTime(0.0001, now + 2.45);
+    hSrc.connect(hLP); hLP.connect(hG); send(hG);
+    hSrc.start(now + 0.08); hSrc.stop(now + 2.5);
+
+    // ---- 3. Hydraulic whine T=0.25 → T=2.2 (rising sawtooth) ----
+    const whOsc = ctx.createOscillator(); whOsc.type = 'sawtooth';
+    whOsc.frequency.setValueAtTime(52, now + 0.25);
+    whOsc.frequency.exponentialRampToValueAtTime(260, now + 1.9);
+    whOsc.frequency.exponentialRampToValueAtTime(480, now + 2.2);
+    const whBP = ctx.createBiquadFilter(); whBP.type = 'bandpass'; whBP.Q.value = 2.5;
+    whBP.frequency.setValueAtTime(180, now + 0.25);
+    whBP.frequency.exponentialRampToValueAtTime(700, now + 2.2);
+    const whG = ctx.createGain();
+    whG.gain.setValueAtTime(0.0001, now + 0.25);
+    whG.gain.exponentialRampToValueAtTime(0.10, now + 0.45);
+    whG.gain.setValueAtTime(0.10, now + 1.9);
+    whG.gain.exponentialRampToValueAtTime(0.0001, now + 2.25);
+    whOsc.connect(whBP); whBP.connect(whG); send(whG);
+    whOsc.start(now + 0.25); whOsc.stop(now + 2.3);
+
+    // ---- 4. Dull thud at T=2.35 (door fully seated in frame) ----
+    const tdOsc = ctx.createOscillator(); tdOsc.type = 'sine';
+    tdOsc.frequency.setValueAtTime(58, now + 2.35);
+    tdOsc.frequency.exponentialRampToValueAtTime(24, now + 2.65);
+    const tdG = ctx.createGain();
+    tdG.gain.setValueAtTime(0.0001, now + 2.35);
+    tdG.gain.exponentialRampToValueAtTime(0.6, now + 2.356);
+    tdG.gain.exponentialRampToValueAtTime(0.0001, now + 2.72);
+    tdOsc.connect(tdG); send(tdG);
+    tdOsc.start(now + 2.35); tdOsc.stop(now + 2.75);
+
+    // Thud noise body
+    const tnLen = Math.floor(sr * 0.14);
+    const tnBuf = ctx.createBuffer(1, tnLen, sr);
+    const tnDat = tnBuf.getChannelData(0);
+    for (let i = 0; i < tnLen; i++) tnDat[i] = Math.random() * 2 - 1;
+    const tnSrc = ctx.createBufferSource(); tnSrc.buffer = tnBuf;
+    const tnF = ctx.createBiquadFilter(); tnF.type = 'lowpass'; tnF.frequency.value = 220;
+    const tnG = ctx.createGain();
+    tnG.gain.setValueAtTime(0.0001, now + 2.35);
+    tnG.gain.exponentialRampToValueAtTime(0.5, now + 2.356);
+    tnG.gain.exponentialRampToValueAtTime(0.0001, now + 2.48);
+    tnSrc.connect(tnF); tnF.connect(tnG); send(tnG);
+    tnSrc.start(now + 2.35); tnSrc.stop(now + 2.5);
 }
 
 // ---- Hydraulic whoosh (4-of-a-kind long-press) ----------------------------

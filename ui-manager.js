@@ -80,6 +80,9 @@ export function onMainMenu(fn)         { WelcomeMenu.setCallbacks({ onMainMenu: 
 /** Fires when the MP host returns to main menu, directing guests to follow. */
 export function onHostLeft(fn)         { WelcomeMenu.setCallbacks({ onHostLeft:    fn }); }
 
+/** Fires when the deal animation should start (Botfather: after reveal veil clears). */
+export function onDealStart(fn)        { WelcomeMenu.setCallbacks({ onDealStart:   fn }); }
+
 /** Returns the current welcome-screen configuration chosen by the player. */
 export function getPlayerConfig()      { return WelcomeMenu.getPlayerConfig(); }
 

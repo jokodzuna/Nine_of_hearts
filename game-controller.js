@@ -41,6 +41,7 @@ import {
     onNewGame,
     onMainMenu,
     onHostLeft,
+    onDealStart,
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
@@ -120,6 +121,7 @@ let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min perman
 
 let _state          = null;
 let _gameActive     = false;
+let _pendingHands   = null;   // botfather: hands stored until deal veil clears
 let _humanTimer     = null;    // setTimeout handle for human auto-move
 
 // Multiplayer state
@@ -142,6 +144,7 @@ let _humanFoursThisGame  = 0;
 // ============================================================
 
 onGameStart(_startGame);
+onDealStart(_triggerDeal);
 onDealComplete(_startTurn);
 onCardPlayed(_humanPlayCards);
 onDrawRequested(_humanDraw);
@@ -220,7 +223,20 @@ function _startGame(cfgOverride = null) {
 
     Update('CLEAR_PILE');
     Update('ADD_TO_PILE', { card: ds.pile[0] });
-    Update('ANIMATE_DEAL', { hands });
+    if (isBotfather) {
+        _pendingHands = hands;   // deal fired by _triggerDeal() when veil clears
+    } else {
+        _pendingHands = null;
+        Update('ANIMATE_DEAL', { hands });
+    }
+}
+
+function _triggerDeal() {
+    if (_pendingHands) {
+        const h = _pendingHands;
+        _pendingHands = null;
+        Update('ANIMATE_DEAL', { hands: h });
+    }
 }
 
 function _startTurn() {

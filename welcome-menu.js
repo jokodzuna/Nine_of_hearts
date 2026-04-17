@@ -25,6 +25,7 @@ let _mpTakenAvatars = new Set();
 // ============================================================
 
 let _cbGameStart   = null;
+let _cbDealStart   = null;
 let _cbMPGameReady = null;
 let _cbMPHostStart = null;
 let _cbNewGame     = null;
@@ -37,6 +38,7 @@ let _cbHostLeft    = null;
  */
 export function setCallbacks(cbs) {
     if (cbs.onGameStart)   _cbGameStart   = cbs.onGameStart;
+    if (cbs.onDealStart)   _cbDealStart   = cbs.onDealStart;
     if (cbs.onMPGameReady) _cbMPGameReady = cbs.onMPGameReady;
     if (cbs.onMPHostStart) _cbMPHostStart = cbs.onMPHostStart;
     if (cbs.onNewGame)     _cbNewGame     = cbs.onNewGame;
@@ -1131,7 +1133,8 @@ function _setupBotfatherCrossfade(onReady) {
         clearTimeout(timer);
         // Show door instantly behind the video (no opacity transition)
         door.classList.add('bf-preshow');
-        // Glitch the video — flickers and ends at opacity 0 after 400 ms
+        // Glitch sound + visual, synchronized — both last ~430 ms
+        Audio.playGlitchSound();
         video.classList.add('bf-glitch');
         setTimeout(() => {
             video.classList.remove('bf-glitch');
@@ -1154,27 +1157,33 @@ function _setupBotfatherCrossfade(onReady) {
         door.removeEventListener('click', _onDoorTap);
         Audio.playDoorOpenSound();
         door.classList.add('bf-doors-open');
+        // Set up game room NOW (table, avatars, pile) while door slides open
+        onReady();
         setTimeout(() => {
-            // Reveal veil fades 0.6 → 0 over 2s as the game initialises
-            const revealVeil = document.getElementById('bfRevealVeil');
-            if (revealVeil) {
-                revealVeil.style.display = '';
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                    revealVeil.classList.add('clearing');
-                    setTimeout(() => {
-                        revealVeil.style.display = 'none';
-                        revealVeil.classList.remove('clearing');
-                    }, 2100);
-                }));
-            }
-            onReady();  // game starts only after door is fully open
+            // Door fully open — reveal veil covers the game at 0.6 opacity
             overlay.style.display = 'none';
             video.pause();
             video.currentTime = 0;
             video.classList.remove('bf-fade-out');
             door.classList.remove('bf-visible', 'bf-doors-open');
-            const veil = document.getElementById('bfDarkVeil');
-            if (veil) veil.classList.remove('veil-clear');
+            const darkVeil = document.getElementById('bfDarkVeil');
+            if (darkVeil) darkVeil.classList.remove('veil-clear');
+            const revealVeil = document.getElementById('bfRevealVeil');
+            if (revealVeil) {
+                revealVeil.style.display = '';
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    revealVeil.classList.add('clearing');
+                    // Veil reaches opacity 0 after 2s — start dealing then
+                    setTimeout(() => {
+                        revealVeil.style.display = 'none';
+                        revealVeil.classList.remove('clearing');
+                        if (_cbDealStart) _cbDealStart();
+                    }, 2100);
+                }));
+            } else {
+                // Fallback: no veil element, deal immediately
+                if (_cbDealStart) _cbDealStart();
+            }
         }, 2600);  // 2.5s door animation + 100ms buffer
     }
 }

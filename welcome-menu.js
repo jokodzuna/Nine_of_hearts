@@ -1141,6 +1141,8 @@ function _setupBotfatherCrossfade(onReady) {
             video.classList.add('bf-fade-out');   // lock video opacity at 0
             door.classList.remove('bf-preshow');
             door.classList.add('bf-visible');     // now properly tappable
+            // Set up game room behind the door image
+            onReady();
             door.addEventListener('click', _onDoorTap);
         }, 430);
     };
@@ -1157,10 +1159,9 @@ function _setupBotfatherCrossfade(onReady) {
         door.removeEventListener('click', _onDoorTap);
         Audio.playDoorOpenSound();
         door.classList.add('bf-doors-open');
-        // Set up game room NOW (table, avatars, pile) while door slides open
-        onReady();
         setTimeout(() => {
-            // Door fully open — reveal veil covers the game at 0.6 opacity
+            // Door fully open — start dealing immediately, no veil
+            if (_cbDealStart) _cbDealStart();
             overlay.style.display = 'none';
             video.pause();
             video.currentTime = 0;
@@ -1168,22 +1169,6 @@ function _setupBotfatherCrossfade(onReady) {
             door.classList.remove('bf-visible', 'bf-doors-open');
             const darkVeil = document.getElementById('bfDarkVeil');
             if (darkVeil) darkVeil.classList.remove('veil-clear');
-            const revealVeil = document.getElementById('bfRevealVeil');
-            if (revealVeil) {
-                revealVeil.style.display = '';
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                    revealVeil.classList.add('clearing');
-                    // Veil reaches opacity 0 after 2s — start dealing then
-                    setTimeout(() => {
-                        revealVeil.style.display = 'none';
-                        revealVeil.classList.remove('clearing');
-                        if (_cbDealStart) _cbDealStart();
-                    }, 2100);
-                }));
-            } else {
-                // Fallback: no veil element, deal immediately
-                if (_cbDealStart) _cbDealStart();
-            }
         }, 2600);  // 2.5s door animation + 100ms buffer
     }
 }

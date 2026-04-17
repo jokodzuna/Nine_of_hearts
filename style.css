@@ -1883,17 +1883,3 @@ body.welcome-active #tapToStart {
     pointer-events: none;
 }
 
-/* Reveal veil: covers game arena after door opens, fades to 0 over 2s */
-.bf-reveal-veil {
-    position: fixed;
-    inset: 0;
-    background: #000;
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 19000;
-    transition: opacity 2s ease;
-}
-.bf-reveal-veil.clearing {
-    opacity: 0;
-    pointer-events: none;
-}

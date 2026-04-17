@@ -205,7 +205,10 @@ export function playDoorOpenSound() {
     const ctx = _audioCtx;
     const now = ctx.currentTime;
     const sr  = ctx.sampleRate;
-    const out = ctx.destination;
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.7;
+    masterGain.connect(ctx.destination);
+    const out = masterGain;
 
     // ---------- Light convolution reverb ----------
     const revLen = Math.floor(sr * 1.4);
@@ -319,35 +322,24 @@ export function playGlitchSound() {
     const sr  = ctx.sampleRate;
     const out = ctx.destination;
 
-    // Noise bursts timed to the opacity-0 frames of glitch-flicker:
-    // 0 ms, 40 ms, 140 ms, 240 ms, 340 ms
-    [0.00, 0.04, 0.14, 0.24, 0.34].forEach((t, i) => {
-        const bLen = Math.floor(sr * 0.05);
+    // Electricity crackling: 16 sharp irregular noise spikes over ~410 ms
+    [0.000, 0.018, 0.042, 0.053, 0.085, 0.110, 0.131, 0.170,
+     0.198, 0.230, 0.265, 0.290, 0.318, 0.355, 0.380, 0.405].forEach(t => {
+        const dur  = 0.005 + Math.random() * 0.010;
+        const bLen = Math.floor(sr * 0.018);
         const bBuf = ctx.createBuffer(1, bLen, sr);
         const bDat = bBuf.getChannelData(0);
         for (let j = 0; j < bLen; j++) bDat[j] = Math.random() * 2 - 1;
         const bSrc = ctx.createBufferSource(); bSrc.buffer = bBuf;
         const bF = ctx.createBiquadFilter();
-        bF.type = 'bandpass'; bF.frequency.value = 1200 + i * 700; bF.Q.value = 1.5;
+        bF.type = 'highpass'; bF.frequency.value = 4000;
         const bG = ctx.createGain();
         bG.gain.setValueAtTime(0.0001, now + t);
-        bG.gain.exponentialRampToValueAtTime(0.4,    now + t + 0.003);
-        bG.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.045);
+        bG.gain.exponentialRampToValueAtTime(0.6,    now + t + 0.001);
+        bG.gain.exponentialRampToValueAtTime(0.0001, now + t + dur);
         bSrc.connect(bF); bF.connect(bG); bG.connect(out);
-        bSrc.start(now + t); bSrc.stop(now + t + 0.05);
+        bSrc.start(now + t); bSrc.stop(now + t + 0.020);
     });
-
-    // Digital stutter: square wave that jumps pitch every 50 ms
-    const osc = ctx.createOscillator(); osc.type = 'square';
-    [880, 1760, 440, 2200, 330, 1100, 660, 1540].forEach((f, i) =>
-        osc.frequency.setValueAtTime(f, now + i * 0.05));
-    const oscG = ctx.createGain();
-    oscG.gain.setValueAtTime(0.0001, now);
-    oscG.gain.exponentialRampToValueAtTime(0.06,   now + 0.01);
-    oscG.gain.setValueAtTime(0.06, now + 0.38);
-    oscG.gain.exponentialRampToValueAtTime(0.0001, now + 0.43);
-    osc.connect(oscG); oscG.connect(out);
-    osc.start(now); osc.stop(now + 0.43);
 }
 
 // ---- Hydraulic whoosh (4-of-a-kind long-press) ----------------------------

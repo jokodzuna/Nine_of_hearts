@@ -1158,6 +1158,7 @@ function _setupBotfatherCrossfade(onReady) {
     function _onDoorTap() {
         door.removeEventListener('click', _onDoorTap);
         Audio.playDoorOpenSound();
+        overlay.style.background = 'transparent';   // reveal game room through sliding panels
         door.classList.add('bf-doors-open');
         setTimeout(() => {
             // Door fully open — start dealing immediately, no veil

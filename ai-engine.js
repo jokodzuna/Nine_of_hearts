@@ -664,7 +664,10 @@ export class ISMCTSEngine {
     /**
      * RHV-based quality playout from a leaf state.
      *
-     * Depth: numPlayers × 8 turns (16 / 24 / 32 for 2 / 3 / 4 players).
+     * Depth: N×4 normally; N×10 when any active player reaches ≤5 cards (endgame).
+     *        Limit is recomputed each turn so it expands/contracts dynamically.
+     * RHV guard: suppressed for current player when their hand is ≤5 cards
+     *            (clearing priority overrides RHV preservation).
      *
      * Scoring at playout end (hit depth or game over):
      *   2 players : normalised (AI_RHV − Opponent_RHV) / 50   → [-1, 1]
@@ -673,15 +676,23 @@ export class ISMCTSEngine {
      */
     _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
-        const N          = s.numPlayers;
-        const depthLimit = N * 3;  // 6 / 9 / 12 — 3 rounds per player
+        const N = s.numPlayers;
 
         while (!isGameOver(s)) {
-            if (++turns > depthLimit) break;
+            // Adaptive depth: endgame (any active player ≤5 cards) → N*10, else N*4
+            let endgame = false;
+            for (let p = 0; p < N; p++) {
+                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 5) {
+                    endgame = true;
+                    break;
+                }
+            }
+            if (++turns > (endgame ? N * 10 : N * 4)) break;
 
-            const raw    = getPossibleMoves(s);
+            const raw      = getPossibleMoves(s);
             if (raw.length === 0) break;
-            const moves  = _applyRHVGuard(raw, s.hands[s.currentPlayer]);
+            const handSize = _popcount(s.hands[s.currentPlayer]);
+            const moves    = handSize <= 5 ? raw : _applyRHVGuard(raw, s.hands[s.currentPlayer]);
 
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2

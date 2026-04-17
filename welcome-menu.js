@@ -1096,41 +1096,55 @@ function _buildWelcomeOverlay() {
 // Botfather intro sequence
 // ============================================================
 
-function _showBotfatherIntro(onComplete) {
-    const overlay   = document.getElementById('botfatherOverlay');
-    const video     = document.getElementById('botfatherVideo');
-    const door      = document.getElementById('botfatherDoor');
+function _applyBotfatherClipPaths() {
     const doorLeft  = document.getElementById('doorLeft');
     const doorRight = document.getElementById('doorRight');
-    if (!overlay || !video || !door) { onComplete(); return; }
-
-    // Compute SVG clip-paths from live screen size
+    if (!doorLeft || !doorRight) return;
     const W = window.innerWidth, H = window.innerHeight;
     const cx = W / 2, cy = H / 2;
-    const r  = Math.min(W, H) * 0.10;  // eye-circle radius
-    // left door: left half + circular bulge toward the right
+    const r  = Math.min(W, H) * 0.10;
     const lp = `M 0,0 L ${cx},0 L ${cx},${cy - r} ` +
                `A ${r},${r} 0 0,1 ${cx},${cy + r} ` +
                `L ${cx},${H} L 0,${H} Z`;
-    // right door: right half + matching hollow
     const rp = `M ${cx},0 L ${W},0 L ${W},${H} ` +
                `L ${cx},${H} L ${cx},${cy + r} ` +
                `A ${r},${r} 0 0,0 ${cx},${cy - r} ` +
                `L ${cx},0 Z`;
-    if (doorLeft)  doorLeft.style.clipPath  = `path('${lp}')`;
-    if (doorRight) doorRight.style.clipPath = `path('${rp}')`;
+    doorLeft.style.clipPath  = `path('${lp}')`;
+    doorRight.style.clipPath = `path('${rp}')`;
+}
 
-    overlay.style.display = '';
-    video.src = 'video/botfather-intro.mp4';
-    video.play().catch(() => { clearTimeout(timer); _crossfade(); });
+// Video is already playing (started in the click handler inside the user-gesture
+// tick).  This function just sets up the 9.8 s crossfade → door image → tap.
+// onReady fires as soon as the metal door is fully visible so the game arena
+// can render behind it before the user opens the door.
+function _setupBotfatherCrossfade(onReady) {
+    const overlay = document.getElementById('botfatherOverlay');
+    const video   = document.getElementById('botfatherVideo');
+    const door    = document.getElementById('botfatherDoor');
+    if (!overlay || !video || !door) { onReady(); return; }
 
+    let crossed = false;
     const _crossfade = () => {
+        if (crossed) return;
+        crossed = true;
+        clearTimeout(timer);
         video.classList.add('bf-fade-out');
         door.classList.add('bf-visible');
+        // 300 ms crossfade completes; then start game and enable tap
+        setTimeout(() => {
+            onReady();
+            door.addEventListener('click', _onDoorTap);
+        }, 350);
     };
-    const timer = setTimeout(_crossfade, 9800);
-    video.addEventListener('ended', () => { clearTimeout(timer); _crossfade(); }, { once: true });
-    video.addEventListener('error',  () => { clearTimeout(timer); _crossfade(); }, { once: true });
+
+    // Calculate remaining play time from current video position
+    const remaining = (!video.paused && !video.error)
+        ? Math.max(0, (9.8 - video.currentTime) * 1000)
+        : 0;
+    const timer = setTimeout(_crossfade, remaining);
+    video.addEventListener('ended', () => _crossfade(), { once: true });
+    video.addEventListener('error',  () => _crossfade(), { once: true });
 
     function _onDoorTap() {
         door.removeEventListener('click', _onDoorTap);
@@ -1138,13 +1152,12 @@ function _showBotfatherIntro(onComplete) {
         door.classList.add('bf-doors-open');
         setTimeout(() => {
             overlay.style.display = 'none';
-            video.src = '';
-            door.classList.remove('bf-visible', 'bf-doors-open');
+            video.pause();
+            video.currentTime = 0;
             video.classList.remove('bf-fade-out');
-            onComplete();
+            door.classList.remove('bf-visible', 'bf-doors-open');
         }, 1500);
     }
-    door.addEventListener('click', _onDoorTap);
 }
 
 /**
@@ -1218,28 +1231,39 @@ export function setup() {
                 return;
             }
 
-            const ws           = document.getElementById('welcomeScreen');
-            const isBotfather  = _difficulty === 'botfather';
+            const ws          = document.getElementById('welcomeScreen');
+            const isBotfather = _difficulty === 'botfather';
+            const bfOverlay   = isBotfather ? document.getElementById('botfatherOverlay') : null;
+            const bfVideo     = isBotfather ? document.getElementById('botfatherVideo')   : null;
+
+            // Launch video NOW — still inside the user-gesture tick, so
+            // autoplay with audio is permitted without restriction.
+            if (bfVideo && bfOverlay) {
+                _applyBotfatherClipPaths();
+                bfOverlay.style.display = '';
+                bfVideo.currentTime = 0;
+                bfVideo.play().catch(() => {});  // failure surfaced via video.paused check
+            }
+
             if (!ws) {
-                if (isBotfather) _showBotfatherIntro(() => { if (_cbGameStart) _cbGameStart(); });
+                if (isBotfather) _setupBotfatherCrossfade(() => { if (_cbGameStart) _cbGameStart(); });
                 else if (_cbGameStart) _cbGameStart();
                 return;
             }
 
-            ws.style.zIndex = '21000';
+            ws.style.zIndex = '21000';  // welcome screen stays above overlay (20000)
             ws.classList.remove('doors-open');
             setTimeout(() => {
                 ws.querySelectorAll('.welcome-menu, #welcomeOverlay').forEach(el => el.style.display = 'none');
-                ws.classList.add('doors-open');
+                ws.classList.add('doors-open');  // green doors lift — video visible behind
                 setTimeout(() => {
+                    ws.style.display = 'none';   // welcome screen fully gone
                     if (isBotfather) {
-                        ws.style.display = 'none';
-                        _showBotfatherIntro(() => { if (_cbGameStart) _cbGameStart(); });
+                        _setupBotfatherCrossfade(() => { if (_cbGameStart) _cbGameStart(); });
                     } else {
                         if (_cbGameStart) _cbGameStart();
-                        setTimeout(() => { ws.style.display = 'none'; }, 1300);
                     }
-                }, 500);
+                }, 1300);  // wait for the full 1.2 s door-open animation
             }, 1300);
         });
     }
@@ -1253,4 +1277,13 @@ export function setup() {
             if (_cbGameStart) _cbGameStart();
         });
     }
+
+    // Preload botfather assets so there is zero buffering delay at game start
+    const _bfVid = document.getElementById('botfatherVideo');
+    if (_bfVid && !_bfVid.src) {
+        _bfVid.preload = 'auto';
+        _bfVid.src     = 'video/botfather-intro.mp4';
+    }
+    ['Images/botfather-door.jpg', 'Images/bot-avatars/botfather.webp']
+        .forEach(src => { const img = new Image(); img.src = src; });
 }

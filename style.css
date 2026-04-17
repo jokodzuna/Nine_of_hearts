@@ -1791,7 +1791,7 @@ body.welcome-active #tapToStart {
 .botfather-overlay {
     position: fixed;
     inset: 0;
-    z-index: 9500;
+    z-index: 20000;
     background: #000;
     overflow: hidden;
 }
@@ -1802,7 +1802,7 @@ body.welcome-active #tapToStart {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: opacity 0.8s ease;
+    transition: opacity 0.3s ease;
 }
 
 #botfatherVideo.bf-fade-out {
@@ -1815,7 +1815,7 @@ body.welcome-active #tapToStart {
     inset: 0;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.8s ease;
+    transition: opacity 0.3s ease;
 }
 
 .botfather-door.bf-visible {

@@ -254,16 +254,19 @@ function _computeRHV(hand) {
 /**
  * Virtual card count for endgame-switch threshold.
  *
- * For each 4-of-a-kind of Q / K / A in the hand, subtract 3 from the raw
- * card count (the set plays as a single action, so it contributes ~1 card
- * of effective play-time rather than 4).
+ * Aces (any quantity) collapse to 1 card — they always play together.
+ * 4-of-a-kind Q or K subtracts 3 — the set plays as a single action.
  *
  * @param {number} hand  24-bit hand bitmask
  * @returns {number}     Virtual card count (always ≥ 1 if hand non-empty)
  */
 function _virtualCount(hand) {
     let c = _popcount(hand);
-    for (let r = 3; r <= 5; r++) {   // Q (3), K (4), A (5)
+    // Any number of Aces counts as 1 card (they collapse into a single action)
+    const aceCount = _popcount(hand & _RANK_MASK[5]);
+    if (aceCount > 0) c -= (aceCount - 1);
+    // 4-of-a-kind Q or K also plays as a single action
+    for (let r = 3; r <= 4; r++) {   // Q (3), K (4)
         if (_popcount(hand & _RANK_MASK[r]) === 4) c -= 3;
     }
     return c;

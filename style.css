@@ -431,6 +431,15 @@ body.welcome-active #tapToStart {
         inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
+.version-label {
+    margin-top: clamp(6px, 1vh, 12px);
+    font-size: clamp(10px, 1.2vh, 13px);
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.08em;
+    text-align: center;
+    user-select: none;
+}
+
 /* ---- Lift Doors ---- */
 
 /* Each door is exactly half the viewport, overflow:hidden clips its half. */

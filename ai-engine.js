@@ -662,27 +662,30 @@ export class ISMCTSEngine {
     }
 
     /**
-     * RHV-based quality playout from a leaf state.
+     * Quality playout from a leaf state.
      *
-     * Depth: N×4 normally; N×10 when any active player reaches ≤5 cards (endgame).
+     * Depth: N×4 normally; N×10 when any active player reaches ≤4 cards (endgame).
      *        Limit is recomputed each turn so it expands/contracts dynamically.
      * RHV guard: suppressed for current player when their hand is ≤5 cards
      *            (clearing priority overrides RHV preservation).
      *
-     * Scoring at playout end (hit depth or game over):
-     *   2 players : normalised (AI_RHV − Opponent_RHV) / 50   → [-1, 1]
-     *   3-4 players: normalised AI_RHV / 25                   → [-1, 1]
-     *   Empty hand (safe) returns RHV = +50 → clamped to +1.
+     * Scoring at playout end:
+     *   Endgame  (any active player ≤4 cards at end, or game over):
+     *     2 players  — Win/Loss: rootPlayer empty → 1.0, opponent empty → 0.0,
+     *                  depth-hit non-terminal → oppCards / (myCards + oppCards)
+     *   Normal   (both players >4 cards):
+     *     2 players  — differential RHV / 50   → [-1, 1]
+     *     3-4 players — absolute RHV / 25      → [-1, 1]
      */
     _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
         const N = s.numPlayers;
 
         while (!isGameOver(s)) {
-            // Adaptive depth: endgame (any active player ≤5 cards) → N*10, else N*4
+            // Endgame trigger: any active player ≤4 cards → depth N×10, else N×4
             let endgame = false;
             for (let p = 0; p < N; p++) {
-                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 5) {
+                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 4) {
                     endgame = true;
                     break;
                 }
@@ -701,17 +704,42 @@ export class ISMCTSEngine {
             s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
         }
 
-        // RHV scoring
+        // Determine scoring mode: Win/Loss when game over OR any active player ≤4 cards
+        const myCards = _popcount(s.hands[rootPlayer]);
+        let useWinLoss = isGameOver(s);
+        if (!useWinLoss) {
+            for (let p = 0; p < N; p++) {
+                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 4) {
+                    useWinLoss = true; break;
+                }
+            }
+        }
+
+        if (useWinLoss && N === 2) {
+            if (myCards === 0) return 1.0;                              // rootPlayer won
+            if (_popcount(s.hands[1 - rootPlayer]) === 0) return 0.0;  // opponent won
+            // Depth-hit in endgame, non-terminal: sigmoid of differential RHV
+            // sigmoid maps [-∞,+∞] → (0,1); scale=25 ≈ half of _RHV_DIFF_NORM
+            const rhvDiff = _computeRHV(s.hands[rootPlayer]) - _computeRHV(s.hands[1 - rootPlayer]);
+            return 1 / (1 + Math.exp(-rhvDiff / 25));
+        }
+
+        // Normal phase (both players >4 cards): differential RHV
         const myRHV = _computeRHV(s.hands[rootPlayer]);
         if (N === 2) {
-            const opp    = 1 - rootPlayer;
-            const oppRHV = _computeRHV(s.hands[opp]);
+            const oppRHV = _computeRHV(s.hands[1 - rootPlayer]);
             return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / _RHV_DIFF_NORM));
         }
         return Math.max(-1.0, Math.min(1.0, myRHV / _RHV_NORM));
     }
 
-    /** Backpropagate score from leaf to root. */
+    /**
+     * Backpropagate score from leaf to root.
+     * Normal phase : score ∈ [-1, 1]  (differential RHV)
+     * Endgame phase: score ∈ [0, 1]   (Win/Loss or card-count ratio)
+     * wins/visits therefore represents win-ratio during endgame,
+     * and average hand advantage during normal play.
+     */
     _backprop(node, score) {
         let n = node;
         while (n !== null) {

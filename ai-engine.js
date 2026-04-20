@@ -252,6 +252,24 @@ function _computeRHV(hand) {
 }
 
 /**
+ * Virtual card count for endgame-switch threshold.
+ *
+ * For each 4-of-a-kind of Q / K / A in the hand, subtract 3 from the raw
+ * card count (the set plays as a single action, so it contributes ~1 card
+ * of effective play-time rather than 4).
+ *
+ * @param {number} hand  24-bit hand bitmask
+ * @returns {number}     Virtual card count (always ≥ 1 if hand non-empty)
+ */
+function _virtualCount(hand) {
+    let c = _popcount(hand);
+    for (let r = 3; r <= 5; r++) {   // Q (3), K (4), A (5)
+        if (_popcount(hand & _RANK_MASK[r]) === 4) c -= 3;
+    }
+    return c;
+}
+
+/**
  * RHV Guard — disqualifies play moves whose resulting-hand RHV would drop
  * by more than 5 points vs the current hand.  Draw moves are always kept.
  *
@@ -269,14 +287,27 @@ function _applyRHVGuard(moves, hand) {
     let   hasDraw = false, hasPlay = false;
     let   fallbackMove = 0, fallbackRHV = -Infinity;
 
+    // Lone-Ace constraint: if exactly 1 Ace remains and hand > 2 cards,
+    // treat the Ace as unplayable (demoted to last-resort fallback).
+    const blockLoneAce = _popcount(hand & _RANK_MASK[5]) === 1
+                      && _popcount(hand) > 2;
+
     for (let i = 0; i < moves.length; i++) {
-        const m = moves[i];
+        const m    = moves[i];
         if (m & DRAW_FLAG) {
             out.push(m);
             hasDraw = true;
         } else {
-            const newHand = (hand & ~(m & 0xFFFFFF)) | 0;
+            const bits    = m & 0xFFFFFF;
+            const newHand = (hand & ~bits) | 0;
             const newRHV  = _computeRHV(newHand);
+
+            // Block lone-Ace play unless it wins the game outright
+            if (blockLoneAce && (bits & _RANK_MASK[5]) !== 0 && newHand !== 0) {
+                if (newRHV > fallbackRHV) { fallbackRHV = newRHV; fallbackMove = m; }
+                continue;
+            }
+
             if (curRHV - newRHV <= 5) {
                 out.push(m);
                 hasPlay = true;
@@ -682,12 +713,17 @@ export class ISMCTSEngine {
         const N = s.numPlayers;
 
         while (!isGameOver(s)) {
-            // Endgame trigger: any active player ≤4 cards → depth N×10, else N×4
+            // Endgame trigger: virtual card count ≤4 for any active player
+            // Bot: always use virtual count.
+            // Opponent: use virtual count only when Shark has full card certainty.
             let endgame = false;
             for (let p = 0; p < N; p++) {
-                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 4) {
-                    endgame = true;
-                    break;
+                if (s.eliminated & (1 << p)) continue;
+                const useVC = p === rootPlayer
+                    || (this._cardKnowledge !== null
+                        && _popcount(this._cardKnowledge[p]) >= _popcount(s.hands[p]));
+                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= 4) {
+                    endgame = true; break;
                 }
             }
             if (++turns > (endgame ? N * 10 : N * 4)) break;
@@ -709,7 +745,11 @@ export class ISMCTSEngine {
         let useWinLoss = isGameOver(s);
         if (!useWinLoss) {
             for (let p = 0; p < N; p++) {
-                if (!(s.eliminated & (1 << p)) && _popcount(s.hands[p]) <= 4) {
+                if (s.eliminated & (1 << p)) continue;
+                const useVC = p === rootPlayer
+                    || (this._cardKnowledge !== null
+                        && _popcount(this._cardKnowledge[p]) >= _popcount(s.hands[p]));
+                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= 4) {
                     useWinLoss = true; break;
                 }
             }

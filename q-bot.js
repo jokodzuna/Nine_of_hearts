@@ -73,7 +73,7 @@ function heuristicMove(moves) {
 export class QBotEngine {
     constructor() {
         this._table = null;
-        fetch('/q-table.json')
+        fetch('./q-table.json')
             .then(r => r.json())
             .then(data => { this._table = data.table; })
             .catch(err => console.warn('[QBot] Could not load q-table.json — using heuristic fallback.', err));
@@ -115,7 +115,7 @@ export class HybridQBotEngine {
         this._table     = null;
         this._mcts      = new ISMCTSEngine('shark');
         this._turnCount = 0;
-        fetch('/q-table.json')
+        fetch('./q-table.json')
             .then(r => r.json())
             .then(data => { this._table = data.table ?? data; })
             .catch(err => console.warn('[HybridQBot] q-table.json unavailable — using MCTS.', err));

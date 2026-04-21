@@ -28,6 +28,7 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
+import { QBotEngine, HybridQBotEngine } from './q-bot.js'; // HybridQBotEngine: TEST_BLOCK
 
 import {
     Update,
@@ -177,23 +178,34 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
-        easy:      [null, 'gambler', 'newbie',  'newbie' ],
-        medium:    [null, 'shark',  'gambler', 'gambler'],
-        hard:      [null, 'shark',  'shark',   'shark'  ],
-        botfather: [null, 'shark',  null,       null    ],
+        easy:           [null, 'gambler', 'newbie',  'newbie' ],
+        medium:         [null, 'shark',  'gambler', 'gambler'],
+        hard:           [null, 'shark',  'shark',   'shark'  ],
+        botfather:      [null, 'shark',  null,       null    ],
+        'test-hybrid':  [null, null,     null,       null    ], // TEST_BLOCK
+        'test-pureq':   [null, null,     null,       null    ], // TEST_BLOCK
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
+    // ===== TEST_BLOCK_START =====
+    if      (cfg.difficulty === 'test-hybrid') _engines[1] = new HybridQBotEngine();
+    else if (cfg.difficulty === 'test-pureq')  _engines[1] = new QBotEngine();
+    // ===== TEST_BLOCK_END =====
 
     // ---- Players ----
-    NUM_PLAYERS = isBotfather ? 2 : cfg.numPlayers;
+    NUM_PLAYERS = (isBotfather || isTestBot) ? 2 : cfg.numPlayers; // TEST_BLOCK: isTestBot forces 2
     if (isBotfather) {
         PLAYER_IDS[1]   = 'player2Cards';   // Botfather sits at top
         PLAYER_NAMES[1] = 'The Botfather';
+    // ===== TEST_BLOCK_START =====
+    } else if (isTestBot) {
+        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid' ? 'Hybrid Q+MCTS' : 'Pure Q-bot';
     }
+    // ===== TEST_BLOCK_END =====
     _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS);
 
     PLAYER_NAMES[0]     = cfg.playerName || 'Player';
@@ -212,8 +224,10 @@ function _startGame(cfgOverride = null) {
         Update('SET_PLAYER_AVATAR',  { playerId: 'player2Cards', avatarPath: 'Images/bot-avatars/botfather.webp' });
         Update('SET_PLAYER_NAME',    { playerId: 'player2Cards', name: 'The Botfather' });
     } else {
-        Update('SETUP_PLAYERS', { numPlayers: cfg.numPlayers, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
-        for (let p = 1; p < 4; p++) {
+        const numForSetup = isTestBot ? 2 : cfg.numPlayers; // TEST_BLOCK
+        Update('SETUP_PLAYERS', { numPlayers: numForSetup, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
+        const maxBotSlot = isTestBot ? 2 : 4; // TEST_BLOCK
+        for (let p = 1; p < maxBotSlot; p++) {
             Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
         }
     }

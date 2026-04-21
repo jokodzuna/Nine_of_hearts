@@ -638,7 +638,8 @@ function _updateProfileWidget() {
 }
 
 function _updateMenuBtnLabels() {
-    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather' };
+    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather',
+        'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot' }; // TEST_BLOCK
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1078,6 +1079,18 @@ function _buildWelcomeOverlay() {
         () => _difficulty,
         v => { _difficulty = v; _updateMenuBtnLabels(); }
     );
+    // ===== TEST_BLOCK_START — remove testPanel, testBtn, testSep for production =====
+    const testPanel = _buildTestBotPanel();
+    const _testList = diffPanel.querySelector('.option-list');
+    const _testBtn  = document.createElement('button');
+    _testBtn.className   = 'option-btn test-bot-btn';
+    _testBtn.textContent = '🧪 TEST';
+    _testBtn.addEventListener('click', () => _openWelcomePanel('test-bots'));
+    const _testSep = document.createElement('div');
+    _testSep.className = 'option-sep';
+    _testList.prepend(_testSep);
+    _testList.prepend(_testBtn);
+    // ===== TEST_BLOCK_END =====
 
     // ---- Multiplayer ----
     const mpPanel = _buildMPPanel();
@@ -1085,7 +1098,7 @@ function _buildWelcomeOverlay() {
     const statsPanel    = _buildStatsPanel();
     const achPanel      = _buildAchievementsPanel();
     const settingsPanel = _buildSettingsPanel();
-    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, mpPanel, statsPanel, achPanel, settingsPanel);
+    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, testPanel, mpPanel, statsPanel, achPanel, settingsPanel); // testPanel: TEST_BLOCK
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 
@@ -1173,6 +1186,40 @@ function _setupBotfatherCrossfade(onReady) {
         }, 2600);  // 2.5s door animation + 100ms buffer
     }
 }
+
+// ===== TEST_BLOCK_START — delete this function for production =====
+function _buildTestBotPanel() {
+    const panel = _makePanelBase('test-bots', '\ud83e\uddea Test Bots');
+    const list  = document.createElement('div');
+    list.className = 'option-list';
+    const opts = [
+        ['test-hybrid', 'Hybrid Q+MCTS'],
+        ['test-pureq',  'Pure Q-bot'],
+    ];
+    for (const [value, label] of opts) {
+        const btn = document.createElement('button');
+        btn.className   = `option-btn${_difficulty === value ? ' selected' : ''}`;
+        btn.textContent = label;
+        btn.dataset.value = value;
+        btn.addEventListener('click', () => {
+            list.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            _difficulty  = value;
+            _numPlayers  = 2;
+            _updateMenuBtnLabels();
+        });
+        list.appendChild(btn);
+    }
+    panel.appendChild(list);
+    const backBtn = document.createElement('button');
+    backBtn.className   = 'menu-btn';
+    backBtn.textContent = '\u2190 Back';
+    backBtn.addEventListener('click', () => _openWelcomePanel('difficulty'));
+    panel.appendChild(backBtn);
+    panel.appendChild(_makePanelCloseBtn('Done'));
+    return panel;
+}
+// ===== TEST_BLOCK_END =====
 
 /**
  * Build the welcome overlay and register all welcome-screen button listeners.

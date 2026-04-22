@@ -204,6 +204,36 @@ function _pickQualityMove(pool, topRankIdx, hand, twoAcesOnTop = false, drawBonu
     return pool[0];
 }
 
+/**
+ * Greedy (argmax) variant of _pickQualityMove.
+ * Uses identical weights but returns the single highest-weighted move
+ * deterministically — used in rollouts to model a smart opponent.
+ */
+function _pickBestMove(pool, topRankIdx, hand, twoAcesOnTop = false, drawBonus = 1.0) {
+    const totalCards = _popcount(hand);
+    const aceCount   = _popcount(hand & _RANK_MASK[5]);
+    const kingCount  = _popcount(hand & _RANK_MASK[4]);
+    let best = pool[0], bestW = -Infinity;
+    for (const m of pool) {
+        let w;
+        if (m & DRAW_FLAG) {
+            w = drawBonus;
+        } else {
+            const bits    = m & 0xFFFFFF;
+            const rankIdx = (31 - Math.clz32(bits & (-bits))) >> 2;
+            const dist    = rankIdx - topRankIdx;
+            w = Math.max(1, 6 - dist);
+            if (totalCards >= 3) {
+                if      (rankIdx === 5 && aceCount  === 1) w *= 0.05;
+                else if (rankIdx === 4 && aceCount  === 0 && kingCount === 1) w *= 0.05;
+            }
+            if (twoAcesOnTop && rankIdx === 5 && totalCards > 2) w *= 0.01;
+        }
+        if (w > bestW) { bestW = w; best = m; }
+    }
+    return best;
+}
+
 // ============================================================
 // RHV — Relative Hand Value
 // ============================================================
@@ -759,7 +789,7 @@ export class ISMCTSEngine {
                 && s.pileSize >= 2
                 && (s.pile[s.pileSize - 2] >> 2) === 5;
             const drawBonus = _pileDrawBonus(s, s.hands[s.currentPlayer]);
-            s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
+            s = applyMove(s, _pickBestMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
         }
 
         // Determine scoring mode: Win/Loss when game over OR any active player ≤egCards

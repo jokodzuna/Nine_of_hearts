@@ -371,7 +371,7 @@ export class ISMCTSEngine {
         shark: {
             name:             'The Shark',
             difficulty:       'Expert',
-            maxIterations:    3000,
+            maxIterations:    10000,
             explorationParam: 0.7,    // low → exploits known good moves
             weightStale:      -0.8,   // retained for reference
             maxTime:          3000,   // ms hard ceiling

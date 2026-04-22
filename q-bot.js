@@ -18,18 +18,22 @@ function pop(x) {
     return (Math.imul((x + (x >>> 4)) & 0x0F0F0F, 0x010101) >>> 16) & 0xFF;
 }
 
-// ---- State encoding (identical to q-trainer.mjs encodeState) --------
+// ---- State encoding V2 (must match hybrid-trainer.mjs encodeState exactly) --------
 function pClass(rk) { return rk <= 1 ? 0 : rk <= 3 ? 1 : 2; }
 function bkt(n)     { return n >= 3 ? 3 : n; }
-function hdist(n)   { return n<=1?0 : n===2?1 : n<=4?2 : n<=8?3 : 4; }
 function pdepth(ps) { const d=ps-1; return d<=0?0 : d<=2?1 : 2; }
 
 function encodeState(s) {
-    const h  = s.hands[BOT];
-    const oh = s.hands[1 - BOT];
-    const p2 = s.pileSize >= 2 ? pClass(s.pile[s.pileSize - 2] >> 2) : 3;
-    const p3 = s.pileSize >= 3 ? pClass(s.pile[s.pileSize - 3] >> 2) : 3;
-    return `${s.topRankIdx}|${p2}|${p3}|${bkt(pop(h&(RM[0]|RM[1])))}|${bkt(pop(h&(RM[2]|RM[3])))}|${bkt(pop(h&(RM[4]|RM[5])))}|${hdist(pop(h))}|${hdist(pop(oh))}|${pdepth(s.pileSize)}|${bkt(pop(oh&(RM[4]|RM[5])))}`;
+    const h   = s.hands[BOT];
+    const oh  = s.hands[1 - BOT];
+    const p2  = s.pileSize >= 2 ? pClass(s.pile[s.pileSize - 2] >> 2) : 3;
+    const p3  = s.pileSize >= 3 ? pClass(s.pile[s.pileSize - 3] >> 2) : 3;
+    const myH = Math.min(pop(h),  12);
+    const opH = Math.min(pop(oh), 12);
+    const myA = pop(h & RM[5]);
+    return `${s.topRankIdx}|${p2}|${p3}` +
+           `|${bkt(pop(h  & (RM[0]|RM[1])))}|${bkt(pop(h  & (RM[2]|RM[3])))}` +
+           `|${myA}|${myH}|${opH}|${pdepth(s.pileSize)}|${bkt(pop(oh & (RM[4]|RM[5])))}`;
 }
 
 // ---- Action ↔ concrete move (identical to q-trainer.mjs) ------------

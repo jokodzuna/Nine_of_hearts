@@ -374,10 +374,12 @@ export class ISMCTSEngine {
             maxIterations:    3000,
             explorationParam: 0.7,    // low → exploits known good moves
             weightStale:      -0.8,   // retained for reference
-            maxTime:          500,    // ms hard ceiling
+            maxTime:          3000,   // ms hard ceiling
             maxTurns:         250,    // playout turn limit before heuristic fallback
             useCardTracking:  true,   // Short-Term Memory: track observed drawn cards
             useTreeReuse:     true,   // persist subtree between turns
+            endgameCards:     5,      // endgame triggers at ≤5 cards
+            endgameTurnHorizon: null, // null → N*20 (computed in _simulate)
         },
 
         gambler: {
@@ -762,7 +764,7 @@ export class ISMCTSEngine {
         let s = state, turns = 0;
         const N = s.numPlayers;
         const egCards   = this.profile.endgameCards      ?? 4;
-        const egHorizon = this.profile.endgameTurnHorizon ?? N * 10;
+        const egHorizon = this.profile.endgameTurnHorizon ?? N * 20;
 
         while (!isGameOver(s)) {
             // Endgame trigger: virtual card count ≤egCards for any active player

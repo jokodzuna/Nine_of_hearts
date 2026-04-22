@@ -76,48 +76,45 @@ function heuristicMove(moves) {
 // ---- QBotEngine class -----------------------------------------------
 export class QBotEngine {
     constructor() {
-        this._table = null;
+        this._table    = null;
+        this._fallback = new ISMCTSEngine('qbotFallback');
         fetch('./q-table.json')
             .then(r => r.json())
             .then(data => { this._table = data.table; })
-            .catch(err => console.warn('[QBot] Could not load q-table.json — using heuristic fallback.', err));
+            .catch(err => console.warn('[QBot] Could not load q-table.json — using MCTS fallback.', err));
     }
 
     chooseMove(state) {
         const moves = getPossibleMoves(state);
         if (!moves.length) return 0;
 
-        if (!this._table) {
-            return heuristicMove(moves);
-        }
+        if (!this._table) return this._fallback.chooseMove(state);
 
-        const key   = encodeState(state);
-        const qrow  = this._table[key];
+        const key  = encodeState(state);
+        const qrow = this._table[key];
+        if (!qrow)  return this._fallback.chooseMove(state);
+
         const legal = [...new Set(moves.map(moveToAct))];
-
-        // Greedy pick — no exploration during deployment
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            // null entry means untried (Q=Infinity); treat as strongly preferred
-            const v = qrow ? (qrow[a] ?? Infinity) : Infinity;
+            const v = qrow[a] ?? Infinity;
             if (v > bv) { bv = v; best = a; }
         }
-
-        return actToMove(moves, best) ?? heuristicMove(moves);
+        return actToMove(moves, best) ?? this._fallback.chooseMove(state);
     }
 
-    // --- ISMCTSEngine interface stubs (Q-bot is stateless per-game) ---
-    cleanup()        {}
-    resetKnowledge() {}
-    observeMove()    {}
-    advanceTree()    {}
+    // --- ISMCTSEngine interface ---
+    cleanup()         { this._fallback.cleanup(); }
+    resetKnowledge()  { this._fallback.resetKnowledge(); }
+    observeMove(m, p) { this._fallback.observeMove(m, p); }
+    advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
 
 // ===== TEST_BLOCK_START — delete this class and the ISMCTSEngine import above for production =====
 export class HybridQBotEngine {
     constructor() {
         this._table     = null;
-        this._mcts      = new ISMCTSEngine('shark');
+        this._mcts      = new ISMCTSEngine('qbotFallback');
         this._turnCount = 0;
         fetch('./q-table.json')
             .then(r => r.json())

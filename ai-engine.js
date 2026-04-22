@@ -369,6 +369,23 @@ export class ISMCTSEngine {
             maxTime:          500,
             maxTurns:         100,
         },
+
+        // ===== TEST_BLOCK_START — used by Q-bot fallback, remove with Q-bot for production =====
+        qbotFallback: {
+            name:              'Q-bot Fallback',
+            difficulty:        'Expert',
+            maxIterations:     10000,
+            explorationParam:  0.7,
+            weightStale:       -0.8,
+            maxTime:           2000,
+            maxTurns:          250,
+            useCardTracking:   true,
+            useTreeReuse:      true,
+            endgameCards:      5,      // endgame triggers at ≤5 cards (not ≤4)
+            endgameTurnHorizon: 30,    // max rollout turns in endgame
+            linearRhvEndgame:  true,   // linear RHV for depth-hit instead of sigmoid
+        },
+        // ===== TEST_BLOCK_END =====
     };
 
     // ----------------------------------------------------------
@@ -714,9 +731,11 @@ export class ISMCTSEngine {
     _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
         const N = s.numPlayers;
+        const egCards   = this.profile.endgameCards      ?? 4;
+        const egHorizon = this.profile.endgameTurnHorizon ?? N * 10;
 
         while (!isGameOver(s)) {
-            // Endgame trigger: virtual card count ≤4 for any active player
+            // Endgame trigger: virtual card count ≤egCards for any active player
             // Bot: always use virtual count.
             // Opponent: use virtual count only when Shark has full card certainty.
             let endgame = false;
@@ -725,16 +744,16 @@ export class ISMCTSEngine {
                 const useVC = p === rootPlayer
                     || (this._cardKnowledge !== null
                         && _popcount(this._cardKnowledge[p]) >= _popcount(s.hands[p]));
-                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= 4) {
+                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= egCards) {
                     endgame = true; break;
                 }
             }
-            if (++turns > (endgame ? N * 10 : N * 4)) break;
+            if (++turns > (endgame ? egHorizon : N * 4)) break;
 
             const raw      = getPossibleMoves(s);
             if (raw.length === 0) break;
             const handSize = _popcount(s.hands[s.currentPlayer]);
-            const moves    = handSize <= 5 ? raw : _applyRHVGuard(raw, s.hands[s.currentPlayer]);
+            const moves    = handSize <= egCards ? raw : _applyRHVGuard(raw, s.hands[s.currentPlayer]);
 
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2
@@ -743,7 +762,7 @@ export class ISMCTSEngine {
             s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
         }
 
-        // Determine scoring mode: Win/Loss when game over OR any active player ≤4 cards
+        // Determine scoring mode: Win/Loss when game over OR any active player ≤egCards
         const myCards = _popcount(s.hands[rootPlayer]);
         let useWinLoss = isGameOver(s);
         if (!useWinLoss) {
@@ -752,7 +771,7 @@ export class ISMCTSEngine {
                 const useVC = p === rootPlayer
                     || (this._cardKnowledge !== null
                         && _popcount(this._cardKnowledge[p]) >= _popcount(s.hands[p]));
-                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= 4) {
+                if ((useVC ? _virtualCount(s.hands[p]) : _popcount(s.hands[p])) <= egCards) {
                     useWinLoss = true; break;
                 }
             }
@@ -761,9 +780,10 @@ export class ISMCTSEngine {
         if (useWinLoss && N === 2) {
             if (myCards === 0) return 1.0;                              // rootPlayer won
             if (_popcount(s.hands[1 - rootPlayer]) === 0) return 0.0;  // opponent won
-            // Depth-hit in endgame, non-terminal: sigmoid of differential RHV
-            // sigmoid maps [-∞,+∞] → (0,1); scale=25 ≈ half of _RHV_DIFF_NORM
+            // Depth-hit in endgame, non-terminal: linear or sigmoid differential RHV
             const rhvDiff = _computeRHV(s.hands[rootPlayer]) - _computeRHV(s.hands[1 - rootPlayer]);
+            if (this.profile.linearRhvEndgame)
+                return Math.max(0, Math.min(1, 0.5 + rhvDiff / (2 * _RHV_DIFF_NORM)));
             return 1 / (1 + Math.exp(-rhvDiff / 25));
         }
 

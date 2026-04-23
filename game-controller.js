@@ -132,6 +132,7 @@ let _state          = null;
 let _gameActive     = false;
 let _pendingHands   = null;   // botfather: hands stored until deal veil clears
 let _humanTimer     = null;    // setTimeout handle for human auto-move
+let _pileAddTimer   = null;    // setTimeout handle for deferred AI card→pile animation
 
 // Multiplayer state
 let _mpMode       = false;     // true during a multiplayer game
@@ -337,6 +338,11 @@ function _applyTrainingCorrection(preState, botMove, correctedMove, botEngine) {
     }
     // Undo bot's move: restore pre-move state and replay with corrected move
     _state = preState;
+    // Cancel any pending deferred pile-add from the original bot move and re-sync visuals
+    if (_pileAddTimer) { clearTimeout(_pileAddTimer); _pileAddTimer = null; }
+    Update('CLEAR_PILE');
+    const _preDecode = decodeState(_state);
+    for (const c of _preDecode.pile) Update('ADD_TO_PILE', { card: c });
     const key    = _encodeHumanState(preState);
     const botAct = _moveToActLocal(botMove);
     const humAct = _moveToActLocal(correctedMove);
@@ -431,7 +437,11 @@ function _applyAndAdvance(move, preState = null, botEngine = null) {
             count: Math.max(0, _popcount(_state.hands[_cp]) - dm.cards.length),
         });
         const _played = dm.cards;
-        setTimeout(() => { for (const card of _played) Update('ADD_TO_PILE', { card }); }, 150);
+        if (_pileAddTimer) { clearTimeout(_pileAddTimer); _pileAddTimer = null; }
+        _pileAddTimer = setTimeout(() => {
+            _pileAddTimer = null;
+            for (const card of _played) Update('ADD_TO_PILE', { card });
+        }, 150);
     } else {
         for (const card of dm.cards) {
             Update('ADD_TO_PILE', { card });

@@ -1,0 +1,22 @@
+{
+  "rules": {
+    "rooms": {
+      ".read":  "auth != null",
+      ".write": "auth != null"
+    },
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "q-table-test": {
+      ".read":  "auth != null",
+      ".write": "auth != null"
+    },
+    "teaching_logs": {
+      ".read":  "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

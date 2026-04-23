@@ -57,7 +57,7 @@ import * as Audio  from './audio.js';
 // ===== TEST_BLOCK_START — appState for training sandbox =====
 export const appState = { isTrainingMode: false };
 const TRAINING_BOT_DELAY = 500; // ms before bot plays in training mode (shorter — reveal window replaces pre-play delay)
-const REVEAL_WINDOW_MS   = 2000; // ms tap-to-pause window after bot card lands
+const REVEAL_WINDOW_MS   = 4000; // ms tap-to-pause window after bot card lands
 // ===== TEST_BLOCK_END =====
 
 // ============================================================

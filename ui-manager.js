@@ -822,7 +822,7 @@ if (location.search.includes('debug=1') || /#debug\b/i.test(location.hash)) {
 
 // ===== TEST_BLOCK_START — Training Sandbox UI (reveal window, correction modal, debug panel) =====
 
-const REVEAL_WINDOW_MS = 2000;
+const REVEAL_WINDOW_MS = 4000;
 
 /**
  * Start the 2s tap-to-pause reveal window after a bot card lands on the pile.

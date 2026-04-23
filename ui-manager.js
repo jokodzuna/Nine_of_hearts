@@ -929,7 +929,9 @@ function _openCorrectionModal(payload) {
             drawBtn.textContent = `Draw\n${drawCount}`;
             drawBtn.style.whiteSpace = 'pre';
             drawBtn.addEventListener('click', () => {
+                const note = commentInput.value.trim();
                 overlay.remove();
+                if (note) import('./training-sandbox.js').then(m => m.sandbox.addComment(note));
                 onCorrection?.(legalMove);
             });
             handArea.appendChild(drawBtn);
@@ -941,7 +943,9 @@ function _openCorrectionModal(payload) {
             const cardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[bit >> 2], suit: SUIT_NAMES[bit & 3] });
             cardEl.classList.add('training-card');
             cardEl.addEventListener('click', () => {
+                const note = commentInput.value.trim();
                 overlay.remove();
+                if (note) import('./training-sandbox.js').then(m => m.sandbox.addComment(note));
                 onCorrection?.(legalMove);
             });
             handArea.appendChild(cardEl);

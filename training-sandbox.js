@@ -131,6 +131,7 @@ export class TrainingSandbox {
         this._deltaQ(stateKey, humanActionId, CORRECTION_BONUS);
         this._deltaQ(stateKey, botActionId,   CORRECTION_PENALTY);
         this._log({ type: 'correction', stateKey, humanActionId, botActionId });
+        console.log(`[Training-sandbox] Correction applied. State: ${stateKey} | Human act: ${humanActionId} (+${CORRECTION_BONUS}) | Bot act: ${botActionId} (${CORRECTION_PENALTY}). Buffer size: ${this._bufferSize()}`);
     }
 
     /**
@@ -139,6 +140,7 @@ export class TrainingSandbox {
      */
     applyMCTSApproval(stateKey, actionId) {
         this._deltaQ(stateKey, actionId, 10);
+        console.log(`[Training-sandbox] MCTS approval. State: ${stateKey} | Act: ${actionId} (+10). Buffer size: ${this._bufferSize()}`);
     }
 
     // ----------------------------------------------------------
@@ -149,6 +151,7 @@ export class TrainingSandbox {
      * @param {'bot'|'human'} winner  Who won the game.
      */
     applyBackprop(winner) {
+        console.log(`[Training-sandbox] applyBackprop called. Winner: ${winner} | Bot moves: ${this.botMoveHistory.length} | Human moves: ${this.humanMoveHistory.length}`);
         const winnerHistory = winner === 'bot'   ? this.botMoveHistory   : this.humanMoveHistory;
         const loserHistory  = winner === 'bot'   ? this.humanMoveHistory : this.botMoveHistory;
 
@@ -165,6 +168,7 @@ export class TrainingSandbox {
         }
 
         this._log({ type: 'backprop', winner, winnerMoves: n, loserMoves: loserHistory.length });
+        console.log(`[Training-sandbox] Backprop done. Buffer size after: ${this._bufferSize()}`);
     }
 
     // ----------------------------------------------------------
@@ -176,6 +180,9 @@ export class TrainingSandbox {
      * Call once at game over.
      */
     async flushToFirebase() {
+        const bufSize = this._bufferSize();
+        console.log(`[Training-sandbox] Game Over detected. Attempting to flush ${bufSize} state-action entries to Firebase...`);
+
         const db      = getDB();
         const updates = {};
         for (const [key, actions] of Object.entries(this._buffer)) {
@@ -188,21 +195,29 @@ export class TrainingSandbox {
                 this._baseTable[key][actionId] = newVal;
             }
         }
+        console.log(`[Training-sandbox] Prepared ${Object.keys(updates).length} Firebase path updates.`);
         try {
-            if (Object.keys(updates).length > 0) await update(ref(db), updates);
+            if (Object.keys(updates).length > 0) {
+                await update(ref(db), updates);
+                console.log('[Training-sandbox] Q-table flush SUCCESS.');
+            } else {
+                console.log('[Training-sandbox] Buffer empty — nothing to flush.');
+            }
         } catch (e) {
-            console.warn('[Sandbox] flushToFirebase error:', e);
+            console.error('[Training-sandbox] Firebase update() FAILED. Full error object:', e);
         }
 
         // Save audit log
         try {
             const logKey = `game_${this._gameStartTs}`;
+            console.log(`[Training-sandbox] Writing teaching log: ${FB_LOGS_PATH}/${logKey} (${this._auditLog.length} entries)...`);
             await set(ref(db, `${FB_LOGS_PATH}/${logKey}`), {
                 timestamp: this._gameStartTs,
                 entries:   this._auditLog,
             });
+            console.log('[Training-sandbox] Teaching log write SUCCESS.');
         } catch (e) {
-            console.warn('[Sandbox] audit log write failed:', e);
+            console.error('[Training-sandbox] Teaching log write FAILED. Full error object:', e);
         }
     }
 
@@ -220,6 +235,12 @@ export class TrainingSandbox {
     _deltaQ(stateKey, actionId, delta) {
         if (!this._buffer[stateKey])          this._buffer[stateKey] = {};
         this._buffer[stateKey][actionId] = (this._buffer[stateKey][actionId] ?? 0) + delta;
+    }
+
+    _bufferSize() {
+        let n = 0;
+        for (const actions of Object.values(this._buffer)) n += Object.keys(actions).length;
+        return n;
     }
 
     _log(entry) {

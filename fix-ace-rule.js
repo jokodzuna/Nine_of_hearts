@@ -6,8 +6,11 @@
 //   import('./fix-ace-rule.js').then(m => m.fixAceRule())
 //
 // Rule applied:
-//   - When the top card is a 9 (topRankIdx = 0), set Q(ace) = -999
+//   - When the pile contains ONLY the 9♥ base card (pileDepth = 0), set Q(ace) = -999
 //   - Exception: if bot has ONLY aces in hand (myH === aces), leave unchanged
+//
+// Note: topRankIdx=0 alone is NOT sufficient — a 9 can also land on top of a
+// populated pile mid-game.  pileDepth=0 uniquely identifies pileSize=1 (bare 9♥).
 
 import { getDB } from './multiplayer.js';
 import {
@@ -21,6 +24,8 @@ const ACE_ON_NINE_PENALTY = -999;
 // State key format (fields split by '|'):
 // [0] topRankIdx  [1] p2  [2] p3  [3] low9_10  [4] JQ
 // [5] aces  [6] myH  [7] opH  [8] pileDepth  [9] opHighCards
+//
+// pileDepth values (pdepth fn): 0 → pileSize≤1 (bare 9♥), 1 → 2-3 cards, 2 → 4+
 
 export async function fixAceRule() {
     console.log('[Fix] Loading q-table-test from Firebase…');
@@ -39,10 +44,13 @@ export async function fixAceRule() {
 
     for (const [key, qrow] of Object.entries(table)) {
         const parts   = key.split('|');
-        const topRank = parseInt(parts[0], 10);
+        const topRank   = parseInt(parts[0], 10);
+        const pileDepth  = parseInt(parts[8], 10);
 
-        // Only touch states where top card is a 9
-        if (topRank !== 0) continue;
+        // Only touch states where the pile is bare (only 9♥ present):
+        // topRankIdx=0 AND pileDepth=0 together mean pileSize=1.
+        // topRankIdx=0 alone would also match a 9 played onto an existing pile.
+        if (topRank !== 0 || pileDepth !== 0) continue;
 
         const aces = parseInt(parts[5], 10);
         const myH  = parseInt(parts[6], 10);

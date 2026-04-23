@@ -28,7 +28,8 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
-import { QBotEngine, HybridQBotEngine } from './q-bot.js'; // HybridQBotEngine: TEST_BLOCK
+import { QBotEngine, HybridQBotEngine, TrainingQBotEngine } from './q-bot.js'; // HybridQBotEngine/TrainingQBotEngine: TEST_BLOCK
+import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
 import {
     Update,
@@ -49,8 +50,15 @@ import * as MP from './multiplayer.js';
 const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
 
 import { AI_AVATARS, DEFAULT_AVATAR } from './constants.js';
+
 import * as Economy from './economy.js';
 import * as Audio  from './audio.js';
+
+// ===== TEST_BLOCK_START — appState for training sandbox =====
+export const appState = { isTrainingMode: false };
+const TRAINING_BOT_DELAY = 500; // ms before bot plays in training mode (shorter — reveal window replaces pre-play delay)
+const REVEAL_WINDOW_MS   = 2000; // ms tap-to-pause window after bot card lands
+// ===== TEST_BLOCK_END =====
 
 // ============================================================
 // Config
@@ -178,7 +186,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
-    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq'; // TEST_BLOCK
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
@@ -188,12 +196,20 @@ function _startGame(cfgOverride = null) {
         botfather:      [null, 'shark',  null,       null    ],
         'test-hybrid':  [null, null,     null,       null    ], // TEST_BLOCK
         'test-pureq':   [null, null,     null,       null    ], // TEST_BLOCK
+        'test-training':[null, null,     null,       null    ], // TEST_BLOCK
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     // ===== TEST_BLOCK_START =====
-    if      (cfg.difficulty === 'test-hybrid') _engines[1] = new HybridQBotEngine();
-    else if (cfg.difficulty === 'test-pureq')  _engines[1] = new QBotEngine();
+    if      (cfg.difficulty === 'test-hybrid')   _engines[1] = new HybridQBotEngine();
+    else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
+    else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
+    // ===== TEST_BLOCK_END =====
+    // ===== TEST_BLOCK_START — reset sandbox on new game =====
+    if (appState.isTrainingMode) {
+        Object.assign(sandbox, new (Object.getPrototypeOf(sandbox).constructor)());
+        sandbox.ensureInitialized().catch(console.warn);
+    }
     // ===== TEST_BLOCK_END =====
 
     // ---- Players ----
@@ -203,7 +219,9 @@ function _startGame(cfgOverride = null) {
         PLAYER_NAMES[1] = 'The Botfather';
     // ===== TEST_BLOCK_START =====
     } else if (isTestBot) {
-        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid' ? 'Hybrid Q+MCTS' : 'Pure Q-bot';
+        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid' ? 'Hybrid Q+MCTS'
+                        : cfg.difficulty === 'test-training' ? 'Training Bot'
+                        : 'Pure Q-bot';
     }
     // ===== TEST_BLOCK_END =====
     _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS);
@@ -285,7 +303,7 @@ function _startTurn() {
         Update('ENABLE_PLAY', { enabled: false });
         Update('ENABLE_DRAW', { enabled: false });
         Update('START_TIMER', { playerId: PLAYER_IDS[p], isHuman: false });
-        setTimeout(() => _aiTurn(p), _aiDelay());
+        setTimeout(() => _aiTurn(p), appState.isTrainingMode ? TRAINING_BOT_DELAY : _aiDelay());
     }
 }
 
@@ -293,13 +311,61 @@ function _aiTurn(playerIdx) {
     if (!_state || !_gameActive || _state.currentPlayer !== playerIdx) return;
 
     const engine = _engines[playerIdx];
-    const move   = engine.chooseMove(_state);
+    // ===== TEST_BLOCK_START =====
+    const preState = appState.isTrainingMode ? Object.assign({}, _state,
+        { hands: Int32Array.from(_state.hands), pile: Int32Array.from(_state.pile) }
+    ) : null;
+    // ===== TEST_BLOCK_END =====
+    const move = engine.chooseMove(_state);
 
     // Apply first — advanceTree inside _applyAndAdvance saves the subtree
     // before cleanup() would discard _root
-    _applyAndAdvance(move);
+    _applyAndAdvance(move, preState, engine);
     engine.cleanup();
 }
+
+// ===== TEST_BLOCK_START =====
+function _applyTrainingCorrection(preState, botMove, correctedMove, botEngine) {
+    if (!correctedMove || correctedMove === botMove) {
+        // No correction — silent approve MCTS if applicable
+        if (botEngine?.lastMoveSrc === 'mcts') {
+            const key = _encodeHumanState(preState);
+            sandbox.applyMCTSApproval(key, _moveToActLocal(botMove));
+        }
+        setTimeout(_startTurn, POST_MOVE_MS);
+        return;
+    }
+    // Undo bot's move: restore pre-move state and replay with corrected move
+    _state = preState;
+    const key    = _encodeHumanState(preState);
+    const botAct = _moveToActLocal(botMove);
+    const humAct = _moveToActLocal(correctedMove);
+    sandbox.applyCorrection(key, humAct, botAct);
+    _applyAndAdvance(correctedMove);
+}
+
+function _encodeHumanState(s) {
+    // Mirror of encodeState from q-bot.js for recording human moves
+    const BOT_SEAT = 1;
+    const RM = [0x00000F,0x0000F0,0x000F00,0x00F000,0x0F0000,0xF00000];
+    const h   = s.hands[BOT_SEAT], oh = s.hands[1 - BOT_SEAT];
+    const p2  = s.pileSize >= 2 ? (s.pile[s.pileSize-2]>>2 <= 1 ? 0 : s.pile[s.pileSize-2]>>2 <= 3 ? 1 : 2) : 3;
+    const p3  = s.pileSize >= 3 ? (s.pile[s.pileSize-3]>>2 <= 1 ? 0 : s.pile[s.pileSize-3]>>2 <= 3 ? 1 : 2) : 3;
+    const bkt = n => n>=3?3:n;
+    const myH = Math.min(_popcount(h), 12), opH = Math.min(_popcount(oh), 12);
+    const myA = _popcount(h & RM[5]);
+    const pd  = s.pileSize-1 <= 0 ? 0 : s.pileSize-1 <= 2 ? 1 : 2;
+    return `${s.topRankIdx}|${p2}|${p3}|${bkt(_popcount(h&(RM[0]|RM[1])))}|${bkt(_popcount(h&(RM[2]|RM[3])))}|${myA}|${myH}|${opH}|${pd}|${bkt(_popcount(oh&(RM[4]|RM[5])))}`;
+}
+
+const ACT_QUAD_L = 6, ACT_DRAW_L = 7;
+function _moveToActLocal(m) {
+    if (m & DRAW_FLAG) return ACT_DRAW_L;
+    const bits = m & 0xFFFFFF;
+    if (_popcount(bits) >= 3) return ACT_QUAD_L;
+    return (31 - Math.clz32(bits)) >> 2;
+}
+// ===== TEST_BLOCK_END =====
 
 function _humanPlayCards(cards) {
     const hi = _mpMode ? _myMPIdx : HUMAN;
@@ -316,6 +382,12 @@ function _humanPlayCards(cards) {
     }
 
     Audio.triggerHaptic('light');
+    // ===== TEST_BLOCK_START — record human move for training =====
+    if (appState.isTrainingMode) {
+        const key = _encodeHumanState(_state);
+        sandbox.recordHumanMove(key, _moveToActLocal(move));
+    }
+    // ===== TEST_BLOCK_END =====
     if (_mpMode) _applyMPMove(move);
     else         _applyAndAdvance(move);
 }
@@ -332,7 +404,7 @@ function _humanDraw() {
     else         _applyAndAdvance(drawMove);
 }
 
-function _applyAndAdvance(move) {
+function _applyAndAdvance(move, preState = null, botEngine = null) {
     if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
 
     // Notify all AI engines of this move (before state changes so pile is intact)
@@ -373,6 +445,18 @@ function _applyAndAdvance(move) {
         return;
     }
 
+    // ===== TEST_BLOCK_START — reveal window in training mode for AI moves =====
+    const isTrainingAiMove = appState.isTrainingMode && preState !== null;
+    if (isTrainingAiMove) {
+        const dm = decodeMove(move);
+        Update('SHOW_REVEAL_WINDOW', {
+            preState, move, botEngine,
+            onCorrection: (correctedMove) => _applyTrainingCorrection(preState, move, correctedMove, botEngine),
+            onApprove:    () => setTimeout(_startTurn, POST_MOVE_MS),
+        });
+        return;
+    }
+    // ===== TEST_BLOCK_END =====
     setTimeout(_startTurn, POST_MOVE_MS);
 }
 
@@ -479,6 +563,22 @@ function _endGame() {
     Update('ENABLE_DRAW', { enabled: false });
 
     _renderHands(decodeState(_state));
+
+    // ===== TEST_BLOCK_START — training backprop + flush =====
+    if (appState.isTrainingMode) {
+        const humanSeat0 = HUMAN;
+        let winner = null;
+        for (let p = 0; p < NUM_PLAYERS; p++) {
+            if (_state.eliminated & (1 << p)) continue;
+            winner = (p === humanSeat0) ? 'human' : 'bot';
+            break;
+        }
+        if (winner) {
+            sandbox.applyBackprop(winner);
+            sandbox.flushToFirebase().catch(console.warn);
+        }
+    }
+    // ===== TEST_BLOCK_END =====
 
     for (let p = 0; p < NUM_PLAYERS; p++) {
         if (!(_state.eliminated & (1 << p))) {

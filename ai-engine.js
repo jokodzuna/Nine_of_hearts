@@ -558,6 +558,11 @@ export class ISMCTSEngine {
 
         const best = this._bestMove(this._root);
 
+        // Expose win probability for training debug panel (root wins/visits ratio)
+        this.lastWinProb = (this._root && this._root.visits > 0)
+            ? this._root.wins / this._root.visits
+            : null;
+
         // Safety fallback: if tree is empty (game already over), play first legal move
         if (best === null) {
             const moves = getPossibleMoves(state);

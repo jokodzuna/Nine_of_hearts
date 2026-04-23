@@ -639,7 +639,8 @@ function _updateProfileWidget() {
 
 function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather',
-        'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot' }; // TEST_BLOCK
+        'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot',
+        'test-training': '🎓 Training Sandbox' }; // TEST_BLOCK
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1193,8 +1194,9 @@ function _buildTestBotPanel() {
     const list  = document.createElement('div');
     list.className = 'option-list';
     const opts = [
-        ['test-hybrid', 'Hybrid Q+MCTS'],
-        ['test-pureq',  'Pure Q-bot'],
+        ['test-hybrid',   'Hybrid Q+MCTS'],
+        ['test-pureq',    'Pure Q-bot'],
+        ['test-training', '🎓 Training Sandbox'],
     ];
     for (const [value, label] of opts) {
         const btn = document.createElement('button');
@@ -1206,6 +1208,11 @@ function _buildTestBotPanel() {
             btn.classList.add('selected');
             _difficulty  = value;
             _numPlayers  = 2;
+            // ===== TEST_BLOCK_START =====
+            import('./game-controller.js').then(m => {
+                m.appState.isTrainingMode = (value === 'test-training');
+            });
+            // ===== TEST_BLOCK_END =====
             _updateMenuBtnLabels();
         });
         list.appendChild(btn);

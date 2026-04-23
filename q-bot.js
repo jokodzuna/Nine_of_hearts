@@ -4,6 +4,7 @@
 
 import { getPossibleMoves, DRAW_FLAG } from './game-logic.js';
 import { ISMCTSEngine } from './ai-engine.js'; // TEST_BLOCK
+import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
 // ---- Constants (must match q-trainer.mjs exactly) -------------------
 const BOT      = 1;
@@ -153,5 +154,67 @@ export class HybridQBotEngine {
     resetKnowledge()  { this._turnCount = 0; this._mcts.resetKnowledge(); }
     observeMove(m, p) { this._mcts.observeMove(m, p); }
     advanceTree(m, p) { this._mcts.advanceTree(m, p); }
+}
+// ===== TEST_BLOCK_END =====
+
+// ===== TEST_BLOCK_START — TrainingQBotEngine (Training Sandbox, remove for production) =====
+export class TrainingQBotEngine {
+    constructor() {
+        this._table      = null;   // loaded from Firebase q-table-test
+        this._fallback   = new ISMCTSEngine('qbotFallback');
+        this.lastMoveSrc = null;   // 'qtable' | 'mcts'
+        this.lastWinProb = null;   // from MCTS when fallback used
+        sandbox.loadQTable().then(t => { this._table = t; });
+    }
+
+    chooseMove(state) {
+        const moves = getPossibleMoves(state);
+        if (!moves.length) return 0;
+
+        const key  = encodeState(state);
+        const qrow = this._table?.[key];
+
+        let chosenMove, chosenAct;
+
+        if (!this._table || !qrow) {
+            // Unknown state → MCTS fallback
+            chosenMove          = this._fallback.chooseMove(state);
+            this.lastMoveSrc    = 'mcts';
+            this.lastWinProb    = this._fallback.lastWinProb ?? null;
+            chosenAct           = moveToAct(chosenMove);
+        } else {
+            const legal = [...new Set(moves.map(moveToAct))];
+            let best = legal[0], bv = -Infinity;
+            for (const a of legal) {
+                const v = qrow[a] ?? Infinity;
+                if (v > bv) { bv = v; best = a; }
+            }
+            const resolved = actToMove(moves, best);
+            if (resolved === null) {
+                chosenMove       = this._fallback.chooseMove(state);
+                this.lastMoveSrc = 'mcts';
+                this.lastWinProb = this._fallback.lastWinProb ?? null;
+                chosenAct        = moveToAct(chosenMove);
+            } else {
+                chosenMove       = resolved;
+                this.lastMoveSrc = 'qtable';
+                this.lastWinProb = null;
+                chosenAct        = best;
+            }
+        }
+
+        sandbox.recordBotMove(key, chosenAct);
+        return chosenMove;
+    }
+
+    /** Reload q-table from Firebase (called after a correction is flushed). */
+    async refreshTable() {
+        this._table = await sandbox.loadQTable();
+    }
+
+    cleanup()         { this._fallback.cleanup(); }
+    resetKnowledge()  { this._fallback.resetKnowledge(); }
+    observeMove(m, p) { this._fallback.observeMove(m, p); }
+    advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
 // ===== TEST_BLOCK_END =====

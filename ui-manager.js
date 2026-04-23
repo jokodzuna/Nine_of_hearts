@@ -40,6 +40,12 @@ let _longPressTimer = null;
 
 let _connOverlay = null;  // full-screen connection-lost overlay element
 
+// ===== TEST_BLOCK_START — training sandbox UI state =====
+let _revealTimer    = null;  // setTimeout handle for the 2s reveal window
+let _revealPayload  = null;  // { preState, move, botEngine, onCorrection, onApprove }
+let _debugPanel     = null;  // persistent debug-panel DOM element
+// ===== TEST_BLOCK_END =====
+
 let _timer = { rafId: null, endTime: 0, isHuman: false, lastTick: null, container: null };
 
 // ============================================================
@@ -210,6 +216,17 @@ export function Update(command, payload = {}) {
             if (infoId) _setAvatarImg(`#${infoId} .avatar`, payload.avatarPath);
             break;
         }
+        // ===== TEST_BLOCK_START — training sandbox commands =====
+        case 'SHOW_REVEAL_WINDOW':
+            _startRevealWindow(payload);
+            break;
+        case 'UPDATE_DEBUG_PANEL':
+            _updateDebugPanel(payload);
+            break;
+        case 'HIDE_DEBUG_PANEL':
+            if (_debugPanel) { _debugPanel.remove(); _debugPanel = null; }
+            break;
+        // ===== TEST_BLOCK_END =====
         default:
             console.warn(`[ui-manager] Unknown command: "${command}"`);
     }
@@ -802,3 +819,179 @@ _updateLayoutDebug();
 if (location.search.includes('debug=1') || /#debug\b/i.test(location.hash)) {
     setInterval(_updateLayoutDebug, 250);
 }
+
+// ===== TEST_BLOCK_START — Training Sandbox UI (reveal window, correction modal, debug panel) =====
+
+const REVEAL_WINDOW_MS = 2000;
+
+/**
+ * Start the 2s tap-to-pause reveal window after a bot card lands on the pile.
+ * If the pile top card is tapped, open the correction modal.
+ * Otherwise, silently approve after the window expires.
+ */
+function _startRevealWindow(payload) {
+    _revealPayload = payload;
+
+    // Show debug panel for this move
+    const eng = payload.botEngine;
+    _updateDebugPanel({
+        moveSrc:   eng?.lastMoveSrc ?? '?',
+        winProb:   eng?.lastWinProb ?? null,
+        cardKnowledge: eng?._fallback?._cardKnowledge ?? eng?._cardKnowledge ?? null,
+    });
+
+    // Highlight the pile top card as tappable
+    const pileEl = document.getElementById('pile');
+    if (pileEl) pileEl.classList.add('reveal-window-active');
+
+    // One-time tap listener on the pile
+    const _onPileTap = (e) => {
+        e.stopPropagation();
+        _endRevealWindow(false);
+        _openCorrectionModal(payload);
+    };
+    pileEl?.addEventListener('click', _onPileTap, { once: true });
+
+    // Auto-approve after window expires
+    _revealTimer = setTimeout(() => {
+        pileEl?.removeEventListener('click', _onPileTap);
+        _endRevealWindow(true);
+        payload.onApprove?.();
+    }, REVEAL_WINDOW_MS);
+}
+
+function _endRevealWindow(approved) {
+    if (_revealTimer) { clearTimeout(_revealTimer); _revealTimer = null; }
+    const pileEl = document.getElementById('pile');
+    if (pileEl) pileEl.classList.remove('reveal-window-active');
+    _revealPayload = null;
+}
+
+/**
+ * Open the correction modal — shows bot's played card, debug info,
+ * and human's hand as selectable alternatives.
+ */
+function _openCorrectionModal(payload) {
+    const { preState, move, botEngine, onCorrection } = payload;
+
+    // Build modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'training-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'training-modal';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'training-modal-header';
+    const src = botEngine?.lastMoveSrc ?? '?';
+    const prob = botEngine?.lastWinProb != null
+        ? `${(botEngine.lastWinProb * 100).toFixed(1)}%`
+        : 'N/A';
+    header.innerHTML = `<strong>Correct this move?</strong>
+        <div class="training-modal-meta">Source: <b>${src.toUpperCase()}</b> &nbsp;|&nbsp; Win prob: <b>${prob}</b></div>`;
+    modal.appendChild(header);
+
+    // Bot played card display
+    const botSection = document.createElement('div');
+    botSection.className = 'training-modal-section';
+    botSection.innerHTML = '<div class="training-modal-label">Bot played:</div>';
+    const botCardEl = CardHelpers.createCardFaceUp(move & 0xFFFFFF
+        ? (31 - Math.clz32((move & 0xFFFFFF) & (-(move & 0xFFFFFF)))) >> 2
+        : 0, 0);
+    botCardEl.classList.add('training-card', 'training-card-bot');
+    botSection.appendChild(botCardEl);
+    modal.appendChild(botSection);
+
+    // Human's hand as correction options
+    const humanSection = document.createElement('div');
+    humanSection.className = 'training-modal-section';
+    humanSection.innerHTML = '<div class="training-modal-label">Play instead (tap to correct):</div>';
+
+    const handArea = document.createElement('div');
+    handArea.className = 'training-modal-hand';
+
+    // Get legal moves from the pre-move state for the bot's seat (player 1)
+    const { getPossibleMoves: gpm } = window._gameLogicForTraining ?? {};
+    const hand = preState.hands[1];
+    let mask = hand;
+    while (mask) {
+        const lb   = mask & (-mask);
+        mask       &= ~lb;
+        const bit  = 31 - Math.clz32(lb);
+        const rank = bit >> 2;
+        const suit = bit & 3;
+        const cardEl = CardHelpers.createCardFaceUp(rank, suit);
+        cardEl.classList.add('training-card');
+        const cardMove = lb; // single-card move bitmask
+        cardEl.addEventListener('click', () => {
+            overlay.remove();
+            onCorrection?.(cardMove);
+        });
+        handArea.appendChild(cardEl);
+    }
+    humanSection.appendChild(handArea);
+    modal.appendChild(humanSection);
+
+    // Comment input
+    const commentSection = document.createElement('div');
+    commentSection.className = 'training-modal-section';
+    const commentInput = document.createElement('input');
+    commentInput.type        = 'text';
+    commentInput.placeholder = 'Optional comment…';
+    commentInput.className   = 'training-modal-comment';
+    commentSection.appendChild(commentInput);
+    modal.appendChild(commentSection);
+
+    // Buttons
+    const btnRow = document.createElement('div');
+    btnRow.className = 'training-modal-btns';
+
+    const keepBtn = document.createElement('button');
+    keepBtn.textContent = 'Keep Bot Move';
+    keepBtn.className   = 'training-modal-btn training-modal-btn-keep';
+    keepBtn.onclick = () => {
+        overlay.remove();
+        if (commentInput.value.trim()) {
+            import('./training-sandbox.js').then(m => m.sandbox.addComment(commentInput.value.trim()));
+        }
+        onCorrection?.(null);
+    };
+
+    btnRow.appendChild(keepBtn);
+    modal.appendChild(btnRow);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
+
+/** Update (or create) the persistent debug panel in the top-right corner. */
+function _updateDebugPanel({ moveSrc, winProb, cardKnowledge }) {
+    if (!_debugPanel) {
+        _debugPanel = document.createElement('div');
+        _debugPanel.className = 'training-debug-panel';
+        document.body.appendChild(_debugPanel);
+    }
+
+    const probTxt = winProb != null ? `${(winProb * 100).toFixed(1)}%` : '—';
+    const srcBadge = moveSrc === 'qtable'
+        ? '<span class="dbg-badge dbg-qtable">Q-TABLE</span>'
+        : moveSrc === 'mcts'
+            ? '<span class="dbg-badge dbg-mcts">MCTS</span>'
+            : '<span class="dbg-badge">—</span>';
+
+    let knownTxt = '—';
+    if (cardKnowledge) {
+        const known = Object.values(cardKnowledge).reduce((s, m) => {
+            let c = m; let n = 0;
+            while (c) { c &= c-1; n++; }
+            return s + n;
+        }, 0);
+        knownTxt = `${known} cards`;
+    }
+
+    _debugPanel.innerHTML = `
+        <div class="dbg-row">${srcBadge} <span class="dbg-label">Win prob:</span> <b>${probTxt}</b></div>
+        <div class="dbg-row"><span class="dbg-label">Known opp cards:</span> <b>${knownTxt}</b></div>
+    `;
+}
+// ===== TEST_BLOCK_END =====

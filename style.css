@@ -767,6 +767,71 @@ body.welcome-active #tapToStart {
 .test-bot-btn { border-color: rgba(255,200,50,0.5) !important; color: #ffd84a !important; }
 .test-bot-btn:hover { background: rgba(255,200,50,0.15) !important; }
 .option-sep { border: none; border-top: 1px solid rgba(255,255,255,0.15); margin: 2px 0; }
+
+/* ---- Reveal window: pulsing pile highlight ---- */
+#pile.reveal-window-active {
+    outline: 3px solid rgba(255, 220, 50, 0.85);
+    outline-offset: 4px;
+    animation: reveal-pulse 0.6s ease-in-out infinite alternate;
+    cursor: pointer;
+}
+@keyframes reveal-pulse {
+    from { outline-color: rgba(255,220,50,0.5); }
+    to   { outline-color: rgba(255,220,50,1.0); }
+}
+
+/* ---- Correction modal ---- */
+.training-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+}
+.training-modal {
+    background: #1a1a2e;
+    border: 1px solid rgba(255,220,50,0.4);
+    border-radius: 14px;
+    padding: 18px 20px;
+    width: min(90vw, 380px);
+    color: #fff;
+    font-family: inherit;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.training-modal-header { margin-bottom: 12px; font-size: 1rem; }
+.training-modal-meta   { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
+.training-modal-section { margin-bottom: 12px; }
+.training-modal-label  { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-bottom: 6px; }
+.training-modal-hand   { display: flex; flex-wrap: wrap; gap: 6px; }
+.training-card         { width: 44px; height: 66px; border-radius: 5px; cursor: pointer;
+                          transition: transform 0.15s; }
+.training-card:hover   { transform: translateY(-4px); }
+.training-card-bot     { outline: 2px solid rgba(255,80,80,0.7); cursor: default; }
+.training-modal-comment {
+    width: 100%; box-sizing: border-box;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px; color: #fff; padding: 6px 8px; font-size: 0.85rem;
+}
+.training-modal-btns   { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.training-modal-btn    { padding: 7px 16px; border-radius: 7px; border: none; cursor: pointer;
+                          font-size: 0.85rem; font-weight: 600; }
+.training-modal-btn-keep { background: rgba(255,255,255,0.12); color: #fff; }
+.training-modal-btn-keep:hover { background: rgba(255,255,255,0.22); }
+
+/* ---- Debug panel ---- */
+.training-debug-panel {
+    position: fixed; top: 10px; right: 10px;
+    background: rgba(10,10,30,0.88);
+    border: 1px solid rgba(255,220,50,0.35);
+    border-radius: 8px; padding: 8px 12px;
+    font-size: 0.75rem; color: rgba(255,255,255,0.85);
+    z-index: 8888; pointer-events: none;
+    min-width: 160px;
+}
+.dbg-row   { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.dbg-label { color: rgba(255,255,255,0.5); }
+.dbg-badge { padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; }
+.dbg-qtable { background: rgba(50,200,100,0.25); color: #5dde8a; border: 1px solid #5dde8a44; }
+.dbg-mcts   { background: rgba(80,140,255,0.25); color: #7eb4ff; border: 1px solid #7eb4ff44; }
 /* ===== TEST_BLOCK_END ===== */
 
 @media (orientation: portrait) {

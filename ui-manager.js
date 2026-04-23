@@ -18,6 +18,7 @@
 // ============================================================
 
 import { HUMAN_ID, SIDE_IDS, INFO_ID, TURN_DURATION_MS, DEFAULT_AVATAR } from './constants.js';
+import { RANK_NAMES, SUIT_NAMES } from './game-logic.js'; // TEST_BLOCK — training modal card rendering
 import * as Audio        from './audio.js';
 import * as CardHelpers  from './card-helpers.js';
 import * as Animations   from './animations.js';
@@ -835,9 +836,9 @@ function _startRevealWindow(payload) {
     // Show debug panel for this move
     const eng = payload.botEngine;
     _updateDebugPanel({
-        moveSrc:   eng?.lastMoveSrc ?? '?',
-        winProb:   eng?.lastWinProb ?? null,
-        cardKnowledge: eng?._fallback?._cardKnowledge ?? eng?._cardKnowledge ?? null,
+        moveSrc:  eng?.lastMoveSrc ?? '?',
+        winProb:  eng?.lastWinProb ?? null,
+        preState: payload.preState,
     });
 
     // Highlight the pile top card as tappable
@@ -899,7 +900,7 @@ function _openCorrectionModal(payload) {
     const _botBits = move & 0xFFFFFF;
     const _botLB   = _botBits ? (_botBits & (-_botBits)) : 1;
     const _botBit  = 31 - Math.clz32(_botLB);
-    const botCardEl = CardHelpers.createCardFaceUp(_botBit >> 2, _botBit & 3);
+    const botCardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[_botBit >> 2], suit: SUIT_NAMES[_botBit & 3] });
     botCardEl.classList.add('training-card', 'training-card-bot');
     botSection.appendChild(botCardEl);
     modal.appendChild(botSection);
@@ -917,9 +918,7 @@ function _openCorrectionModal(payload) {
         if (!bits) continue;
         const lb   = bits & (-bits);
         const bit  = 31 - Math.clz32(lb);
-        const rank = bit >> 2;
-        const suit = bit & 3;
-        const cardEl = CardHelpers.createCardFaceUp(rank, suit);
+        const cardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[bit >> 2], suit: SUIT_NAMES[bit & 3] });
         cardEl.classList.add('training-card');
         cardEl.addEventListener('click', () => {
             overlay.remove();
@@ -962,7 +961,7 @@ function _openCorrectionModal(payload) {
 }
 
 /** Update (or create) the persistent debug panel in the top-right corner. */
-function _updateDebugPanel({ moveSrc, winProb, cardKnowledge }) {
+function _updateDebugPanel({ moveSrc, winProb, preState }) {
     if (!_debugPanel) {
         _debugPanel = document.createElement('div');
         _debugPanel.className = 'training-debug-panel';
@@ -976,19 +975,18 @@ function _updateDebugPanel({ moveSrc, winProb, cardKnowledge }) {
             ? '<span class="dbg-badge dbg-mcts">MCTS</span>'
             : '<span class="dbg-badge">—</span>';
 
-    let knownTxt = '—';
-    if (cardKnowledge) {
-        const known = Object.values(cardKnowledge).reduce((s, m) => {
-            let c = m; let n = 0;
-            while (c) { c &= c-1; n++; }
-            return s + n;
-        }, 0);
-        knownTxt = `${known} cards`;
+    // In 2-player mode all 24 cards are dealt so opponent hand is fully determined
+    let oppTxt = '—';
+    if (preState) {
+        let h = preState.hands[0], n = 0;
+        while (h) { h &= h - 1; n++; }
+        const label = preState.numPlayers === 2 ? '2P: full info' : 'cards tracked';
+        oppTxt = `${n} (${label})`;
     }
 
     _debugPanel.innerHTML = `
         <div class="dbg-row">${srcBadge} <span class="dbg-label">Win prob:</span> <b>${probTxt}</b></div>
-        <div class="dbg-row"><span class="dbg-label">Known opp cards:</span> <b>${knownTxt}</b></div>
+        <div class="dbg-row"><span class="dbg-label">Opp hand:</span> <b>${oppTxt}</b></div>
     `;
 }
 // ===== TEST_BLOCK_END =====

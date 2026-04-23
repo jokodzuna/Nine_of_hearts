@@ -803,9 +803,16 @@ body.welcome-active #tapToStart {
 .training-modal-label  { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-bottom: 6px; }
 .training-modal-hand   { display: flex; flex-wrap: wrap; gap: 6px; }
 .training-card         { width: 44px; height: 66px; border-radius: 5px; cursor: pointer;
-                          transition: transform 0.15s; }
-.training-card:hover   { transform: translateY(-4px); }
+                          opacity: 1 !important; transform: none !important;
+                          transition: transform 0.15s; overflow: hidden; }
+.training-card:hover   { transform: translateY(-4px) !important; }
 .training-card-bot     { outline: 2px solid rgba(255,80,80,0.7); cursor: default; }
+.training-draw-btn     { display: flex; align-items: center; justify-content: center;
+                          width: 66px; height: 66px; border-radius: 5px; cursor: pointer;
+                          background: rgba(80,140,255,0.2); border: 2px solid rgba(80,140,255,0.6);
+                          color: #7eb4ff; font-size: 0.78rem; font-weight: 700; text-align: center;
+                          transition: background 0.15s; user-select: none; }
+.training-draw-btn:hover { background: rgba(80,140,255,0.35); }
 .training-modal-comment {
     width: 100%; box-sizing: border-box;
     background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);

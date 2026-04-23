@@ -893,19 +893,26 @@ function _openCorrectionModal(payload) {
         <div class="training-modal-meta">Source: <b>${src.toUpperCase()}</b> &nbsp;|&nbsp; Win prob: <b>${prob}</b></div>`;
     modal.appendChild(header);
 
-    // Bot played card display
+    // Bot's move display (play or draw)
     const botSection = document.createElement('div');
     botSection.className = 'training-modal-section';
-    botSection.innerHTML = '<div class="training-modal-label">Bot played:</div>';
-    const _botBits = move & 0xFFFFFF;
-    const _botLB   = _botBits ? (_botBits & (-_botBits)) : 1;
-    const _botBit  = 31 - Math.clz32(_botLB);
-    const botCardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[_botBit >> 2], suit: SUIT_NAMES[_botBit & 3] });
-    botCardEl.classList.add('training-card', 'training-card-bot');
-    botSection.appendChild(botCardEl);
+    if (move & (1 << 24)) {
+        // Bot drew cards
+        const drawCount = (move & 3) + 1;
+        botSection.innerHTML = `<div class="training-modal-label">Bot drew:</div>
+            <div class="training-draw-btn" style="cursor:default; opacity:0.7">Drew<br>${drawCount} card${drawCount > 1 ? 's' : ''}</div>`;
+    } else {
+        botSection.innerHTML = '<div class="training-modal-label">Bot played:</div>';
+        const _botBits = move & 0xFFFFFF;
+        const _botLB   = _botBits ? (_botBits & (-_botBits)) : 1;
+        const _botBit  = 31 - Math.clz32(_botLB);
+        const botCardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[_botBit >> 2], suit: SUIT_NAMES[_botBit & 3] });
+        botCardEl.classList.add('training-card', 'training-card-bot');
+        botSection.appendChild(botCardEl);
+    }
     modal.appendChild(botSection);
 
-    // Human's correction options — legal play moves from pre-state
+    // Correction options — all legal moves (plays + draw)
     const humanSection = document.createElement('div');
     humanSection.className = 'training-modal-section';
     humanSection.innerHTML = '<div class="training-modal-label">Play instead (tap to correct):</div>';
@@ -914,17 +921,31 @@ function _openCorrectionModal(payload) {
     handArea.className = 'training-modal-hand';
 
     for (const legalMove of (payload.legalMoves ?? [])) {
-        const bits = legalMove & 0xFFFFFF;
-        if (!bits) continue;
-        const lb   = bits & (-bits);
-        const bit  = 31 - Math.clz32(lb);
-        const cardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[bit >> 2], suit: SUIT_NAMES[bit & 3] });
-        cardEl.classList.add('training-card');
-        cardEl.addEventListener('click', () => {
-            overlay.remove();
-            onCorrection?.(legalMove);
-        });
-        handArea.appendChild(cardEl);
+        if (legalMove & (1 << 24)) {
+            // Draw option
+            const drawCount = (legalMove & 3) + 1;
+            const drawBtn = document.createElement('div');
+            drawBtn.className = 'training-draw-btn';
+            drawBtn.textContent = `Draw\n${drawCount}`;
+            drawBtn.style.whiteSpace = 'pre';
+            drawBtn.addEventListener('click', () => {
+                overlay.remove();
+                onCorrection?.(legalMove);
+            });
+            handArea.appendChild(drawBtn);
+        } else {
+            const bits = legalMove & 0xFFFFFF;
+            if (!bits) continue;
+            const lb   = bits & (-bits);
+            const bit  = 31 - Math.clz32(lb);
+            const cardEl = CardHelpers.createFaceUpCard({ rank: RANK_NAMES[bit >> 2], suit: SUIT_NAMES[bit & 3] });
+            cardEl.classList.add('training-card');
+            cardEl.addEventListener('click', () => {
+                overlay.remove();
+                onCorrection?.(legalMove);
+            });
+            handArea.appendChild(cardEl);
+        }
     }
     humanSection.appendChild(handArea);
     modal.appendChild(humanSection);

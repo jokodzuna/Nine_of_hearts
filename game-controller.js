@@ -447,7 +447,7 @@ function _applyAndAdvance(move, preState = null, botEngine = null) {
 
     // ===== TEST_BLOCK_START — reveal window in training mode for AI moves =====
     if (appState.isTrainingMode && preState !== null) {
-        const legalMoves = getPossibleMoves(preState).filter(m => !(m & DRAW_FLAG));
+        const legalMoves = getPossibleMoves(preState); // includes draw option
         Update('SHOW_REVEAL_WINDOW', {
             preState, move, botEngine, legalMoves,
             onCorrection: (correctedMove) => _applyTrainingCorrection(preState, move, correctedMove, botEngine),

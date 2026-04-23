@@ -207,7 +207,7 @@ function _startGame(cfgOverride = null) {
     // ===== TEST_BLOCK_END =====
     // ===== TEST_BLOCK_START — reset sandbox on new game =====
     if (appState.isTrainingMode) {
-        Object.assign(sandbox, new (Object.getPrototypeOf(sandbox).constructor)());
+        sandbox.reset();
         sandbox.ensureInitialized().catch(console.warn);
     }
     // ===== TEST_BLOCK_END =====
@@ -446,11 +446,10 @@ function _applyAndAdvance(move, preState = null, botEngine = null) {
     }
 
     // ===== TEST_BLOCK_START — reveal window in training mode for AI moves =====
-    const isTrainingAiMove = appState.isTrainingMode && preState !== null;
-    if (isTrainingAiMove) {
-        const dm = decodeMove(move);
+    if (appState.isTrainingMode && preState !== null) {
+        const legalMoves = getPossibleMoves(preState).filter(m => !(m & DRAW_FLAG));
         Update('SHOW_REVEAL_WINDOW', {
-            preState, move, botEngine,
+            preState, move, botEngine, legalMoves,
             onCorrection: (correctedMove) => _applyTrainingCorrection(preState, move, correctedMove, botEngine),
             onApprove:    () => setTimeout(_startTurn, POST_MOVE_MS),
         });

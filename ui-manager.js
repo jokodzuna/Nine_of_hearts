@@ -896,14 +896,15 @@ function _openCorrectionModal(payload) {
     const botSection = document.createElement('div');
     botSection.className = 'training-modal-section';
     botSection.innerHTML = '<div class="training-modal-label">Bot played:</div>';
-    const botCardEl = CardHelpers.createCardFaceUp(move & 0xFFFFFF
-        ? (31 - Math.clz32((move & 0xFFFFFF) & (-(move & 0xFFFFFF)))) >> 2
-        : 0, 0);
+    const _botBits = move & 0xFFFFFF;
+    const _botLB   = _botBits ? (_botBits & (-_botBits)) : 1;
+    const _botBit  = 31 - Math.clz32(_botLB);
+    const botCardEl = CardHelpers.createCardFaceUp(_botBit >> 2, _botBit & 3);
     botCardEl.classList.add('training-card', 'training-card-bot');
     botSection.appendChild(botCardEl);
     modal.appendChild(botSection);
 
-    // Human's hand as correction options
+    // Human's correction options — legal play moves from pre-state
     const humanSection = document.createElement('div');
     humanSection.className = 'training-modal-section';
     humanSection.innerHTML = '<div class="training-modal-label">Play instead (tap to correct):</div>';
@@ -911,22 +912,18 @@ function _openCorrectionModal(payload) {
     const handArea = document.createElement('div');
     handArea.className = 'training-modal-hand';
 
-    // Get legal moves from the pre-move state for the bot's seat (player 1)
-    const { getPossibleMoves: gpm } = window._gameLogicForTraining ?? {};
-    const hand = preState.hands[1];
-    let mask = hand;
-    while (mask) {
-        const lb   = mask & (-mask);
-        mask       &= ~lb;
+    for (const legalMove of (payload.legalMoves ?? [])) {
+        const bits = legalMove & 0xFFFFFF;
+        if (!bits) continue;
+        const lb   = bits & (-bits);
         const bit  = 31 - Math.clz32(lb);
         const rank = bit >> 2;
         const suit = bit & 3;
         const cardEl = CardHelpers.createCardFaceUp(rank, suit);
         cardEl.classList.add('training-card');
-        const cardMove = lb; // single-card move bitmask
         cardEl.addEventListener('click', () => {
             overlay.remove();
-            onCorrection?.(cardMove);
+            onCorrection?.(legalMove);
         });
         handArea.appendChild(cardEl);
     }

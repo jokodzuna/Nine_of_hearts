@@ -76,6 +76,16 @@ export class TrainingSandbox {
         }
     }
 
+    /** Reset all per-game state (keeps _initialized flag and Firebase connection). */
+    reset() {
+        this.botMoveHistory   = [];
+        this.humanMoveHistory = [];
+        this._buffer          = {};
+        this._turn            = 0;
+        this._auditLog        = [];
+        this._gameStartTs     = Date.now();
+    }
+
     /**
      * Load the test Q-table from Firebase.
      * Returns { stateKey: {actionId: qValue} } or null on failure.

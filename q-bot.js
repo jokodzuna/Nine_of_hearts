@@ -183,18 +183,38 @@ export class TrainingQBotEngine {
             this.lastWinProb    = this._fallback.lastWinProb ?? null;
             chosenAct           = moveToAct(chosenMove);
         } else {
+            // Only consider actions that have a trained value; skip unknowns
             const legal = [...new Set(moves.map(moveToAct))];
-            let best = legal[0], bv = -Infinity;
+            let best = null, bv = -Infinity;
             for (const a of legal) {
-                const v = qrow[a] ?? Infinity;
-                if (v > bv) { bv = v; best = a; }
+                if (!(a in qrow)) continue; // untrained → skip, not Infinity
+                if (qrow[a] > bv) { bv = qrow[a]; best = a; }
             }
-            const resolved = actToMove(moves, best);
+            const resolved = best !== null ? actToMove(moves, best) : null;
             if (resolved === null) {
+                // No trained actions for this state → MCTS
                 chosenMove       = this._fallback.chooseMove(state);
                 this.lastMoveSrc = 'mcts';
                 this.lastWinProb = this._fallback.lastWinProb ?? null;
                 chosenAct        = moveToAct(chosenMove);
+            } else if (bv < 0) {
+                // All trained values negative — consult MCTS and compare
+                const mctsMove = this._fallback.chooseMove(state);
+                const mctsAct  = moveToAct(mctsMove);
+                const mctsQ    = qrow[mctsAct] ?? null;
+                if (mctsQ === null || mctsQ >= bv) {
+                    // MCTS move is untrained or at least as good → use MCTS
+                    chosenMove       = mctsMove;
+                    this.lastMoveSrc = 'mcts';
+                    this.lastWinProb = this._fallback.lastWinProb ?? null;
+                    chosenAct        = mctsAct;
+                } else {
+                    // Q-table's least-negative beats MCTS's value → use Q-table
+                    chosenMove       = resolved;
+                    this.lastMoveSrc = 'qtable';
+                    this.lastWinProb = null;
+                    chosenAct        = best;
+                }
             } else {
                 chosenMove       = resolved;
                 this.lastMoveSrc = 'qtable';

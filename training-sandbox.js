@@ -44,6 +44,8 @@ export class TrainingSandbox {
         this._auditLog        = [];
         /** Game start timestamp */
         this._gameStartTs     = Date.now();
+        /** Cached Q-table values from last load — used as base for flush arithmetic */
+        this._baseTable       = {};
     }
 
     // ----------------------------------------------------------
@@ -95,10 +97,11 @@ export class TrainingSandbox {
             await this.ensureInitialized();
             const db   = getDB();
             const snap = await get(ref(db, `${FB_QTABLE_PATH}/table`));
-            return snap.exists() ? snap.val() : {};
+            this._baseTable = snap.exists() ? (snap.val() ?? {}) : {};
+            return this._baseTable;
         } catch (e) {
             console.warn('[Sandbox] loadQTable error:', e);
-            return {};
+            return this._baseTable; // return cached copy on failure
         }
     }
 
@@ -177,7 +180,12 @@ export class TrainingSandbox {
         const updates = {};
         for (const [key, actions] of Object.entries(this._buffer)) {
             for (const [actionId, delta] of Object.entries(actions)) {
-                updates[`${FB_QTABLE_PATH}/table/${key}/${actionId}`] = delta;
+                const base   = this._baseTable?.[key]?.[actionId] ?? 0;
+                const newVal = base + delta;
+                updates[`${FB_QTABLE_PATH}/table/${key}/${actionId}`] = newVal;
+                // Update local cache so subsequent games in this session start correctly
+                if (!this._baseTable[key]) this._baseTable[key] = {};
+                this._baseTable[key][actionId] = newVal;
             }
         }
         try {

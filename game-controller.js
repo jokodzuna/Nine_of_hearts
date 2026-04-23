@@ -575,14 +575,13 @@ function _endGame() {
 
     // ===== TEST_BLOCK_START — training backprop + flush =====
     if (appState.isTrainingMode) {
-        const humanSeat0 = HUMAN;
-        let winner = null;
+        // Find the loser (the one player NOT eliminated = still holds cards)
+        let loser = -1;
         for (let p = 0; p < NUM_PLAYERS; p++) {
-            if (_state.eliminated & (1 << p)) continue;
-            winner = (p === humanSeat0) ? 'human' : 'bot';
-            break;
+            if (!(_state.eliminated & (1 << p))) { loser = p; break; }
         }
-        if (winner) {
+        if (loser >= 0) {
+            const winner = (loser === HUMAN) ? 'bot' : 'human'; // winner is the NON-loser
             sandbox.applyBackprop(winner);
             sandbox.flushToFirebase().catch(console.warn);
         }
@@ -627,6 +626,12 @@ function _forceEndGame() {
     _renderHands(decodeState(_state));
 
     // In _forceEndGame all humans cleared their hands — human always survived
+    // ===== TEST_BLOCK_START — training backprop + flush (human won) =====
+    if (appState.isTrainingMode) {
+        sandbox.applyBackprop('human');
+        sandbox.flushToFirebase().catch(console.warn);
+    }
+    // ===== TEST_BLOCK_END =====
     Economy.recordGameResult({
         survived:            true,
         foursPlayedThisGame: _humanFoursThisGame,

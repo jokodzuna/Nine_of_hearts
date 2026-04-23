@@ -207,6 +207,7 @@ function _startGame(cfgOverride = null) {
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
     // ===== TEST_BLOCK_END =====
     // ===== TEST_BLOCK_START — reset sandbox on new game =====
+    console.log(`[GC] _startGame: difficulty=${cfg.difficulty}, appState.isTrainingMode=${appState.isTrainingMode}`);
     if (appState.isTrainingMode) {
         sandbox.reset();
         sandbox.ensureInitialized().catch(console.warn);
@@ -574,6 +575,7 @@ function _endGame() {
     _renderHands(decodeState(_state));
 
     // ===== TEST_BLOCK_START — training backprop + flush =====
+    console.log(`[GC] _endGame called. isTrainingMode=${appState.isTrainingMode}`);
     if (appState.isTrainingMode) {
         // Find the loser (the one player NOT eliminated = still holds cards)
         let loser = -1;
@@ -627,6 +629,7 @@ function _forceEndGame() {
 
     // In _forceEndGame all humans cleared their hands — human always survived
     // ===== TEST_BLOCK_START — training backprop + flush (human won) =====
+    console.log(`[GC] _forceEndGame called. isTrainingMode=${appState.isTrainingMode}`);
     if (appState.isTrainingMode) {
         sandbox.applyBackprop('human');
         sandbox.flushToFirebase().catch(console.warn);

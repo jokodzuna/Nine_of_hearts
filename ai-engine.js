@@ -514,7 +514,10 @@ export class ISMCTSEngine {
             }
         }
 
-        return best;
+        // End-game danger veto: if the chosen move lets any opponent with ≤4
+        // cards finish immediately (unknown pool contains enough same-rank cards
+        // ≥ new top rank), prefer the safest alternative from the tree.
+        return this._safetyCheck(state, rootPlayer, best);
     }
 
     /**
@@ -698,6 +701,72 @@ export class ISMCTSEngine {
             return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / _RHV_DIFF_NORM));
         }
         return Math.max(-1.0, Math.min(1.0, myRHV / _RHV_NORM));
+    }
+
+    /**
+     * End-game danger veto.
+     *
+     * After ISMCTS selects a move, this checks whether it could let any
+     * opponent immediately empty their hand on the very next turn.
+     * The check is cheap (no tree search) and only activates when an
+     * opponent holds ≤ DANGER_CARDS cards.
+     *
+     * A move is "risky" when, after it is played:
+     *   ∃ rank R ≥ new_topRank  such that  unknown_pool[R] >= opponent_hand_size
+     * i.e., there exists a consistent world where the opponent holds a complete
+     * same-rank group and can finish on their next turn.
+     *
+     * If the best ISMCTS move is risky, the method returns the highest-visited
+     * NON-risky alternative, or the original move if none exists.
+     */
+    _safetyCheck(state, rootPlayer, chosenMove) {
+        const DANGER_CARDS = 4;
+        const N = state.numPlayers;
+
+        // Fast exit: no opponent in danger zone
+        let anyDanger = false;
+        for (let p = 0; p < N; p++) {
+            if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
+            if (_popcount(state.hands[p]) <= DANGER_CARDS) { anyDanger = true; break; }
+        }
+        if (!anyDanger) return chosenMove;
+
+        // Build the unknown card pool (cards root player has not seen)
+        let knownMask = state.hands[rootPlayer];
+        for (let i = 0; i < state.pileSize; i++) knownMask |= (1 << state.pile[i]);
+        if (this._pileSeenMask) knownMask |= this._pileSeenMask;
+        const unknownPool = (~knownMask) & 0xFFFFFF;
+
+        // Returns true if `move` could allow an immediate opponent finish
+        const _isRisky = (move) => {
+            if (move & DRAW_FLAG) return false; // draw doesn't set a new top rank
+            const bits       = move & 0xFFFFFF;
+            const lb         = bits & (-bits);
+            const newTopRank = (31 - Math.clz32(lb)) >> 2;
+
+            for (let p = 0; p < N; p++) {
+                if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
+                const opSz = _popcount(state.hands[p]);
+                if (opSz > DANGER_CARDS || opSz === 0) continue;
+
+                for (let r = newTopRank; r < 6; r++) {
+                    if (_popcount(unknownPool & _RANK_MASK[r]) >= opSz) return true;
+                }
+            }
+            return false;
+        };
+
+        if (!_isRisky(chosenMove)) return chosenMove;
+
+        // Chosen move is risky — find the best-visited non-risky alternative
+        let altMove = null, altVisits = -1;
+        for (const [move, child] of this._root.children) {
+            if (!_isRisky(move) && child.visits > altVisits) {
+                altVisits = child.visits;
+                altMove   = move;
+            }
+        }
+        return altMove ?? chosenMove;
     }
 
     /** Backpropagate score from leaf to root. */

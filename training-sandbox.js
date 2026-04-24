@@ -20,7 +20,7 @@ const CORRECTION_BONUS   =  200;   // human correction award
 const CORRECTION_PENALTY = -200;   // bot penalised for corrected move
 const BACKPROP_BASE      =  200;   // base reward for winner's moves
 const BACKPROP_GAMMA     =  0.9;   // discount factor per step from terminal
-const LOSS_PENALTY       = -20;    // small penalty for loser's moves
+
 
 const FB_QTABLE_PATH     = 'q-table-test';
 const FB_LOGS_PATH       = 'teaching_logs';
@@ -152,9 +152,10 @@ export class TrainingSandbox {
      */
     applyBackprop(winner) {
         console.log(`[Training-sandbox] applyBackprop called. Winner: ${winner} | Bot moves: ${this.botMoveHistory.length} | Human moves: ${this.humanMoveHistory.length}`);
-        const winnerHistory = winner === 'bot'   ? this.botMoveHistory   : this.humanMoveHistory;
-        const loserHistory  = winner === 'bot'   ? this.humanMoveHistory : this.botMoveHistory;
+        const winnerHistory = winner === 'bot' ? this.botMoveHistory : this.humanMoveHistory;
 
+        // Winner-only: reward the winner's moves with decaying credit.
+        // Loser moves are NOT penalised — corrections are the only negative signal.
         const n = winnerHistory.length;
         for (let i = 0; i < n; i++) {
             const { stateKey, actionId } = winnerHistory[i];
@@ -163,12 +164,8 @@ export class TrainingSandbox {
             this._deltaQ(stateKey, actionId, reward);
         }
 
-        for (const { stateKey, actionId } of loserHistory) {
-            this._deltaQ(stateKey, actionId, LOSS_PENALTY);
-        }
-
-        this._log({ type: 'backprop', winner, winnerMoves: n, loserMoves: loserHistory.length });
-        console.log(`[Training-sandbox] Backprop done. Buffer size after: ${this._bufferSize()}`);
+        this._log({ type: 'backprop', winner, winnerMoves: n });
+        console.log(`[Training-sandbox] Backprop done (winner-only). Buffer size after: ${this._bufferSize()}`);
     }
 
     // ----------------------------------------------------------

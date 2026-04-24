@@ -660,6 +660,9 @@ function _handleNewGame() {
         // Guest: screen stays; Firebase 'gameStart' triggers _onMPGameStart
     } else {
         _startGame(_lastLocalConfig);
+        // Botfather: the door animation only plays on first launch from the welcome
+        // screen, so _cbDealStart never fires on a rematch.  Trigger the deal now.
+        if (_lastLocalConfig?.difficulty === 'botfather') _triggerDeal();
     }
 }
 

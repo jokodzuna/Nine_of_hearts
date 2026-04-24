@@ -584,7 +584,7 @@ function _onCardTouchStart(e) {
             Audio.playLongSelectSound();
             Audio.triggerHaptic('success');
         }
-    }, 1000);
+    }, 700);
 }
 
 function _onCardTouchMove(e) {

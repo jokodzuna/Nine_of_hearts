@@ -78,7 +78,7 @@ function heuristicMove(moves) {
 export class QBotEngine {
     constructor() {
         this._table    = null;
-        this._fallback = new ISMCTSEngine('qbotFallback');
+        this._fallback = new ISMCTSEngine('shark');
         fetch('./q-table.json')
             .then(r => r.json())
             .then(data => { this._table = data.table; })
@@ -115,7 +115,7 @@ export class QBotEngine {
 export class HybridQBotEngine {
     constructor() {
         this._table     = null;
-        this._mcts      = new ISMCTSEngine('qbotFallback');
+        this._mcts      = new ISMCTSEngine('shark');
         this._turnCount = 0;
         fetch('./q-table.json')
             .then(r => r.json())
@@ -161,7 +161,7 @@ export class HybridQBotEngine {
 export class TrainingQBotEngine {
     constructor() {
         this._table      = null;   // loaded from Firebase q-table-test
-        this._fallback   = new ISMCTSEngine('qbotFallback');
+        this._fallback   = new ISMCTSEngine('shark');
         this.lastMoveSrc = null;   // 'qtable' | 'mcts'
         this.lastWinProb = null;   // from MCTS when fallback used
         sandbox.loadQTable().then(t => { this._table = t; });

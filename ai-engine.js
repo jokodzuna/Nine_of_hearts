@@ -281,6 +281,26 @@ function _computeRHV(hand) {
     return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
 }
 
+// ===== TEST_BLOCK_START — MCTS-ace-50 RHV (remove with mctsAce50 profile for production) =====
+/** Point values for MCTS-ace-50 profile, indexed by rank (0=9 … 5=A). */
+const _ACE50_VALS = new Int16Array([-25, -5, 5, 15, 30, 50]);
+
+/**
+ * Ace-50 RHV: flat sum of per-card values (not averaged).
+ *   Empty hand → +200  (clearing bonus)
+ *   Per card:  9=−25  10=−5  J=+5  Q=+15  K=+30  A=+50
+ */
+function _computeAce50RHV(hand) {
+    if (!hand) return 200;
+    let sum = 0;
+    for (let r = 0; r < 6; r++) {
+        const cnt = _popcount(hand & _RANK_MASK[r]);
+        if (cnt) sum += _ACE50_VALS[r] * cnt;
+    }
+    return sum;
+}
+// ===== TEST_BLOCK_END =====
+
 /**
  * Virtual card count for endgame-switch threshold.
  *
@@ -416,6 +436,23 @@ export class ISMCTSEngine {
             endgameCards:      5,      // endgame triggers at ≤5 cards (not ≤4)
             endgameTurnHorizon: 30,    // max rollout turns in endgame
             linearRhvEndgame:  true,   // linear RHV for depth-hit instead of sigmoid
+        },
+        // ===== TEST_BLOCK_END =====
+
+        // ===== TEST_BLOCK_START — MCTS-ace-50 test profile =====
+        mctsAce50: {
+            name:               'MCTS-ace-50',
+            difficulty:         'Expert',
+            maxIterations:      10000,
+            explorationParam:   0.7,
+            weightStale:        -0.8,
+            maxTime:            3000,
+            maxTurns:           250,
+            useCardTracking:    true,
+            useTreeReuse:       true,
+            endgameCards:       5,     // endgame triggers at ≤5 virtual cards
+            endgameTurnHorizon: 8,     // 4 rounds × 2 players
+            rhvMode:            'ace50',
         },
         // ===== TEST_BLOCK_END =====
     };
@@ -801,6 +838,25 @@ export class ISMCTSEngine {
 
         // Determine scoring mode: Win/Loss when game over OR any active player ≤egCards
         const myCards = _popcount(s.hands[rootPlayer]);
+
+        // ===== TEST_BLOCK_START — MCTS-ace-50 scoring (no win/loss, no sigmoid) =====
+        if (this.profile.rhvMode === 'ace50' && N === 2) {
+            const myVC   = _virtualCount(s.hands[rootPlayer]);
+            const oppVC  = _virtualCount(s.hands[1 - rootPlayer]);
+            const myRHV  = _computeAce50RHV(s.hands[rootPlayer]);
+            const oppRHV = _computeAce50RHV(s.hands[1 - rootPlayer]);
+            if (myVC <= 5 || oppVC <= 5) {
+                // Endgame: absolute myRHV + card-shed bonuses, penalise opp progress
+                // myVC/oppVC < 5 → shed ≥1 card since endgame trigger → +/−10 per card
+                const myBonus  = myVC  < 5 ? (5 - myVC)  * 10 : 0;
+                const oppBonus = oppVC < 5 ? (5 - oppVC) * 10 : 0;
+                return Math.max(-1.0, Math.min(1.0,
+                    ((myRHV + myBonus) - (oppRHV + oppBonus)) / 300));
+            }
+            // Normal phase: differential RHV
+            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 300));
+        }
+        // ===== TEST_BLOCK_END =====
         let useWinLoss = isGameOver(s);
         if (!useWinLoss) {
             for (let p = 0; p < N; p++) {

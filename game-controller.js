@@ -187,24 +187,27 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
-    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training'; // TEST_BLOCK
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
         easy:           [null, 'gambler', 'newbie',  'newbie' ],
         medium:         [null, 'shark',  'gambler', 'gambler'],
         hard:           [null, 'shark',  'shark',   'shark'  ],
-        botfather:      [null, 'shark',  null,       null    ],
+        botfather:      [null, null,    null,       null    ],
         'test-hybrid':  [null, null,     null,       null    ], // TEST_BLOCK
         'test-pureq':   [null, null,     null,       null    ], // TEST_BLOCK
         'test-training':[null, null,     null,       null    ], // TEST_BLOCK
+        'test-ace50':   [null, null,     null,       null    ], // TEST_BLOCK
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     // ===== TEST_BLOCK_START =====
-    if      (cfg.difficulty === 'test-hybrid')   _engines[1] = new HybridQBotEngine();
+    if      (cfg.difficulty === 'botfather')     _engines[1] = new TrainingQBotEngine();
+    else if (cfg.difficulty === 'test-hybrid')   _engines[1] = new HybridQBotEngine();
     else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
+    else if (cfg.difficulty === 'test-ace50')    _engines[1] = new ISMCTSEngine('mctsAce50'); // TEST_BLOCK
     // ===== TEST_BLOCK_END =====
     // ===== TEST_BLOCK_START — reset sandbox on new game =====
     console.log(`[GC] _startGame: difficulty=${cfg.difficulty}, appState.isTrainingMode=${appState.isTrainingMode}`);
@@ -221,8 +224,9 @@ function _startGame(cfgOverride = null) {
         PLAYER_NAMES[1] = 'The Botfather';
     // ===== TEST_BLOCK_START =====
     } else if (isTestBot) {
-        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid' ? 'Hybrid Q+MCTS'
+        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid'   ? 'Hybrid Q+MCTS'
                         : cfg.difficulty === 'test-training' ? 'Training Bot'
+                        : cfg.difficulty === 'test-ace50'    ? 'MCTS-ace-50'
                         : 'Pure Q-bot';
     }
     // ===== TEST_BLOCK_END =====

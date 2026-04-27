@@ -1,0 +1,18 @@
+
+1. I am introducing RHV - relative hand value. It's a sum of values of all cards in your hand devided by the amount of cards in your hand. The higher RHV, the stronger your hand is at that moment in the game. 
+Card values:
+Cleared hand +50
+Ace +25
+King +17
+Queen +12
+Jack +5
+10 -5 (negative value)
+9 -20 (negative value)
+Three 9s and four 10s are treated as one 9 and one 10, because you can get rid of them in one go.
+J,Q,K,A - if you have 4 of a kind you get +5 bonus added to the RHV.
+2. Another variable I am introducing is RHVD - relative hand value difference- in 2 player game it is equal your RHV minus your oponent's RHV
+3. AI only run simulations for 10 turns ahead. There is no point to look too far ahead.
+4. When AI run simulations their goal is not determine win/loose anymore. 
+   4.1 Three or four player game. The goal in simulation is to find a move that leads to the highest RHV 10 turns later. You don't care about other players hands at this point. 
+   4.2 If you reach 2 player game, the simulation goal changes to finding a move that gives the highest positive RHVD 
+5. AI players should have full memory - they have to remember all the cards that have been played. That would apply to sharks only I think, lower levels would have worse memory.

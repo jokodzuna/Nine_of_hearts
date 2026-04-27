@@ -283,8 +283,10 @@ function _startGame(cfgOverride = null) {
         Update('SETUP_PLAYERS', { numPlayers: numForSetup, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
         const maxBotSlot = isTestBot ? 2 : 4; // TEST_BLOCK
         for (let p = 1; p < maxBotSlot; p++) {
-            Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+            Update('SET_PLAYER_AVATAR', { playerId: PLAYER_IDS[p], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+            Update('SET_PLAYER_NAME',   { playerId: PLAYER_IDS[p], name: PLAYER_NAMES[p] });
         }
+        if (_botVsBot) Update('SET_PLAYER_NAME', { playerId: PLAYER_IDS[0], name: PLAYER_NAMES[0] }); // TEST_BLOCK
     }
 
     const hands = {};

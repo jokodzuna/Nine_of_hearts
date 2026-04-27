@@ -72,6 +72,24 @@ const HUMAN_TURN_MS = 15000;  // must match TURN_DURATION_MS in ui-manager.js
 /** Random 2–4 s delay so AI turns feel natural, not robotic. */
 const _aiDelay = () => 2000 + Math.random() * 2000;
 
+// ===== TEST_BLOCK_START — bot-vs-bot mode =====
+let _botVsBot     = false;
+let _botVsBotFast = false;
+const _BOT_LABELS = { mctsAce50: 'MCTS-ace-50', shark: 'Shark', gambler: 'Gambler',
+    newbie: 'Newbie', hybrid: 'Hybrid Q+MCTS', pureq: 'Pure Q-bot', training: 'Training Bot' };
+function _makeBotEngine(key) {
+    switch (key) {
+        case 'mctsAce50': return new ISMCTSEngine('mctsAce50');
+        case 'gambler':   return new ISMCTSEngine('gambler');
+        case 'newbie':    return new ISMCTSEngine('newbie');
+        case 'hybrid':    return new HybridQBotEngine();
+        case 'pureq':     return new QBotEngine();
+        case 'training':  return new TrainingQBotEngine();
+        default:          return new ISMCTSEngine('shark');
+    }
+}
+// ===== TEST_BLOCK_END =====
+
 const PLAYER_IDS = [
     'yourCards',    // 0 — Human (bottom)
     'player1Cards', // 1 — Lisa   (right)
@@ -187,7 +205,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
-    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50'; // TEST_BLOCK
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
@@ -199,6 +217,7 @@ function _startGame(cfgOverride = null) {
         'test-pureq':   [null, null,     null,       null    ], // TEST_BLOCK
         'test-training':[null, null,     null,       null    ], // TEST_BLOCK
         'test-ace50':   [null, null,     null,       null    ], // TEST_BLOCK
+        'test-bot-vs-bot': [null, null,  null,       null    ], // TEST_BLOCK
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
@@ -208,6 +227,15 @@ function _startGame(cfgOverride = null) {
     else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
     else if (cfg.difficulty === 'test-ace50')    _engines[1] = new ISMCTSEngine('mctsAce50'); // TEST_BLOCK
+    else if (cfg.difficulty === 'test-bot-vs-bot') {                                          // TEST_BLOCK
+        _engines[0] = _makeBotEngine(cfg.botP0 ?? 'mctsAce50');                              // TEST_BLOCK
+        _engines[1] = _makeBotEngine(cfg.botP1 ?? 'shark');                                  // TEST_BLOCK
+    }                                                                                         // TEST_BLOCK
+    // ===== TEST_BLOCK_END =====
+    // ===== TEST_BLOCK_START — bot-vs-bot flags =====
+    _botVsBot     = cfg.difficulty === 'test-bot-vs-bot';
+    _botVsBotFast = _botVsBot && !!cfg.botVsBotFast;
+    if (_botVsBot) appState.isTrainingMode = false;
     // ===== TEST_BLOCK_END =====
     // ===== TEST_BLOCK_START — reset sandbox on new game =====
     console.log(`[GC] _startGame: difficulty=${cfg.difficulty}, appState.isTrainingMode=${appState.isTrainingMode}`);
@@ -223,6 +251,9 @@ function _startGame(cfgOverride = null) {
         PLAYER_IDS[1]   = 'player2Cards';   // Botfather sits at top
         PLAYER_NAMES[1] = 'The Botfather';
     // ===== TEST_BLOCK_START =====
+    } else if (cfg.difficulty === 'test-bot-vs-bot') {
+        PLAYER_NAMES[0] = _BOT_LABELS[cfg.botP0] ?? 'Bot A';
+        PLAYER_NAMES[1] = _BOT_LABELS[cfg.botP1] ?? 'Bot B';
     } else if (isTestBot) {
         PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid'   ? 'Hybrid Q+MCTS'
                         : cfg.difficulty === 'test-training' ? 'Training Bot'
@@ -232,7 +263,7 @@ function _startGame(cfgOverride = null) {
     // ===== TEST_BLOCK_END =====
     _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS);
 
-    PLAYER_NAMES[0]     = cfg.playerName || 'Player';
+    if (!_botVsBot) PLAYER_NAMES[0] = cfg.playerName || 'Player'; // TEST_BLOCK: bot-vs-bot sets name above
     _gameActive         = true;
     _gameStartTime      = Date.now();
     _humanMaxCards      = 0;
@@ -299,7 +330,7 @@ function _startTurn() {
     const turnMsg = `${PLAYER_NAMES[p]}'s turn  ·  Top: ${ds.topCard.rank}${ds.topCard.suit}`;
     Update('SHOW_MESSAGE', { text: turnMsg });
 
-    if (p === HUMAN) {
+    if (p === HUMAN && !_botVsBot) {
         _updateDrawBtn(drawCount);
         Update('ENABLE_PLAY', { enabled: true });
         Update('ENABLE_DRAW', { enabled: drawable > 0 });
@@ -309,7 +340,7 @@ function _startTurn() {
         Update('ENABLE_PLAY', { enabled: false });
         Update('ENABLE_DRAW', { enabled: false });
         Update('START_TIMER', { playerId: PLAYER_IDS[p], isHuman: false });
-        setTimeout(() => _aiTurn(p), appState.isTrainingMode ? TRAINING_BOT_DELAY : _aiDelay());
+        setTimeout(() => _aiTurn(p), _botVsBotFast ? 50 : appState.isTrainingMode ? TRAINING_BOT_DELAY : _aiDelay());
     }
 }
 

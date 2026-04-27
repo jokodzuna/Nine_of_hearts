@@ -19,6 +19,11 @@ let _numPlayers     = 4;
 let _difficulty     = 'easy';
 let _gameMode       = 'bots';
 let _mpTakenAvatars = new Set();
+// ===== TEST_BLOCK_START — bot-vs-bot state =====
+let _bbBotA = 'mctsAce50';
+let _bbBotB = 'shark';
+let _bbFast = false;
+// ===== TEST_BLOCK_END =====
 
 // ============================================================
 // Callbacks (registered by ui-manager, forwarded from game-controller)
@@ -53,11 +58,14 @@ export function setCallbacks(cbs) {
 /** Returns the player configuration chosen on the welcome screen. */
 export function getPlayerConfig() {
     return {
-        playerName:  _playerName,
-        avatarPath: _avatarPath,
-        numPlayers:  _numPlayers,
-        difficulty:  _difficulty,
-        gameMode:    _gameMode,
+        playerName:   _playerName,
+        avatarPath:   _avatarPath,
+        numPlayers:   _numPlayers,
+        difficulty:   _difficulty,
+        gameMode:     _gameMode,
+        botP0:        _bbBotA,        // TEST_BLOCK
+        botP1:        _bbBotB,        // TEST_BLOCK
+        botVsBotFast: _bbFast,        // TEST_BLOCK
     };
 }
 
@@ -640,7 +648,8 @@ function _updateProfileWidget() {
 function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather',
         'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot',
-        'test-training': '🎓 Training Sandbox', 'test-ace50': '🧪 MCTS-ace-50' }; // TEST_BLOCK
+        'test-training': '🎓 Training Sandbox', 'test-ace50': '🧪 MCTS-ace-50',
+        'test-bot-vs-bot': '🤖 Bot Battle' }; // TEST_BLOCK
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1099,7 +1108,8 @@ function _buildWelcomeOverlay() {
     const statsPanel    = _buildStatsPanel();
     const achPanel      = _buildAchievementsPanel();
     const settingsPanel = _buildSettingsPanel();
-    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, testPanel, mpPanel, statsPanel, achPanel, settingsPanel); // testPanel: TEST_BLOCK
+    const bbPanel       = _buildBotBattlePanel(); // TEST_BLOCK
+    ov.append(howPanel, profilePanel, avatarSelectPanel, playersPanel, diffPanel, testPanel, bbPanel, mpPanel, statsPanel, achPanel, settingsPanel); // testPanel/bbPanel: TEST_BLOCK
     ws.appendChild(ov);
     _updateMenuBtnLabels();
 
@@ -1188,7 +1198,7 @@ function _setupBotfatherCrossfade(onReady) {
     }
 }
 
-// ===== TEST_BLOCK_START — delete this function for production =====
+// ===== TEST_BLOCK_START — delete these functions for production =====
 function _buildTestBotPanel() {
     const panel = _makePanelBase('test-bots', '\ud83e\uddea Test Bots');
     const list  = document.createElement('div');
@@ -1209,20 +1219,105 @@ function _buildTestBotPanel() {
             btn.classList.add('selected');
             _difficulty  = value;
             _numPlayers  = 2;
-            // ===== TEST_BLOCK_START =====
             import('./game-controller.js').then(m => {
                 m.appState.isTrainingMode = (value === 'test-training');
             });
-            // ===== TEST_BLOCK_END =====
             _updateMenuBtnLabels();
         });
         list.appendChild(btn);
     }
+    // Bot Battle entry — opens sub-panel
+    const bbBtn = document.createElement('button');
+    bbBtn.className   = `option-btn${_difficulty === 'test-bot-vs-bot' ? ' selected' : ''}`;
+    bbBtn.textContent = '🤖 Bot Battle →';
+    bbBtn.addEventListener('click', () => _openWelcomePanel('bot-vs-bot'));
+    list.appendChild(bbBtn);
     panel.appendChild(list);
     const backBtn = document.createElement('button');
     backBtn.className   = 'menu-btn';
     backBtn.textContent = '\u2190 Back';
     backBtn.addEventListener('click', () => _openWelcomePanel('difficulty'));
+    panel.appendChild(backBtn);
+    panel.appendChild(_makePanelCloseBtn('Done'));
+    return panel;
+}
+
+function _buildBotBattlePanel() {
+    const panel = _makePanelBase('bot-vs-bot', '🤖 Bot Battle');
+
+    const BOT_OPTS = [
+        ['mctsAce50', '🧪 MCTS-ace-50'],
+        ['shark',     '🦈 Shark'],
+        ['gambler',   '🎲 Gambler'],
+        ['newbie',    '🐣 Newbie'],
+        ['hybrid',    '🔀 Hybrid Q+MCTS'],
+        ['pureq',     '📊 Pure Q-bot'],
+        ['training',  '🎓 Training Bot'],
+    ];
+
+    const arena = document.createElement('div');
+    arena.style.cssText = 'display:flex;gap:8px;align-items:flex-start;justify-content:center;width:100%;margin:6px 0';
+
+    function makeCol(side, initVal) {
+        const col = document.createElement('div');
+        col.style.cssText = 'display:flex;flex-direction:column;flex:1;gap:3px';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'text-align:center;font-weight:bold;font-size:0.8em;margin-bottom:2px;opacity:0.7';
+        lbl.textContent = side === 'A' ? 'Bottom' : 'Top';
+        col.appendChild(lbl);
+        for (const [key, name] of BOT_OPTS) {
+            const btn = document.createElement('button');
+            btn.className = `option-btn${key === initVal ? ' selected' : ''}`;
+            btn.style.cssText = 'font-size:0.85em;padding:6px 8px';
+            btn.textContent = name;
+            btn.addEventListener('click', () => {
+                col.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                if (side === 'A') _bbBotA = key; else _bbBotB = key;
+                _difficulty = 'test-bot-vs-bot';
+                _numPlayers = 2;
+                import('./game-controller.js').then(m => { m.appState.isTrainingMode = false; });
+                _updateMenuBtnLabels();
+            });
+            col.appendChild(btn);
+        }
+        return col;
+    }
+
+    const vs = document.createElement('div');
+    vs.style.cssText = 'display:flex;align-items:center;font-size:1.3em;font-weight:bold;padding:28px 4px 0';
+    vs.textContent = 'VS';
+
+    arena.appendChild(makeCol('A', _bbBotA));
+    arena.appendChild(vs);
+    arena.appendChild(makeCol('B', _bbBotB));
+    panel.appendChild(arena);
+
+    // Speed row
+    const speedRow = document.createElement('div');
+    speedRow.style.cssText = 'display:flex;gap:8px;justify-content:center;align-items:center;margin:8px 0 4px';
+    const speedLbl = document.createElement('span');
+    speedLbl.textContent = 'Speed:';
+    speedLbl.style.cssText = 'font-size:0.9em;opacity:0.7';
+    speedRow.appendChild(speedLbl);
+    for (const [fast, text] of [[false, '🐢 Watched'], [true, '⚡ Fast']]) {
+        const btn = document.createElement('button');
+        btn.className = `option-btn${_bbFast === fast ? ' selected' : ''}`;
+        btn.style.cssText = 'font-size:0.85em;padding:6px 12px';
+        btn.textContent = text;
+        btn.addEventListener('click', () => {
+            speedRow.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            _bbFast = fast;
+        });
+        speedRow.appendChild(btn);
+    }
+    panel.appendChild(speedRow);
+
+    const backBtn = document.createElement('button');
+    backBtn.className   = 'menu-btn';
+    backBtn.textContent = '\u2190 Back';
+    backBtn.addEventListener('click', () => _openWelcomePanel('test-bots'));
     panel.appendChild(backBtn);
     panel.appendChild(_makePanelCloseBtn('Done'));
     return panel;

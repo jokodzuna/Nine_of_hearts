@@ -286,18 +286,32 @@ function _computeRHV(hand) {
 const _ACE50_VALS = new Int16Array([-25, -5, 5, 15, 30, 50]);
 
 /**
- * Ace-50 RHV: flat sum of per-card values (not averaged).
- *   Empty hand → +200  (clearing bonus)
- *   Per card:  9=−25  10=−5  J=+5  Q=+15  K=+30  A=+50
+ * Ace-50 RHV: same averaging logic as _computeRHV, with new card values.
+ *   Empty hand → +200  (clearing bonus, dominates max per-card of +50)
+ *   Three 9s (group)  → sum 3×(−25)=−75, counts as 1 effective card
+ *   Four 10s (group)  → sum 4×(−5)=−20, counts as 1 effective card
+ *   Quad J/Q/K/A      → +5 bonus
+ *   All other cards   → _ACE50_VALS[rank] each, counted normally
+ *   RHV = (sum + quadBonus) / effectiveCardCount
  */
 function _computeAce50RHV(hand) {
     if (!hand) return 200;
-    let sum = 0;
+    let sum = 0, effCount = 0, quadBonus = 0;
     for (let r = 0; r < 6; r++) {
-        const cnt = _popcount(hand & _RANK_MASK[r]);
-        if (cnt) sum += _ACE50_VALS[r] * cnt;
+        const group = hand & _RANK_MASK[r];
+        if (!group) continue;
+        const cnt = _popcount(group);
+        if (r === 0 && cnt === 3) {            // Three 9s — special group
+            sum += 3 * _ACE50_VALS[0]; effCount += 1;
+        } else if (r === 1 && cnt === 4) {     // Four 10s — special group
+            sum += 4 * _ACE50_VALS[1]; effCount += 1;
+        } else {
+            sum += _ACE50_VALS[r] * cnt;
+            effCount += cnt;
+            if (cnt === 4 && r >= 2) quadBonus = 5;  // Quad J/Q/K/A
+        }
     }
-    return sum;
+    return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
 }
 // ===== TEST_BLOCK_END =====
 
@@ -375,6 +389,51 @@ function _applyRHVGuard(moves, hand) {
     if (!hasPlay && !hasDraw && fallbackMove !== 0) out.push(fallbackMove);
     return out.length > 0 ? out : moves;
 }
+
+// ===== TEST_BLOCK_START — ace-50 rollout guard (remove with mctsAce50 profile for production) =====
+/**
+ * RHV Guard for ace-50 profile: uses flat ace-50 sums instead of averaged RHV.
+ * Threshold 20 — blocks plays that drop the flat sum by more than 20 points.
+ * This prevents the bot from shedding Aces (−50) or Kings (−30) in rollouts.
+ */
+function _applyAce50RHVGuard(moves, hand) {
+    const curRHV = _computeAce50RHV(hand);
+    const out    = [];
+    let   hasDraw = false, hasPlay = false;
+    let   fallbackMove = 0, fallbackRHV = -Infinity;
+
+    const blockLoneAce = _popcount(hand & _RANK_MASK[5]) === 1
+                      && _popcount(hand) > 2;
+
+    for (let i = 0; i < moves.length; i++) {
+        const m = moves[i];
+        if (m & DRAW_FLAG) {
+            out.push(m);
+            hasDraw = true;
+        } else {
+            const bits    = m & 0xFFFFFF;
+            const newHand = (hand & ~bits) | 0;
+            const newRHV  = _computeAce50RHV(newHand);
+
+            if (blockLoneAce && (bits & _RANK_MASK[5]) !== 0 && newHand !== 0) {
+                if (newRHV > fallbackRHV) { fallbackRHV = newRHV; fallbackMove = m; }
+                continue;
+            }
+
+            if (curRHV - newRHV <= 5) {
+                out.push(m);
+                hasPlay = true;
+            } else if (newRHV > fallbackRHV) {
+                fallbackRHV = newRHV;
+                fallbackMove = m;
+            }
+        }
+    }
+
+    if (!hasPlay && !hasDraw && fallbackMove !== 0) out.push(fallbackMove);
+    return out.length > 0 ? out : moves;
+}
+// ===== TEST_BLOCK_END =====
 
 // ============================================================
 // ISMCTSEngine
@@ -827,7 +886,10 @@ export class ISMCTSEngine {
             const raw      = getPossibleMoves(s);
             if (raw.length === 0) break;
             const handSize = _popcount(s.hands[s.currentPlayer]);
-            const moves    = handSize <= egCards ? raw : _applyRHVGuard(raw, s.hands[s.currentPlayer]);
+            const moves    = handSize <= egCards ? raw
+                : (this.profile.rhvMode === 'ace50'
+                    ? _applyAce50RHVGuard(raw, s.hands[s.currentPlayer])
+                    : _applyRHVGuard(raw, s.hands[s.currentPlayer]));
 
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2

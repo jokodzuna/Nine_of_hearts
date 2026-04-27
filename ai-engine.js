@@ -292,7 +292,7 @@ const _ACE50_VALS = new Int16Array([-25, -5, 5, 15, 30, 50]);
  *   Four 10s (group)  → sum 4×(−5)=−20, counts as 1 effective card
  *   Quad J/Q/K/A      → +5 bonus
  *   All other cards   → _ACE50_VALS[rank] each, counted normally
- *   RHV = (sum + quadBonus) / effectiveCardCount
+ *   RHV = (sum / effectiveCardCount) + quadBonus
  */
 function _computeAce50RHV(hand) {
     if (!hand) return 200;
@@ -301,17 +301,17 @@ function _computeAce50RHV(hand) {
         const group = hand & _RANK_MASK[r];
         if (!group) continue;
         const cnt = _popcount(group);
-        if (r === 0 && cnt === 3) {            // Three 9s — special group
-            sum += 3 * _ACE50_VALS[0]; effCount += 1;
-        } else if (r === 1 && cnt === 4) {     // Four 10s — special group
-            sum += 4 * _ACE50_VALS[1]; effCount += 1;
+        if (r === 0 && cnt === 3) {            // Three 9s — special group: value of 1 nine, counts as 1 card
+            sum += _ACE50_VALS[0]; effCount += 1;
+        } else if (r === 1 && cnt === 4) {     // Four 10s — special group: value of 1 ten, counts as 1 card
+            sum += _ACE50_VALS[1]; effCount += 1;
         } else {
             sum += _ACE50_VALS[r] * cnt;
             effCount += cnt;
-            if (cnt === 4 && r >= 2) quadBonus = 5;  // Quad J/Q/K/A
+            if (cnt === 4 && r >= 2) quadBonus = 5;  // Quad J/Q/K/A: +5 added to final RHV after division
         }
     }
-    return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
+    return effCount > 0 ? (sum / effCount) + quadBonus : 0.0;
 }
 // ===== TEST_BLOCK_END =====
 
@@ -503,7 +503,7 @@ export class ISMCTSEngine {
             name:               'MCTS-ace-50',
             difficulty:         'Expert',
             maxIterations:      10000,
-            explorationParam:   0.7,
+            explorationParam:   0.4,
             weightStale:        -0.8,
             maxTime:            3000,
             maxTurns:           250,
@@ -913,10 +913,10 @@ export class ISMCTSEngine {
                 const myBonus  = myVC  < 5 ? (5 - myVC)  * 10 : 0;
                 const oppBonus = oppVC < 5 ? (5 - oppVC) * 10 : 0;
                 return Math.max(-1.0, Math.min(1.0,
-                    ((myRHV + myBonus) - (oppRHV + oppBonus)) / 300));
+                    ((myRHV + myBonus) - (oppRHV + oppBonus)) / 250));
             }
             // Normal phase: differential RHV
-            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 300));
+            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 80));
         }
         // ===== TEST_BLOCK_END =====
         let useWinLoss = isGameOver(s);

@@ -640,7 +640,7 @@ function _updateProfileWidget() {
 function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather',
         'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot',
-        'test-training': '🎓 Training Sandbox' }; // TEST_BLOCK
+        'test-training': '🎓 Training Sandbox', 'test-ace50': '🧪 MCTS-ace-50' }; // TEST_BLOCK
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1197,6 +1197,7 @@ function _buildTestBotPanel() {
         ['test-hybrid',   'Hybrid Q+MCTS'],
         ['test-pureq',    'Pure Q-bot'],
         ['test-training', '🎓 Training Sandbox'],
+        ['test-ace50',    '🧪 MCTS-ace-50'],
     ];
     for (const [value, label] of opts) {
         const btn = document.createElement('button');

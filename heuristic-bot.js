@@ -295,7 +295,7 @@ export class HeuristicBot {
         if (drawMove !== null && myAces >= safeAceMin) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
-                if (inHand === 0 || inHand >= 4) continue; // already have quad → Rule 3 will play it
+                if (inHand === 0 || inHand >= 3) continue; // 3+ in hand: play singles; Rule 3 handles full quads
                 let inDraw = 0;
                 for (let i = 0; i < drawCount; i++) {
                     if ((state.pile[state.pileSize - 1 - i] >> 2) === r) inDraw++;
@@ -392,9 +392,15 @@ export class HeuristicBot {
             const sorted = [...safePlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];
             const hRI     = playRI(highest);
-            if (hRI === 4 && myAces >= safeAceMin) return highest;   // K escalation, Ace-safe
-            if (hRI < 4) return highest;                               // J/Q/10: always press
-            // King but Ace-deficient: play next best
+            // When Aces are the top option, prefer K — it forces opp to respond without
+            // burning our Aces; if opp plays A in reply, bot's Ace advantage remains.
+            if (hRI >= 4 && myAces >= safeAceMin) {
+                const kMove = safePlays.find(m => playRI(m) === 4);
+                if (kMove) return kMove;      // K preferred over A
+                return highest;               // no K — escalate with A
+            }
+            if (hRI < 4) return highest;      // J/Q/10: always press
+            // Power cards present but Ace-deficient: play next-best (J/Q)
             const nonK = sorted.find(m => playRI(m) < 4);
             if (nonK) return nonK;
         }

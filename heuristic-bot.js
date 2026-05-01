@@ -118,17 +118,14 @@ export class HeuristicBot {
         const drawCount = Math.min(3, drawable);
 
         // Exact cards we would draw (top of pile stack)
-        let drawRankMask = 0; // bitmask of rank indices in draw pile
+        let drawRankMask = 0;
         for (let i = 0; i < drawCount; i++) {
-            const ri = state.pile[state.pileSize - 1 - i] >> 2;
-            drawRankMask |= (1 << ri);
+            drawRankMask |= (1 << (state.pile[state.pileSize - 1 - i] >> 2));
         }
         const drawHasAce  = !!(drawRankMask & (1 << 5));
         const drawHasKing = !!(drawRankMask & (1 << 4));
 
-        // Count Aces/Kings already permanently in pile (not drawable — excluded from pool)
-        // We count ALL pile cards; the ones beyond drawCount are buried deeper.
-        // For opponent estimation we only need total-in-pile.
+        // Count Aces/Kings in pile (for opponent estimation)
         let acesInPile = 0, kingsInPile = 0;
         for (let i = 0; i < state.pileSize; i++) {
             const ri = state.pile[i] >> 2;
@@ -147,14 +144,12 @@ export class HeuristicBot {
             const oppTotal = _popcount(state.hands[oppP]);
             if (oppTotal < oppMinCards) oppMinCards = oppTotal;
 
-            // Deduction floor: remaining cards not in my hand or pile must be in opponents
-            const acesElsewhere  = Math.max(0, 4 - myAces - acesInPile);
+            const acesElsewhere  = Math.max(0, 4 - myAces  - acesInPile);
             const kingsElsewhere = Math.max(0, 4 - myKings - kingsInPile);
 
             let ea = Math.min(acesElsewhere,  oppTotal);
             let ek = Math.min(kingsElsewhere, oppTotal);
 
-            // Card-tracking override: we know confirmed cards
             if (this._cardKnowledge !== null) {
                 ea = Math.max(ea, _popcount(this._cardKnowledge[oppP] & RANK_MASK[5]));
                 ek = Math.max(ek, _popcount(this._cardKnowledge[oppP] & RANK_MASK[4]));
@@ -166,8 +161,8 @@ export class HeuristicBot {
         if (opps.length === 0) oppMinCards = 0;
 
         // ---- Safety thresholds ----
-        // Need ≥2 Aces when hand is large (early/mid game), ≥1 in late game
-        const safeAceMin = myTotal > 6 ? 2 : 1;
+        // Need ≥2 Aces in early/mid game (hand > 4 cards), ≥1 in late game
+        const safeAceMin = myTotal > 4 ? 2 : 1;
 
         // ---- Separate moves ----
         const drawMove  = moves.find(m => !!(m & DRAW_FLAG)) ?? null;
@@ -178,23 +173,88 @@ export class HeuristicBot {
         const playCnt   = m => _moveCount(m & 0xFFFFFF);
 
         // ==============================================================
-        // RULE 1 — Instant win: emptying hand this turn
+        // RULE 0 — Instant win: emptying hand this turn
         // ==============================================================
         for (const m of playMoves) {
             if (wouldWin(m)) return m;
         }
 
         // ==============================================================
-        // RULE 2 — Triple 9s: most powerful junk dump available
-        // Only legal when pile top is also rank 9
+        // RULE 1 — 9♥ strict opening
+        // When the 9♥ is the top card (pileSize === 1, bit index 1 = rank-0 suit-♥),
+        // always play the lowest card. Only exception: opp has ≤3 cards and their
+        // lowest reachable rank ≤ ours — then play the lowest quad above their lowest
+        // to block them from responding with a cheap card.
+        // 9♥ bit index = rank(0)*4 + suit(♥=1) = 1
         // ==============================================================
-        if (topRI === 0 && my9s === 3) {
-            const tripleNine = playMoves.find(m => playCnt(m) === 3 && playRI(m) === 0);
-            if (tripleNine) return tripleNine;
+        if (state.pile[state.pileSize - 1] === 1) {
+            // Triple 9s still take priority (massive junk dump)
+            if (my9s === 3) {
+                const t9 = playMoves.find(m => playCnt(m) === 3 && playRI(m) === 0);
+                if (t9) return t9;
+            }
+
+            // Find our lowest rank in hand
+            let myLoRI = 5;
+            for (let r = 0; r <= 5; r++) {
+                if (myHand & RANK_MASK[r]) { myLoRI = r; break; }
+            }
+
+            // Exception: opp has ≤3 cards — try to block their lowest card with a quad
+            if (oppMinCards <= 3 && opps.length > 0) {
+                // Estimate opp's lowest reachable rank by deduction:
+                // first rank where we don't hold all 4 + pile doesn't cover the rest
+                let oppLoRI = -1;
+                for (let r = 0; r <= 5; r++) {
+                    let pileCountR = 0;
+                    for (let i = 0; i < state.pileSize; i++) {
+                        if ((state.pile[i] >> 2) === r) pileCountR++;
+                    }
+                    if (_popcount(myHand & RANK_MASK[r]) + pileCountR < 4) {
+                        oppLoRI = r; break;
+                    }
+                }
+                // Card-tracking can confirm even lower cards
+                if (this._cardKnowledge !== null) {
+                    for (const oppP of opps) {
+                        const known = this._cardKnowledge[oppP];
+                        for (let r = 0; r <= 5; r++) {
+                            if (known & RANK_MASK[r]) {
+                                if (oppLoRI === -1 || r < oppLoRI) oppLoRI = r;
+                                break;
+                            }
+                        }
+                    }
+                }
+                // If opp's lowest ≤ our lowest, block with the lowest quad above opp's lowest
+                if (oppLoRI !== -1 && oppLoRI <= myLoRI) {
+                    for (let r = oppLoRI + 1; r <= 5; r++) {
+                        if (_popcount(myHand & RANK_MASK[r]) === 4) {
+                            const qm = playMoves.find(m => playCnt(m) === 4 && playRI(m) === r);
+                            if (qm) return qm;
+                        }
+                    }
+                }
+            }
+
+            // Default: quad of lowest rank (if we hold all 4), otherwise single lowest
+            const loMoves = playMoves.filter(m => playRI(m) === myLoRI);
+            return loMoves.find(m => playCnt(m) === 4)
+                ?? loMoves.find(m => playCnt(m) === 1)
+                ?? loMoves[0]
+                ?? playMoves[0];
         }
 
         // ==============================================================
-        // RULE 3 — 4-of-a-kind junk dump (rank 9–Q only, power is safe)
+        // RULE 2 — Triple 9s on any 9 top
+        // ==============================================================
+        if (topRI === 0 && my9s === 3) {
+            const t9 = playMoves.find(m => playCnt(m) === 3 && playRI(m) === 0);
+            if (t9) return t9;
+        }
+
+        // ==============================================================
+        // RULE 3 — 4-of-a-kind junk dump (rank 9–Q only, Ace reserve safe)
         // ==============================================================
         for (const m of playMoves) {
             if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) return m;
@@ -207,9 +267,9 @@ export class HeuristicBot {
             const aceMoves = playMoves.filter(m => playRI(m) === 5);
             if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;
-                const safeToPlay = acesAfter >= safeAceMin
-                    || oppEstAces === 0               // opponent has no Aces at all
-                    || myAces > oppEstAces + 1;       // dominant Ace advantage
+                // Only escalate with a strict buffer: must stay at safeAceMin AND have clear advantage
+                const safeToPlay = (acesAfter >= safeAceMin && oppEstAces === 0)      // dominate: opp has none
+                                || (acesAfter >= safeAceMin && myAces > oppEstAces + 1); // 2+ Ace lead
                 if (safeToPlay) return aceMoves[0];
             }
             // Can't safely spend Ace — draw
@@ -223,26 +283,26 @@ export class HeuristicBot {
             const aceMoves  = playMoves.filter(m => playRI(m) === 5);
             const kingMoves = playMoves.filter(m => playRI(m) === 4);
 
-            // 5a. Escalate with A if we have Ace dominance
+            // 5a. Escalate with A: only when we clearly dominate AND keep our buffer
             if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;
-                const dominant  = oppEstAces === 0 && acesAfter >= 1;
-                const advantage = acesAfter >= safeAceMin && myAces > oppEstAces;
+                const dominant  = oppEstAces === 0 && acesAfter >= safeAceMin;  // opp has no Aces, we stay safe
+                const advantage = acesAfter >= safeAceMin && myAces > oppEstAces + 1; // 2+ Ace lead
                 if (dominant || advantage) return aceMoves[0];
             }
 
-            // 5b. Draw if pile holds power cards we're deficient in
+            // 5b. Draw if pile has power cards we're deficient in
             if (drawMove !== null) {
-                if (drawHasAce  && myAces < safeAceMin)     return drawMove; // rescue Ace
-                if (drawHasKing && myKings <= 1 && aceMoves.length === 0) return drawMove; // get backup K
+                if (drawHasAce  && myAces < safeAceMin)               return drawMove; // rescue Ace
+                if (drawHasKing && myKings <= 1 && !aceMoves.length)  return drawMove; // get backup K
             }
 
-            // 5c. Match K if we have enough reserve
+            // 5c. Match K if reserve allows
             if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin)) {
                 return kingMoves[0];
             }
 
-            // 5d. Fall back to drawing (preserve last K / Aces)
+            // 5d. Draw: preserve last K and Aces
             return drawMove ?? playMoves[playMoves.length - 1];
         }
 
@@ -250,35 +310,34 @@ export class HeuristicBot {
         // RULE 6 — Top ≤ Q: junk-dump phase
         // ==============================================================
 
-        // Apply lone-Ace guard: last Ace is too valuable to play unless it wins
+        // Lone-Ace guard: never sacrifice last Ace (unless it wins the game)
         let safePlays = [...playMoves];
         if (myAces === 1 && myTotal > 2) {
             const filtered = safePlays.filter(m => playRI(m) !== 5);
             if (filtered.length > 0) safePlays = filtered;
         }
 
-        // 6a. Opponent near win — apply maximum pressure
+        // 6a. Opponent near win — maximum pressure
         if (oppMinCards <= 4 && safePlays.length > 0) {
-            // Play highest available card to raise the bar for opponent
             const sorted = [...safePlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];
             const hRI     = playRI(highest);
-            // Only escalate with K if we still have Ace cover
-            if (hRI === 4 && myAces >= safeAceMin) return highest;
-            // Play anything below K freely (Q, J, 10, 9)
-            if (hRI < 4) return highest;
-            // King but Ace-deficient: find next best
+            if (hRI === 4 && myAces >= safeAceMin) return highest;   // K escalation, Ace-safe
+            if (hRI < 4) return highest;                               // J/Q/10: always press
+            // King but Ace-deficient: play next best
             const nonK = sorted.find(m => playRI(m) < 4);
             if (nonK) return nonK;
         }
 
-        // 6b. Deeply stuck AND pile has power cards → draw to improve hand
+        // 6b. Deeply stuck AND pile has power cards → draw
         if (drawMove !== null && stuckCount >= Math.ceil(myTotal / 2) && (drawHasAce || drawHasKing)) {
             return drawMove;
         }
 
-        // 6c. Ace-dominant: escalate with K to pressure opponent
-        if (oppEstAces === 0 && myAces >= safeAceMin && myKings >= 1) {
+        // 6c. K escalation: press with King whenever opp has no Aces
+        // (does NOT require us to have safeAceMin — if opp has 0 Aces, K is safe to play
+        //  even from a weak position because opp cannot escalate to A-battle)
+        if (myKings >= 1 && oppEstAces === 0) {
             const kingMoves = safePlays.filter(m => playRI(m) === 4);
             if (kingMoves.length > 0) return kingMoves[0];
         }
@@ -290,7 +349,7 @@ export class HeuristicBot {
             if (singles.length > 0) candidates = singles;
         }
 
-        // 6e. Play lowest-rank card first (dump junk: 9s before 10s before Js …)
+        // 6e. Dump lowest rank first (9s before 10s before Js …)
         candidates.sort((a, b) => playRI(a) - playRI(b));
         return candidates[0] ?? drawMove ?? moves[0];
     }

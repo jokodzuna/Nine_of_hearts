@@ -280,7 +280,9 @@ export class HeuristicBot {
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
                 // dump — opp can respond to the quad with their power cards anyway.
-                if (oppMinCards <= 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
+                // Only defer when opp has exactly 3 cards (typically all power: Q+K+A);
+                // with ≤2 cards opp is nearly out — dumping the quad is fine.
+                if (oppMinCards === 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
                 // When opp is near-win press with the quad immediately;
                 // otherwise shed lower singles first so they don't get buried.
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
@@ -323,9 +325,9 @@ export class HeuristicBot {
                 // Only escalate with a strict buffer: must stay at safeAceMin AND have clear advantage
                 const safeToPlay = (acesAfter >= safeAceMin && oppEstAces === 0)       // dominate: opp has none
                                 || (acesAfter >= safeAceMin && myAces > oppEstAces + 1) // 2+ Ace lead
-                                // Late-game (≤4 cards): playing Ace is a near-win forcing move
-                                // as long as we still have non-Ace cards to close with afterwards
-                                || (myTotal <= 4 && (myTotal - myAces) >= 1);
+                                // Late-game (≤4 cards): escalate regardless of hand composition;
+                                // if this is our very last Ace, Rule 0 (instant-win) catches it.
+                                || (myTotal <= 4 && acesAfter >= safeAceMin);
                 if (safeToPlay) return aceMoves[0];
             }
             // Can't safely spend Ace — draw
@@ -415,7 +417,13 @@ export class HeuristicBot {
             if (nonK) return nonK;
         }
 
-        // 6b. Deeply stuck AND pile has power cards → draw
+        // 6b. Draw to unblock stuck 9s: when top is 10 and we hold a full set of 9s
+        // that can never be played at the current rank, drawing peels back the pile and
+        // may uncover a lower top — playing a J/Q/K instead pushes top UP, burying 9s deeper.
+        const my9s = _popcount(myHand & RANK_MASK[0]);
+        if (drawMove !== null && my9s >= 3 && topRI === 1) return drawMove;
+
+        // 6b2. Deeply stuck AND pile has power cards → draw
         if (drawMove !== null && stuckCount >= Math.ceil(myTotal / 2) && (drawHasAce || drawHasKing)) {
             return drawMove;
         }

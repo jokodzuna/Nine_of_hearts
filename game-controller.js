@@ -28,9 +28,6 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
-// ===== DEBUG_BLOCK_START — expose toggle via browser console: aiDebug(true/false) =====
-window.aiDebug = (on = true) => { window.AI_DEBUG = on; console.log(`[AI_DEBUG] ${on ? 'ON' : 'OFF'}`); };
-// ===== DEBUG_BLOCK_END =====
 import { QBotEngine, HybridQBotEngine, TrainingQBotEngine } from './q-bot.js'; // HybridQBotEngine/TrainingQBotEngine: TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 

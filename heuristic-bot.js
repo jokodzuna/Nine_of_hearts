@@ -278,34 +278,45 @@ export class HeuristicBot {
 
         // ==============================================================
         // RULE 5 — Top card is K: escalation decision
+        // Priority: draw K+K recovery > rescue draw > match K > escalate A > draw
         // ==============================================================
         if (topRI === 4) {
             const aceMoves  = playMoves.filter(m => playRI(m) === 5);
             const kingMoves = playMoves.filter(m => playRI(m) === 4);
 
-            // 5a. Escalate with A: only when we clearly dominate AND keep our buffer
-            // Also: check that pile below current K-top isn't power (opp's 3-card draw = myA + K + pile[n-2])
-            if (aceMoves.length > 0) {
-                const acesAfter    = myAces - 1;
-                const dominant     = oppEstAces === 0 && acesAfter >= safeAceMin;
-                const advantage    = acesAfter >= safeAceMin && myAces > oppEstAces + 1;
-                const subTopRI     = state.pileSize >= 2 ? state.pile[state.pileSize - 2] >> 2 : -1;
-                const pileGivesOppPower = subTopRI >= 4; // K or A is 3rd draw card opp would pick up
-                if ((dominant || advantage) && !pileGivesOppPower) return aceMoves[0];
+            // Cards sitting below the current K-top (what opp draws after we play)
+            const subRI2 = state.pileSize >= 2 ? state.pile[state.pileSize - 2] >> 2 : -1;
+            const subRI3 = state.pileSize >= 3 ? state.pile[state.pileSize - 3] >> 2 : -1;
+
+            // 5a. Draw to recover K+K — when pile's 2nd card is also K, drawing gives back
+            // both kings (3-card draw = A/top_K + 2nd_K + whatever).
+            // Skip only if opp has ≤2 cards (can't afford to add 3 to our hand).
+            if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3) {
+                return drawMove;
             }
 
-            // 5b. Draw if pile has power cards we're deficient in
-            if (drawMove !== null) {
-                if (drawHasAce  && myAces < safeAceMin)               return drawMove; // rescue Ace
-                if (drawHasKing && myKings <= 1 && !aceMoves.length)  return drawMove; // get backup K
+            // 5b. Draw if pile has a rescue Ace we need
+            if (drawMove !== null && drawHasAce && myAces < safeAceMin) {
+                return drawMove;
             }
 
-            // 5c. Match K if reserve allows
+            // 5c. Match K — PREFER this over burning an Ace; opp must respond to K again
             if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin)) {
                 return kingMoves[0];
             }
 
-            // 5d. Draw: preserve last K and Aces
+            // 5d. Escalate with A — only with strict dominance AND pile doesn't hand opp power
+            // When I play A, opp draws: [my A] + [current K top] + [subRI2 card].
+            // The first two cards are always A+K (always power), so only escalate when
+            // pile is shallow (subRI2 is NOT a K/A) AND we have overwhelming Ace advantage.
+            if (aceMoves.length > 0 && subRI2 < 4) {
+                const acesAfter = myAces - 1;
+                const dominant  = oppEstAces === 0 && acesAfter >= safeAceMin;
+                const advantage = acesAfter >= safeAceMin && myAces > oppEstAces + 1;
+                if (dominant || advantage) return aceMoves[0];
+            }
+
+            // 5e. Draw (last resort — preserve last K / Aces)
             return drawMove ?? playMoves[playMoves.length - 1];
         }
 

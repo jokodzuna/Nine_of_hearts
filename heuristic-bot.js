@@ -275,7 +275,7 @@ export class HeuristicBot {
         // buried under the quad and restart the escalation loop.
         // ==============================================================
         for (const m of playMoves) {
-            if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) {
+            if (playCnt(m) === 4 && playRI(m) <= 4 && myAces >= safeAceMin) {
                 const r = playRI(m);
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
@@ -367,7 +367,10 @@ export class HeuristicBot {
             // already recovers a K, matching K just recycles power cards and extends the game.
             // Late-game skip: when myTotal<=4 fall through to 5d to escalate with A directly.
             if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin) && myTotal > 4) {
-                if (state.pileSize >= 10 && drawHasKing && drawMove !== null) return drawMove;
+                // K-loop guard: only skip K-match when ANOTHER K is buried below the current
+                // K-top (subRI2/3 === 4). drawHasKing is always true on K-top (the top card
+                // itself is K), so using it here would permanently block K-matching on deep piles.
+                if (state.pileSize >= 10 && (subRI2 === 4 || subRI3 === 4) && drawMove !== null) return drawMove;
                 return kingMoves[0];
             }
 

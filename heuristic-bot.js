@@ -276,6 +276,24 @@ export class HeuristicBot {
         }
 
         // ==============================================================
+        // RULE 3.5 — Draw to complete a junk quad (rank 9–Q)
+        // If the top drawCount pile cards + cards already in hand total 4
+        // of any junk rank, drawing is strictly better than playing a single
+        // card: we'll dump all 4 next turn for a net hand reduction.
+        // ==============================================================
+        if (drawMove !== null) {
+            for (let r = 0; r <= 3; r++) {
+                const inHand = _popcount(myHand & RANK_MASK[r]);
+                if (inHand === 0) continue;
+                let inDraw = 0;
+                for (let i = 0; i < drawCount; i++) {
+                    if ((state.pile[state.pileSize - 1 - i] >> 2) === r) inDraw++;
+                }
+                if (inHand + inDraw >= 4) return drawMove;
+            }
+        }
+
+        // ==============================================================
         // RULE 4 — Top card is A: Ace battle
         // ==============================================================
         if (topRI === 5) {
@@ -324,7 +342,11 @@ export class HeuristicBot {
             }
 
             // 5c. Match K — PREFER this over burning an Ace; opp must respond to K again
+            // Exception: deep-pile K-loop guard — when pile is large (>=10) and drawing
+            // already recovers a K, matching K just recycles power cards and extends the game.
+            // Draw instead: we get the K back plus extra cards to dump later.
             if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin)) {
+                if (state.pileSize >= 10 && drawHasKing && drawMove !== null) return drawMove;
                 return kingMoves[0];
             }
 

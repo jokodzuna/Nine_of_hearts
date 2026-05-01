@@ -30,10 +30,10 @@ import {
 
 function _popcount(x) {
     x = (x | 0);
-    x = x - ((x >>> 1) & 0x555555);
-    x = (x & 0x333333) + ((x >>> 2) & 0x333333);
-    x = (x + (x >>> 4)) & 0x0F0F0F;
-    return Math.imul(x, 0x010101) >>> 16;
+    x = x - ((x >>> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+    x = (x + (x >>> 4)) & 0x0F0F0F0F;
+    return Math.imul(x, 0x01010101) >>> 24;
 }
 
 /** Rank index (0–5) of the lowest-rank card in a move bitmask. */

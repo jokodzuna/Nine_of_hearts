@@ -420,8 +420,10 @@ export class HeuristicBot {
         // 6b. Draw to unblock stuck 9s: when top is 10 and we hold a full set of 9s
         // that can never be played at the current rank, drawing peels back the pile and
         // may uncover a lower top — playing a J/Q/K instead pushes top UP, burying 9s deeper.
-        const my9s = _popcount(myHand & RANK_MASK[0]);
-        if (drawMove !== null && my9s >= 3 && topRI === 1) return drawMove;
+        // Guard: only when we have solid power backup (Aces + King) to handle whatever
+        // new top appears after the draw; without them the draw can be disastrous.
+        if (drawMove !== null && my9s >= 3 && topRI === 1
+                && myAces >= safeAceMin && myKings >= 1) return drawMove;
 
         // 6b2. Deeply stuck AND pile has power cards → draw
         if (drawMove !== null && stuckCount >= Math.ceil(myTotal / 2) && (drawHasAce || drawHasKing)) {

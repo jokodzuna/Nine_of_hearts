@@ -280,11 +280,19 @@ export class HeuristicBot {
         // ==============================================================
         if (topRI === 5) {
             const aceMoves = playMoves.filter(m => playRI(m) === 5);
+
+            // 4a. Mid-game: if pile has K below the A-top, drawing recovers A+K — always prefer that
+            //     (only when we have 5+ cards; in late-game the K+A finishing line takes over below)
+            if (drawMove !== null && drawHasKing && myTotal >= 5) return drawMove;
+
             if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;
                 // Only escalate with a strict buffer: must stay at safeAceMin AND have clear advantage
-                const safeToPlay = (acesAfter >= safeAceMin && oppEstAces === 0)      // dominate: opp has none
-                                || (acesAfter >= safeAceMin && myAces > oppEstAces + 1); // 2+ Ace lead
+                const safeToPlay = (acesAfter >= safeAceMin && oppEstAces === 0)       // dominate: opp has none
+                                || (acesAfter >= safeAceMin && myAces > oppEstAces + 1) // 2+ Ace lead
+                                // Late-game (≤4 cards): playing Ace is a near-win forcing move
+                                // as long as we still have non-Ace cards to close with afterwards
+                                || (myTotal <= 4 && (myTotal - myAces) >= 1);
                 if (safeToPlay) return aceMoves[0];
             }
             // Can't safely spend Ace — draw

@@ -270,9 +270,18 @@ export class HeuristicBot {
 
         // ==============================================================
         // RULE 3 — 4-of-a-kind junk dump (rank 9–Q only, Ace reserve safe)
+        // Only play the quad immediately when there are no playable single cards
+        // of a LOWER junk rank — dump small singles first so they don't get
+        // buried under the quad and restart the escalation loop.
         // ==============================================================
         for (const m of playMoves) {
-            if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) return m;
+            if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) {
+                const r = playRI(m);
+                const hasLowerSingle = playMoves.some(
+                    pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3
+                );
+                if (!hasLowerSingle) return m;
+            }
         }
 
         // ==============================================================
@@ -281,7 +290,7 @@ export class HeuristicBot {
         // of any junk rank, drawing is strictly better than playing a single
         // card: we'll dump all 4 next turn for a net hand reduction.
         // ==============================================================
-        if (drawMove !== null) {
+        if (drawMove !== null && myAces >= safeAceMin) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
                 if (inHand === 0) continue;

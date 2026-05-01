@@ -346,9 +346,12 @@ export class HeuristicBot {
 
             // 5a. Draw to recover K+K — when pile's 2nd card is also K, drawing gives back
             // both kings (3-card draw = A/top_K + 2nd_K + whatever).
-            // Skip in late-game (myTotal<=4): recovering Ks is pointless when we should
-            // be escalating with Aces to finish the game.
-            if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3 && myTotal > 4) {
+            // Skip in late-game (myTotal<=4) OR when hand has no 9s/10s (low junk):
+            // any power-only hand (AAAKKK, AAAKKQ, etc.) is already a finishing hand —
+            // recovering more Kings is pointless and just delays the close.
+            const lowJunk = _popcount(myHand & (RANK_MASK[0] | RANK_MASK[1]));
+            if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3
+                    && myTotal > 4 && lowJunk > 0) {
                 return drawMove;
             }
 

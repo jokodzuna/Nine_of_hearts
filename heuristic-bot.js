@@ -277,7 +277,9 @@ export class HeuristicBot {
         for (const m of playMoves) {
             if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) {
                 const r = playRI(m);
-                const hasLowerSingle = playMoves.some(
+                // When opp is near-win press with the quad immediately;
+                // otherwise shed lower singles first so they don't get buried.
+                const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3
                 );
                 if (!hasLowerSingle) return m;
@@ -293,7 +295,7 @@ export class HeuristicBot {
         if (drawMove !== null && myAces >= safeAceMin) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
-                if (inHand === 0) continue;
+                if (inHand === 0 || inHand >= 4) continue; // already have quad → Rule 3 will play it
                 let inDraw = 0;
                 for (let i = 0; i < drawCount; i++) {
                     if ((state.pile[state.pileSize - 1 - i] >> 2) === r) inDraw++;

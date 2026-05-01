@@ -166,7 +166,7 @@ export class HeuristicBot {
 
         // ---- Separate moves ----
         const drawMove  = moves.find(m => !!(m & DRAW_FLAG)) ?? null;
-        const playMoves = moves.filter(m => !(m & DRAW_FLAG));
+        let   playMoves = moves.filter(m => !(m & DRAW_FLAG));
 
         const wouldWin  = m => ((myHand & ~(m & 0xFFFFFF)) | 0) === 0;
         const playRI    = m => _moveRankIdx(m & 0xFFFFFF);
@@ -181,11 +181,17 @@ export class HeuristicBot {
 
         // ==============================================================
         // RULE 0.5 — Absolute lone-Ace guard (early/mid game)
-        // With 5+ cards in hand, drawing is ALWAYS better than playing the last Ace.
-        // Applies even when forced (top = A and only Ace responses are legal).
+        // With 5+ cards in hand, NEVER play the last Ace.
+        // Shadow Ace out of playMoves so ALL later rules naturally avoid it.
+        // If Ace is the ONLY option, draw instead.
         // ==============================================================
-        if (myAces === 1 && myTotal >= 5 && drawMove !== null) {
-            if (playMoves.every(m => playRI(m) === 5)) return drawMove;
+        if (myAces === 1 && myTotal >= 5) {
+            const nonAce = playMoves.filter(m => playRI(m) !== 5);
+            if (nonAce.length > 0) {
+                playMoves = nonAce;                    // Ace no longer reachable by any rule
+            } else if (drawMove !== null) {
+                return drawMove;                       // forced Ace → draw instead
+            }
         }
 
         // ==============================================================

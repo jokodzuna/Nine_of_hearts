@@ -346,8 +346,9 @@ export class HeuristicBot {
 
             // 5a. Draw to recover K+K — when pile's 2nd card is also K, drawing gives back
             // both kings (3-card draw = A/top_K + 2nd_K + whatever).
-            // Skip only if opp has ≤2 cards (can't afford to add 3 to our hand).
-            if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3) {
+            // Skip in late-game (myTotal<=4): recovering Ks is pointless when we should
+            // be escalating with Aces to finish the game.
+            if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3 && myTotal > 4) {
                 return drawMove;
             }
 
@@ -359,8 +360,8 @@ export class HeuristicBot {
             // 5c. Match K — PREFER this over burning an Ace; opp must respond to K again
             // Exception: deep-pile K-loop guard — when pile is large (>=10) and drawing
             // already recovers a K, matching K just recycles power cards and extends the game.
-            // Draw instead: we get the K back plus extra cards to dump later.
-            if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin)) {
+            // Late-game skip: when myTotal<=4 fall through to 5d to escalate with A directly.
+            if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin) && myTotal > 4) {
                 if (state.pileSize >= 10 && drawHasKing && drawMove !== null) return drawMove;
                 return kingMoves[0];
             }
@@ -369,11 +370,13 @@ export class HeuristicBot {
             // When I play A, opp draws: [my A] + [current K top] + [subRI2 card].
             // The first two cards are always A+K (always power), so only escalate when
             // pile is shallow (subRI2 is NOT a K/A) AND we have overwhelming Ace advantage.
-            if (aceMoves.length > 0 && subRI2 < 4) {
+            // Late-game override: when myTotal<=4 just escalate regardless of pile depth.
+            if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;
                 const dominant  = oppEstAces === 0 && acesAfter >= safeAceMin;
                 const advantage = acesAfter >= safeAceMin && myAces > oppEstAces + 1;
-                if (dominant || advantage) return aceMoves[0];
+                const lateGame  = myTotal <= 4 && acesAfter >= safeAceMin;
+                if (lateGame || ((dominant || advantage) && subRI2 < 4)) return aceMoves[0];
             }
 
             // 5e. Draw (last resort — preserve last K / Aces)

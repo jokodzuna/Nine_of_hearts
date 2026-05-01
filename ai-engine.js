@@ -24,7 +24,7 @@ import {
 } from './game-logic.js';
 
 // ===== DEBUG_BLOCK_START — set AI_DEBUG=false (or remove block) for production =====
-export let AI_DEBUG = false;
+// Controlled via window.AI_DEBUG — set from DevTools or game-controller.js
 const _DBG_R = ['9','10','J','Q','K','A'];
 const _DBG_S = ['\u2660','\u2665','\u2666','\u2663'];
 /** Decode a move integer to a human-readable string. */
@@ -668,7 +668,7 @@ export class ISMCTSEngine {
         const best = this._bestMove(this._root);
 
         // ===== DEBUG_BLOCK_START =====
-        if (AI_DEBUG && this._root && this._root.children.size > 0) {
+        if (window.AI_DEBUG && this._root && this._root.children.size > 0) {
             const topBit = state.pile[state.pileSize - 1];
             const topCard = _DBG_R[topBit >> 2] + _DBG_S[topBit & 3];
             let hb = state.hands[rootPlayer] & 0xFFFFFF, hCards = [];

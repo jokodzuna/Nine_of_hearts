@@ -277,6 +277,10 @@ export class HeuristicBot {
         for (const m of playMoves) {
             if (playCnt(m) === 4 && playRI(m) <= 3 && myAces >= safeAceMin) {
                 const r = playRI(m);
+                // When opp has very few cards (<=3) AND still has an Ace AND we have
+                // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
+                // dump — opp can respond to the quad with their power cards anyway.
+                if (oppMinCards <= 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
                 // When opp is near-win press with the quad immediately;
                 // otherwise shed lower singles first so they don't get buried.
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
@@ -410,12 +414,16 @@ export class HeuristicBot {
             return drawMove;
         }
 
-        // 6c. K escalation: press with King on J+ tops when opp has no Aces
-        // Requires topRI >= 2 (don't escalate from 9 or 10 — premature and wastes K)
-        // Requires myAces >= 1 as backup (if opp has 0 Aces they can't escalate further)
-        if (myKings >= 1 && myAces >= 1 && oppEstAces === 0 && topRI >= 2) {
+        // 6c. K escalation: press with King on J+ tops
+        // Primary:  opp has no Aces — safe to press freely
+        // Extended: 2+ Ace lead over opp AND stuck junk to shed — K forces opp
+        //           to draw or spend their last Ace, either way we advance
+        if (myKings >= 1 && myAces >= safeAceMin && topRI >= 2) {
             const kingMoves = safePlays.filter(m => playRI(m) === 4);
-            if (kingMoves.length > 0) return kingMoves[0];
+            const aceAdvantage = myAces > oppEstAces + 1 && stuckCount > 0;
+            if (kingMoves.length > 0 && (oppEstAces === 0 || aceAdvantage)) {
+                return kingMoves[0];
+            }
         }
 
         // 6d. Prefer singles when hand is large (preserve combo potential)

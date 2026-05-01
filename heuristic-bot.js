@@ -284,11 +284,14 @@ export class HeuristicBot {
             const kingMoves = playMoves.filter(m => playRI(m) === 4);
 
             // 5a. Escalate with A: only when we clearly dominate AND keep our buffer
+            // Also: check that pile below current K-top isn't power (opp's 3-card draw = myA + K + pile[n-2])
             if (aceMoves.length > 0) {
-                const acesAfter = myAces - 1;
-                const dominant  = oppEstAces === 0 && acesAfter >= safeAceMin;  // opp has no Aces, we stay safe
-                const advantage = acesAfter >= safeAceMin && myAces > oppEstAces + 1; // 2+ Ace lead
-                if (dominant || advantage) return aceMoves[0];
+                const acesAfter    = myAces - 1;
+                const dominant     = oppEstAces === 0 && acesAfter >= safeAceMin;
+                const advantage    = acesAfter >= safeAceMin && myAces > oppEstAces + 1;
+                const subTopRI     = state.pileSize >= 2 ? state.pile[state.pileSize - 2] >> 2 : -1;
+                const pileGivesOppPower = subTopRI >= 4; // K or A is 3rd draw card opp would pick up
+                if ((dominant || advantage) && !pileGivesOppPower) return aceMoves[0];
             }
 
             // 5b. Draw if pile has power cards we're deficient in
@@ -334,10 +337,10 @@ export class HeuristicBot {
             return drawMove;
         }
 
-        // 6c. K escalation: press with King whenever opp has no Aces
-        // (does NOT require us to have safeAceMin — if opp has 0 Aces, K is safe to play
-        //  even from a weak position because opp cannot escalate to A-battle)
-        if (myKings >= 1 && oppEstAces === 0) {
+        // 6c. K escalation: press with King on J+ tops when opp has no Aces
+        // Requires topRI >= 2 (don't escalate from 9 or 10 — premature and wastes K)
+        // Requires myAces >= 1 as backup (if opp has 0 Aces they can't escalate further)
+        if (myKings >= 1 && myAces >= 1 && oppEstAces === 0 && topRI >= 2) {
             const kingMoves = safePlays.filter(m => playRI(m) === 4);
             if (kingMoves.length > 0) return kingMoves[0];
         }

@@ -23,6 +23,19 @@ import {
     DRAW_FLAG,
 } from './game-logic.js';
 
+// ===== DEBUG_BLOCK_START — set AI_DEBUG=false (or remove block) for production =====
+export let AI_DEBUG = false;
+const _DBG_R = ['9','10','J','Q','K','A'];
+const _DBG_S = ['\u2660','\u2665','\u2666','\u2663'];
+/** Decode a move integer to a human-readable string. */
+function _fmt(move) {
+    if (move & DRAW_FLAG) return `draw ×${(move & 3) + 1}`;
+    let bits = move & 0xFFFFFF, cards = [];
+    while (bits) { const lb = bits & (-bits); const b = 31 - Math.clz32(lb); cards.push(_DBG_R[b >> 2] + _DBG_S[b & 3]); bits &= ~lb; }
+    return `play [${cards.join(' ')}]`;
+}
+// ===== DEBUG_BLOCK_END =====
+
 // ============================================================
 // ISMCTS Tree Node
 // ============================================================
@@ -653,6 +666,22 @@ export class ISMCTSEngine {
         }
 
         const best = this._bestMove(this._root);
+
+        // ===== DEBUG_BLOCK_START =====
+        if (AI_DEBUG && this._root && this._root.children.size > 0) {
+            const topBit = state.pile[state.pileSize - 1];
+            const topCard = _DBG_R[topBit >> 2] + _DBG_S[topBit & 3];
+            let hb = state.hands[rootPlayer] & 0xFFFFFF, hCards = [];
+            while (hb) { const lb = hb & (-hb); const b = 31 - Math.clz32(lb); hCards.push(_DBG_R[b >> 2] + _DBG_S[b & 3]); hb &= ~lb; }
+            const rows = [...this._root.children.entries()]
+                .sort(([,a],[,b]) => b.visits - a.visits).slice(0, 7)
+                .map(([m, c]) => {
+                    const avg = c.visits > 0 ? (c.wins / c.visits).toFixed(3) : '—';
+                    return `  ${m === best ? '→' : ' '} ${_fmt(m).padEnd(26)} v=${String(c.visits).padStart(5)}  score=${avg}`;
+                }).join('\n');
+            console.log(`[${prof.name}] p${rootPlayer} | Top:${topCard} | Hand:[${hCards.join(' ')}] (${hCards.length} cards)\n${rows}`);
+        }
+        // ===== DEBUG_BLOCK_END =====
 
         // Expose win probability for training debug panel (root wins/visits ratio)
         this.lastWinProb = (this._root && this._root.visits > 0)

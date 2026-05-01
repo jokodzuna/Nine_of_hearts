@@ -29,6 +29,7 @@ import {
 
 import { ISMCTSEngine } from './ai-engine.js';
 import { QBotEngine, HybridQBotEngine, TrainingQBotEngine } from './q-bot.js'; // HybridQBotEngine/TrainingQBotEngine: TEST_BLOCK
+import { HeuristicBot } from './heuristic-bot.js'; // TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
 import {
@@ -76,7 +77,8 @@ const _aiDelay = () => 2000 + Math.random() * 2000;
 let _botVsBot     = false;
 let _botVsBotFast = false;
 const _BOT_LABELS = { mctsAce50: 'MCTS-ace-50', shark: 'Shark', gambler: 'Gambler',
-    newbie: 'Newbie', hybrid: 'Hybrid Q+MCTS', pureq: 'Pure Q-bot', training: 'Training Bot' };
+    newbie: 'Newbie', hybrid: 'Hybrid Q+MCTS', pureq: 'Pure Q-bot', training: 'Training Bot',
+    heuristic: 'Strategist' };
 function _makeBotEngine(key) {
     switch (key) {
         case 'mctsAce50': return new ISMCTSEngine('mctsAce50');
@@ -85,6 +87,7 @@ function _makeBotEngine(key) {
         case 'hybrid':    return new HybridQBotEngine();
         case 'pureq':     return new QBotEngine();
         case 'training':  return new TrainingQBotEngine();
+        case 'heuristic': return new HeuristicBot();          // TEST_BLOCK
         default:          return new ISMCTSEngine('shark');
     }
 }

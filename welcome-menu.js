@@ -1250,9 +1250,10 @@ function _buildBotBattlePanel() {
         ['shark',     '🦈 Shark'],
         ['gambler',   '🎲 Gambler'],
         ['newbie',    '🐣 Newbie'],
-        ['hybrid',    '🔀 Hybrid Q+MCTS'],
-        ['pureq',     '📊 Pure Q-bot'],
-        ['training',  '🎓 Training Bot'],
+        ['hybrid',     '🔀 Hybrid Q+MCTS'],
+        ['pureq',      '📊 Pure Q-bot'],
+        ['training',   '🎓 Training Bot'],
+        ['heuristic',  '🧠 Strategist'],
     ];
 
     const arena = document.createElement('div');

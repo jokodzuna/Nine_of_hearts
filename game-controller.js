@@ -73,6 +73,20 @@ const HUMAN_TURN_MS = 15000;  // must match TURN_DURATION_MS in ui-manager.js
 /** Random 2–4 s delay so AI turns feel natural, not robotic. */
 const _aiDelay = () => 2000 + Math.random() * 2000;
 
+const BOT_DEBUG = true; // set false to silence hand/move logs
+function _fmtHand(hand) {
+    const names = [];
+    let m = hand | 0;
+    while (m) { const b = 31 - Math.clz32(m & -m); names.push(RANK_NAMES[b >> 2] + SUIT_NAMES[b & 3]); m &= m - 1; }
+    return names.join(' ') || '(empty)';
+}
+function _fmtMove(move) {
+    if (move & DRAW_FLAG) return `DRAW ${(move & 3) + 1}`;
+    const bits = move & 0xFFFFFF; const cards = [];
+    let m = bits; while (m) { const b = 31 - Math.clz32(m & -m); cards.push(RANK_NAMES[b >> 2] + SUIT_NAMES[b & 3]); m &= m - 1; }
+    return `PLAY ${cards.join(' ')}`;
+}
+
 // ===== TEST_BLOCK_START — bot-vs-bot mode =====
 let _botVsBot     = false;
 let _botVsBotFast = false;
@@ -358,7 +372,25 @@ function _aiTurn(playerIdx) {
         { hands: Int32Array.from(_state.hands), pile: Int32Array.from(_state.pile) }
     ) : null;
     // ===== TEST_BLOCK_END =====
+
+    if (BOT_DEBUG) {
+        const label = engine?.constructor?.name ?? `P${playerIdx}`;
+        const topBit = _state.pile[_state.pileSize - 1];
+        const topCard = RANK_NAMES[topBit >> 2] + SUIT_NAMES[topBit & 3];
+        console.group(`[BOT ${label}] turn — top: ${topCard} | pile: ${_state.pileSize}`);
+        for (let p = 0; p < _state.numPlayers; p++) {
+            const tag = p === playerIdx ? '▶' : ' ';
+            const elim = (_state.eliminated >> p) & 1 ? ' ELIM' : '';
+            console.log(`  ${tag} P${p}: ${_fmtHand(_state.hands[p])}${elim}`);
+        }
+    }
+
     const move = engine.chooseMove(_state);
+
+    if (BOT_DEBUG) {
+        console.log(`  → ${_fmtMove(move)}`);
+        console.groupEnd();
+    }
 
     // Apply first — advanceTree inside _applyAndAdvance saves the subtree
     // before cleanup() would discard _root

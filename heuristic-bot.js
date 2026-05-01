@@ -180,6 +180,15 @@ export class HeuristicBot {
         }
 
         // ==============================================================
+        // RULE 0.5 — Absolute lone-Ace guard (early/mid game)
+        // With 5+ cards in hand, drawing is ALWAYS better than playing the last Ace.
+        // Applies even when forced (top = A and only Ace responses are legal).
+        // ==============================================================
+        if (myAces === 1 && myTotal >= 5 && drawMove !== null) {
+            if (playMoves.every(m => playRI(m) === 5)) return drawMove;
+        }
+
+        // ==============================================================
         // RULE 1 — 9♥ strict opening
         // When the 9♥ is the top card (pileSize === 1, bit index 1 = rank-0 suit-♥),
         // always play the lowest card. Only exception: opp has ≤3 cards and their

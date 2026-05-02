@@ -1,33 +1,27 @@
 // ================================================================
 // scripts/q-strategist-trainer.mjs
-// Fine-tunes q-table-strategist.json specifically against the
-// HeuristicBot (Strategist) opponent.
+// Fine-tunes q-table-strategist.json against HeuristicBot (Strategist).
 //
 // Opponent mix per game:
-//   50%  vs HeuristicBot   (the target — adapts to its heuristics)
-//   25%  vs Pure Q-bot     (q-table.json greedy — general skill)
-//   25%  vs self           (q-table-strategist greedy — self-play)
+//   50%  vs HeuristicBot   (target — learns its rule-based patterns)
+//   25%  vs Pure Q-bot     (q-table.json + MCTS fallback — keeps general skill)
+//   25%  vs self           (greedy from live table — self-play refinement)
 //
-// Only the Q-strategist (player 1) updates Q-values.
-// Opponents play greedy / deterministic (no Q updates on their side).
+// Urgency mechanism: turn penalty escalates as game drags + hand-size shaping
+// so the bot learns to FINISH games, not loop.
 //
 // Usage:
 //   node scripts/q-strategist-trainer.mjs [--games N] [--epsilon N]
 //
-// Recommended flags:
-//   --games   10000   enough to see meaningful fine-tuning from warm start
-//   --epsilon 0.15    moderate exploration; pre-trained table needs less than fresh
-//
-// Fixed hyper-parameters (tuned to match hybrid-trainer baseline):
-//   α  = 0.05   (fine-tuning LR — avoids catastrophic forgetting of general skill)
-//   γ  = 0.997  (same as hybrid-trainer)
-//   WIN/LOSE = ±50 terminal, turn-penalty = -0.005 × turn_number
-//   STEP_LIMIT = 150 total moves → counted as unfinished game in logs
+// Recommended:
+//   --games   10000
+//   --epsilon 0.25   (higher than before; pre-trained table resists forgetting)
 // ================================================================
 
 import { createInitialState, getPossibleMoves, applyMove,
          isGameOver, getResult, DRAW_FLAG } from '../game-logic.js';
 import { HeuristicBot } from '../heuristic-bot.js';
+import { ISMCTSEngine } from '../ai-engine.js';
 import { writeFileSync, existsSync, readFileSync, copyFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -42,16 +36,17 @@ function getArg(flag, fallback) {
     return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : fallback;
 }
 const GAMES     = parseInt(getArg('--games',   '10000'), 10);
-const EPS_FIXED = parseFloat(getArg('--epsilon', '0.15'));
+const EPS_START = parseFloat(getArg('--epsilon', '0.25'));
+const EPS_MIN   = 0.05;
 
 // ---- Hyper-parameters -----------------------------------------------
-const ALPHA      = 0.05;    // fine-tuning LR (lower than fresh: 0.2)
+const ALPHA      = 0.20;    // raised: needs to adapt quickly to strategist patterns
 const GAMMA      = 0.997;
 const WIN_R      =  50.0;
 const LOSE_R     = -50.0;
 const STEP_LIMIT = 150;     // total moves before declaring unfinished
 const SAVE_EVERY = 200;
-const LOG_EVERY  = 500;
+const LOG_EVERY  = 3000;
 const BOT        = 1;       // Q-strategist is always player 1
 
 // ---- Action indices / constants ------------------------------------
@@ -65,9 +60,7 @@ function pop(x) {
     return (Math.imul((x + (x >>> 4)) & 0x0F0F0F, 0x010101) >>> 16) & 0xFF;
 }
 
-// ---- V2 state encoding (from any player's perspective) -------------
-// Encoding is perspective-agnostic: "my hand" = pid's hand.
-// This matches q-bot.js and hybrid-trainer.mjs exactly.
+// ---- V2 state encoding (perspective-aware) -------------------------
 function pClass(rk) { return rk <= 1 ? 0 : rk <= 3 ? 1 : 2; }
 function bkt(n)     { return n >= 3 ? 3 : n; }
 function pdepth(ps) { const d = ps - 1; return d <= 0 ? 0 : d <= 2 ? 1 : 2; }
@@ -175,49 +168,84 @@ if (existsSync(STRAT_PATH)) {
     console.log('No seed table found — starting fresh.');
 }
 
-// ---- Load Q-bot opponent (q-table.json, greedy, read-only) ----------
-let qbotTable = null;
-if (existsSync(QBOT_PATH)) {
-    const saved = JSON.parse(readFileSync(QBOT_PATH, 'utf8'));
-    qbotTable   = saved.table ?? saved;
-    console.log(`Q-bot opponent table loaded (${Object.keys(qbotTable).length} states)`);
-} else {
-    console.warn('q-table.json not found — Q-bot opponent will play lowest-rank single');
-}
-
-// Greedy lookup in a plain JSON table (read-only opponent)
-function greedyFromJSON(table, key, lActs) {
-    if (!table) return lActs[(Math.random() * lActs.length) | 0];
-    const qrow = table[key];
-    if (!qrow) return lActs[(Math.random() * lActs.length) | 0];
-    let best = lActs[0], bv = -Infinity;
-    for (const a of lActs) {
-        const v = qrow[a] ?? 0;
-        if (v > bv) { bv = v; best = a; }
+// ---- Headless Q-bot opponent (q-table.json + MCTS fallback) --------
+class HeadlessQBot {
+    constructor(tablePath) {
+        this.table    = null;
+        this.fallback = new ISMCTSEngine('shark');
+        if (existsSync(tablePath)) {
+            const saved = JSON.parse(readFileSync(tablePath, 'utf8'));
+            this.table = saved.table ?? saved;
+            console.log(`Q-bot opponent loaded (${Object.keys(this.table).length} states)`);
+        } else {
+            console.warn('q-table.json not found — Q-bot opponent will use pure MCTS fallback');
+        }
     }
-    return best;
+
+    chooseMove(state) {
+        const moves = getPossibleMoves(state);
+        const pid   = state.currentPlayer;
+        const key   = encodeState(state, pid);
+        const lActs = legalActs(moves);
+
+        if (!this.table) return this.fallback.chooseMove(state);
+        const qrow = this.table[key];
+        if (!qrow) return this.fallback.chooseMove(state);
+
+        let best = lActs[0], bv = -Infinity;
+        for (const a of lActs) {
+            const v = qrow[a] ?? 0;
+            if (v > bv) { bv = v; best = a; }
+        }
+        const conc = actToMove(moves, best);
+        if (conc === null) return this.fallback.chooseMove(state);
+        return conc;
+    }
 }
 
-// Greedy lookup in the live Map (self-play opponent, ε=0)
-function greedyFromMap(key, lActs) {
-    const r = Q.get(key);
-    if (!r) return lActs[(Math.random() * lActs.length) | 0];
-    let best = lActs[0], bv = -Infinity;
-    for (const a of lActs) { if (r[a] > bv) { bv = r[a]; best = a; } }
-    return best;
-}
+const qbotOpp = new HeadlessQBot(QBOT_PATH);
 
-// ---- Heuristic opponent (one shared instance, reset each game) ------
+// ---- Heuristic opponent (shared instance, reset each game) ----------
 const heuristicBot = new HeuristicBot();
+
+// ---- Urgency + shaping reward ---------------------------------------
+function stepReward(prev, move, next, botTurnCount, totalMoves) {
+    let r = 0;
+
+    // 1. Escalating turn penalty: the longer the game, the more expensive waiting becomes
+    const urgency = 1 + Math.floor(totalMoves / 40);
+    r -= botTurnCount * 0.015 * urgency;
+
+    // 2. Hand-size shaping: reward playing cards, penalise drawing
+    if (!(move & DRAW_FLAG)) {
+        const played = pop(move & 0xFFFFFF);
+        r += 0.02 * played;          // +0.02 per card removed from hand
+    } else {
+        const drawn = pop(next.hands[BOT] & ~prev.hands[BOT]);
+        r -= 0.015 * drawn;           // -0.015 per card picked up
+    }
+
+    // 3. Blocking bonus: when opponent is forced to draw on their next turn
+    const opp = 1 - BOT;
+    const oppHand = next.hands[opp];
+    if (pop(oppHand) > 0) {
+        let oppCanPlay = false;
+        for (let rk = next.topRankIdx; rk <= 5; rk++) {
+            if (oppHand & RM[rk]) { oppCanPlay = true; break; }
+        }
+        if (!oppCanPlay) r += 0.06;  // opponent blocked → nice play
+    }
+
+    return r;
+}
 
 // ---- Single game ----------------------------------------------------
 // oppType: 'heuristic' | 'qbot' | 'self'
-// Returns: { winner (-1=timeout, 0=p0 won, 1=p1/BOT won), totalMoves }
 function playGame(eps, oppType) {
     let s = createInitialState(2);
     heuristicBot.resetKnowledge();
 
-    const hist      = [];    // BOT's decision history: {key, act, lActs, tPen}
+    const hist      = [];    // BOT's decision history
     let totalMoves  = 0;
     const turnCount = [0, 0];
 
@@ -230,18 +258,28 @@ function playGame(eps, oppType) {
 
         if (p !== BOT) {
             // ---- Opponent turn (no Q update) -------------------------
-            let act;
+            let conc;
             if (oppType === 'heuristic') {
-                const conc = heuristicBot.chooseMove(s);
-                s = applyMove(s, conc);
-                continue;
+                conc = heuristicBot.chooseMove(s);
             } else if (oppType === 'qbot') {
-                act = greedyFromJSON(qbotTable, encodeState(s, p), lActs);
+                const act = qbotOpp.chooseMove(s);
+                // qbotOpp.chooseMove returns a concrete move, not an action
+                conc = act;  // HeadlessQBot already resolves to concrete move
             } else {
-                // self: greedy Q-strategist (ε=0)
-                act = greedyFromMap(encodeState(s, p), lActs);
+                // self: greedy from live Q table (ε=0)
+                const key = encodeState(s, p);
+                const r   = Q.get(key);
+                if (r) {
+                    let best = lActs[0], bv = -Infinity;
+                    for (const a of lActs) { if (r[a] > bv) { bv = r[a]; best = a; } }
+                    conc = actToMove(moves, best) ?? moves[0];
+                } else {
+                    conc = moves[0];
+                }
             }
-            const conc = actToMove(moves, act) ?? moves[0];
+
+            // Notify heuristic bot of opponent's move (for card tracking)
+            heuristicBot.observeMove(s, conc);
             s = applyMove(s, conc);
             continue;
         }
@@ -250,10 +288,13 @@ function playGame(eps, oppType) {
         const key  = encodeState(s, BOT);
         const act  = pickAction(key, lActs, eps);
         const conc = actToMove(moves, act) ?? moves[0];
-        // Turn penalty scales with how many turns BOT has taken
-        const tPen = -(turnCount[BOT] * 0.005);
-        qRow(key);   // pre-register so next-state bootstrap is never stale
-        hist.push({ key, act, lActs, tPen });
+
+        // Notify heuristic bot of our move too (so it tracks the game correctly)
+        heuristicBot.observeMove(s, conc);
+
+        const tPen = turnCount[BOT] * 0.015;  // base component (urgency applied inside stepReward)
+        qRow(key);   // pre-register state immediately
+        hist.push({ key, act, lActs, prev: s, move: conc });
         s = applyMove(s, conc);
     }
 
@@ -265,7 +306,6 @@ function playGame(eps, oppType) {
     if (winner === BOT) {
         termR = WIN_R;
     } else if (timedOut) {
-        // Partial credit only as penalty: proportional card disadvantage
         const total = pop(s.hands[0]) + pop(s.hands[1]);
         const raw   = total > 0 ? 1.5 * (pop(s.hands[1 - BOT]) - pop(s.hands[BOT])) / total : 0;
         termR = Math.min(0, raw);
@@ -274,8 +314,8 @@ function playGame(eps, oppType) {
     }
 
     for (let i = 0; i < hist.length; i++) {
-        const { key, act, tPen, lActs: curLActs } = hist[i];
-        const stepR = tPen;   // only turn penalty (no hand-shaping)
+        const { key, act, lActs: curLActs, prev, move } = hist[i];
+        const stepR = stepReward(prev, move, s, turnCount[BOT], totalMoves);
         if (i < hist.length - 1) {
             const { key: nKey, lActs: nActs } = hist[i + 1];
             updateQ(key, act, stepR, nKey, nActs);
@@ -297,21 +337,22 @@ function serialise() {
 
 // ---- Main loop ------------------------------------------------------
 console.log(`\nQ-Strategist Trainer`);
-console.log(`Games: ${GAMES.toLocaleString()}  |  ε=${EPS_FIXED} (fixed)  |  α=${ALPHA}  |  γ=${GAMMA}`);
-console.log(`Opponent mix: 50% Strategist (HeuristicBot) | 25% Q-bot | 25% self`);
-console.log(`WIN/LOSE = ±${WIN_R}  |  turn-penalty=0.005/turn  |  step-limit=${STEP_LIMIT}`);
+console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN} (smooth decay)  |  α=${ALPHA}  |  γ=${GAMMA}`);
+console.log(`Opponent mix: 50% Strategist | 25% Q-bot (MCTS fallback) | 25% self`);
+console.log(`Urgency: turn-penalty × urgency(1+floor(moves/40)) + hand-size shaping + blocking bonus`);
 console.log(`Output: ${STRAT_PATH}\n`);
 
-// Per-log-window counters (reset every LOG_EVERY games)
+// Per-log-window counters
 let logHWins=0, logHLoss=0, logHTO=0, logHN=0;
 let logQWins=0, logQLoss=0, logQTO=0, logQN=0;
 let logSWins=0, logSLoss=0, logSTO=0, logSN=0;
 let logMoves=0, logN=0, logNewStatesSnap=0;
 
 for (let g = 1; g <= GAMES; g++) {
-    const r = Math.random();
+    const eps     = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - (g - 1) / (GAMES - 1), 2);
+    const r       = Math.random();
     const oppType = r < 0.50 ? 'heuristic' : r < 0.75 ? 'qbot' : 'self';
-    const { winner, totalMoves } = playGame(EPS_FIXED, oppType);
+    const { winner, totalMoves } = playGame(eps, oppType);
     const botWon = winner === BOT;
     const to     = winner === -1;
 
@@ -345,7 +386,7 @@ for (let g = 1; g <= GAMES; g++) {
         const pct = (n, d) => d > 0 ? (n / d * 100).toFixed(1).padStart(5) + '%' : '  n/a';
         const newSt = totalNewStates - logNewStatesSnap;
         console.log(
-            `  game ${String(g).padStart(6)}  ε=${EPS_FIXED.toFixed(2)}` +
+            `  game ${String(g).padStart(6)}  ε=${eps.toFixed(3)}` +
             `  avgMoves=${(logMoves / logN).toFixed(1).padStart(5)}` +
             `  +states=${newSt.toString().padStart(5)}  total=${Q.size}  Qups=${logQUpdates}`
         );

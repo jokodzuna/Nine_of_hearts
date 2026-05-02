@@ -372,9 +372,10 @@ function playGame(eps, oppType) {
     if (winner === BOT) {
         termR = WIN_R;
     } else if (timedOut) {
+        // Timeout: strongly negative, scaled slightly by who has fewer cards
         const total = pop(s.hands[0]) + pop(s.hands[1]);
-        const raw   = total > 0 ? 1.5 * (pop(s.hands[1 - BOT]) - pop(s.hands[BOT])) / total : 0;
-        termR = Math.min(0, raw);
+        const diff  = total > 0 ? (pop(s.hands[1 - BOT]) - pop(s.hands[BOT])) / total : 0;
+        termR = -30.0 + 5.0 * diff;   // base -30, ±5 depending on card advantage
     } else {
         termR = LOSE_R;
     }

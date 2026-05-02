@@ -1,3 +1,6 @@
+// Stub window for headless MCTS (ai-engine.js references window.AI_DEBUG)
+globalThis.window = globalThis.window || { AI_DEBUG: false };
+
 // ================================================================
 // scripts/q-strategist-trainer.mjs
 // Fine-tunes q-table-strategist.json against HeuristicBot (Strategist).
@@ -21,7 +24,6 @@
 import { createInitialState, getPossibleMoves, applyMove,
          isGameOver, getResult, DRAW_FLAG } from '../game-logic.js';
 import { HeuristicBot } from '../heuristic-bot.js';
-import { ISMCTSEngine } from '../ai-engine.js';
 import { writeFileSync, existsSync, readFileSync, copyFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -36,8 +38,8 @@ function getArg(flag, fallback) {
     return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : fallback;
 }
 const GAMES     = parseInt(getArg('--games',   '10000'), 10);
-const EPS_START = parseFloat(getArg('--epsilon', '0.25'));
-const EPS_MIN   = 0.05;
+const EPS_START = parseFloat(getArg('--epsilon', '0.15'));
+const EPS_MIN   = 0.03;
 
 // ---- Hyper-parameters -----------------------------------------------
 const ALPHA      = 0.20;    // raised: needs to adapt quickly to strategist patterns
@@ -109,6 +111,13 @@ function legalActs(moves) { return [...new Set(moves.map(moveToAct))]; }
 const Q = new Map();
 let totalNewStates = 0;
 
+// ---- Frozen snapshot for self-play opponent -------------------------
+let frozenSnapshot = new Map();   // copy of Q at last snapshot; self opponent reads this
+function refreshSnapshot() {
+    frozenSnapshot = new Map();
+    for (const [k, r] of Q) frozenSnapshot.set(k, new Float64Array(r));
+}
+
 function qRow(key) {
     let r = Q.get(key);
     if (!r) { r = new Float64Array(N_ACTS).fill(0); Q.set(key, r); totalNewStates++; }
@@ -167,18 +176,31 @@ if (existsSync(STRAT_PATH)) {
 } else {
     console.log('No seed table found — starting fresh.');
 }
+refreshSnapshot();   // seed frozen snapshot for self-play opponent
 
-// ---- Headless Q-bot opponent (q-table.json + MCTS fallback) --------
+// ---- Fast heuristic fallback (used when Q-table misses) ------------
+function fastHeuristic(state) {
+    const moves = getPossibleMoves(state);
+    const plays = moves.filter(m => !(m & DRAW_FLAG));
+    if (plays.length === 0) return moves[0];
+    let best = plays[0], bestRank = -1;
+    for (const m of plays) {
+        const rk = (31 - Math.clz32(m & 0xFFFFFF)) >> 2;
+        if (rk > bestRank) { bestRank = rk; best = m; }
+    }
+    return best;
+}
+
+// ---- Headless Q-bot opponent (q-table.json + fast heuristic fallback)
 class HeadlessQBot {
     constructor(tablePath) {
-        this.table    = null;
-        this.fallback = new ISMCTSEngine('shark');
+        this.table = null;
         if (existsSync(tablePath)) {
             const saved = JSON.parse(readFileSync(tablePath, 'utf8'));
             this.table = saved.table ?? saved;
             console.log(`Q-bot opponent loaded (${Object.keys(this.table).length} states)`);
         } else {
-            console.warn('q-table.json not found — Q-bot opponent will use pure MCTS fallback');
+            console.warn('q-table.json not found — Q-bot opponent will use fast heuristic fallback');
         }
     }
 
@@ -188,9 +210,9 @@ class HeadlessQBot {
         const key   = encodeState(state, pid);
         const lActs = legalActs(moves);
 
-        if (!this.table) return this.fallback.chooseMove(state);
+        if (!this.table) return fastHeuristic(state);
         const qrow = this.table[key];
-        if (!qrow) return this.fallback.chooseMove(state);
+        if (!qrow) return fastHeuristic(state);
 
         let best = lActs[0], bv = -Infinity;
         for (const a of lActs) {
@@ -198,7 +220,7 @@ class HeadlessQBot {
             if (v > bv) { bv = v; best = a; }
         }
         const conc = actToMove(moves, best);
-        if (conc === null) return this.fallback.chooseMove(state);
+        if (conc === null) return fastHeuristic(state);
         return conc;
     }
 }
@@ -209,23 +231,25 @@ const qbotOpp = new HeadlessQBot(QBOT_PATH);
 const heuristicBot = new HeuristicBot();
 
 // ---- Urgency + shaping reward ---------------------------------------
-function stepReward(prev, move, next, botTurnCount, totalMoves) {
+// isSelfPlay: when true, punish inaction harder (both bots share policy — loops likely)
+function stepReward(prev, move, next, botTurnCount, totalMoves, isSelfPlay) {
     let r = 0;
 
-    // 1. Escalating turn penalty: the longer the game, the more expensive waiting becomes
-    const urgency = 1 + Math.floor(totalMoves / 40);
-    r -= botTurnCount * 0.015 * urgency;
+    // 1. Escalating turn penalty
+    const baseUrgency = 1 + Math.floor(totalMoves / 40);
+    const urgencyMult = isSelfPlay ? 2.5 : 1.0;  // self-play: 2.5× harsher
+    r -= botTurnCount * 0.015 * baseUrgency * urgencyMult;
 
-    // 2. Hand-size shaping: reward playing cards, penalise drawing
+    // 2. Hand-size shaping
     if (!(move & DRAW_FLAG)) {
         const played = pop(move & 0xFFFFFF);
-        r += 0.02 * played;          // +0.02 per card removed from hand
+        r += (isSelfPlay ? 0.04 : 0.02) * played;   // self-play: 2× reward for playing cards
     } else {
         const drawn = pop(next.hands[BOT] & ~prev.hands[BOT]);
-        r -= 0.015 * drawn;           // -0.015 per card picked up
+        r -= (isSelfPlay ? 0.03 : 0.015) * drawn;     // self-play: 2× penalty for drawing
     }
 
-    // 3. Blocking bonus: when opponent is forced to draw on their next turn
+    // 3. Blocking bonus
     const opp = 1 - BOT;
     const oppHand = next.hands[opp];
     if (pop(oppHand) > 0) {
@@ -233,7 +257,7 @@ function stepReward(prev, move, next, botTurnCount, totalMoves) {
         for (let rk = next.topRankIdx; rk <= 5; rk++) {
             if (oppHand & RM[rk]) { oppCanPlay = true; break; }
         }
-        if (!oppCanPlay) r += 0.06;  // opponent blocked → nice play
+        if (!oppCanPlay) r += 0.06;
     }
 
     return r;
@@ -242,6 +266,7 @@ function stepReward(prev, move, next, botTurnCount, totalMoves) {
 // ---- Single game ----------------------------------------------------
 // oppType: 'heuristic' | 'qbot' | 'self'
 function playGame(eps, oppType) {
+    const isSelfPlay = oppType === 'self';
     let s = createInitialState(2);
     heuristicBot.resetKnowledge();
 
@@ -266,9 +291,9 @@ function playGame(eps, oppType) {
                 // qbotOpp.chooseMove returns a concrete move, not an action
                 conc = act;  // HeadlessQBot already resolves to concrete move
             } else {
-                // self: greedy from live Q table (ε=0)
+                // self: greedy from FROZEN snapshot (ε=0) — prevents policy chasing its own tail
                 const key = encodeState(s, p);
-                const r   = Q.get(key);
+                const r   = frozenSnapshot.get(key);
                 if (r) {
                     let best = lActs[0], bv = -Infinity;
                     for (const a of lActs) { if (r[a] > bv) { bv = r[a]; best = a; } }
@@ -315,7 +340,7 @@ function playGame(eps, oppType) {
 
     for (let i = 0; i < hist.length; i++) {
         const { key, act, lActs: curLActs, prev, move } = hist[i];
-        const stepR = stepReward(prev, move, s, turnCount[BOT], totalMoves);
+        const stepR = stepReward(prev, move, s, turnCount[BOT], totalMoves, isSelfPlay);
         if (i < hist.length - 1) {
             const { key: nKey, lActs: nActs } = hist[i + 1];
             updateQ(key, act, stepR, nKey, nActs);
@@ -338,8 +363,9 @@ function serialise() {
 // ---- Main loop ------------------------------------------------------
 console.log(`\nQ-Strategist Trainer`);
 console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN} (smooth decay)  |  α=${ALPHA}  |  γ=${GAMMA}`);
-console.log(`Opponent mix: 50% Strategist | 25% Q-bot (MCTS fallback) | 25% self`);
+console.log(`Opponent mix: 50% Strategist | 25% Q-bot (fast heuristic fallback) | 25% frozen-self`);
 console.log(`Urgency: turn-penalty × urgency(1+floor(moves/40)) + hand-size shaping + blocking bonus`);
+console.log(`Self-play: frozen snapshot opponent + 2.5× urgency + 2× hand-size shaping`);
 console.log(`Output: ${STRAT_PATH}\n`);
 
 // Per-log-window counters
@@ -380,6 +406,7 @@ for (let g = 1; g <= GAMES; g++) {
         const snap = JSON.stringify({ games: g, stateCount: Q.size, table: serialise() });
         writeFileSync(STRAT_PATH, snap);
         process.stdout.write(`  [saved g${g}: ${Q.size} states]\n`);
+        refreshSnapshot();   // freeze current policy for self-play opponent
     }
 
     if (g % LOG_EVERY === 0) {

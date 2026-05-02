@@ -111,6 +111,42 @@ export class QBotEngine {
     advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
 
+// ---- QStrategistEngine class (loads q-table-strategist.json) --------
+export class QStrategistEngine {
+    constructor() {
+        this._table    = null;
+        this._fallback = new ISMCTSEngine('shark');
+        fetch('./q-table-strategist.json')
+            .then(r => r.json())
+            .then(data => { this._table = data.table; })
+            .catch(err => console.warn('[QStrategist] Could not load q-table-strategist.json — using MCTS fallback.', err));
+    }
+
+    chooseMove(state) {
+        const moves = getPossibleMoves(state);
+        if (!moves.length) return 0;
+
+        if (!this._table) return this._fallback.chooseMove(state);
+
+        const key  = encodeState(state);
+        const qrow = this._table[key];
+        if (!qrow)  return this._fallback.chooseMove(state);
+
+        const legal = [...new Set(moves.map(moveToAct))];
+        let best = legal[0], bv = -Infinity;
+        for (const a of legal) {
+            const v = qrow[a] ?? Infinity;
+            if (v > bv) { bv = v; best = a; }
+        }
+        return actToMove(moves, best) ?? this._fallback.chooseMove(state);
+    }
+
+    cleanup()         { this._fallback.cleanup(); }
+    resetKnowledge()  { this._fallback.resetKnowledge(); }
+    observeMove(m, p) { this._fallback.observeMove(m, p); }
+    advanceTree(m, p) { this._fallback.advanceTree(m, p); }
+}
+
 // ===== TEST_BLOCK_START — delete this class and the ISMCTSEngine import above for production =====
 export class HybridQBotEngine {
     constructor() {

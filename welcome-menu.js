@@ -1247,14 +1247,15 @@ function _buildBotBattlePanel() {
     const panel = _makePanelBase('bot-vs-bot', '🤖 Bot Battle');
 
     const BOT_OPTS = [
-        ['mctsAce50', '🧪 MCTS-ace-50'],
-        ['shark',     '🦈 Shark'],
-        ['gambler',   '🎲 Gambler'],
-        ['newbie',    '🐣 Newbie'],
-        ['hybrid',     '🔀 Hybrid Q+MCTS'],
-        ['pureq',      '📊 Pure Q-bot'],
-        ['training',   '🎓 Training Bot'],
-        ['heuristic',  '🧠 Strategist'],
+        ['mctsAce50',   '🧪 MCTS-ace-50'],
+        ['shark',       '🦈 Shark'],
+        ['gambler',     '🎲 Gambler'],
+        ['newbie',      '🐣 Newbie'],
+        ['hybrid',      '🔀 Hybrid Q+MCTS'],
+        ['pureq',       '📊 Pure Q-bot'],
+        ['qstrategist', '🎯 Q-Strategist'],
+        ['training',    '🎓 Training Bot'],
+        ['heuristic',   '🧠 Strategist'],
     ];
 
     const arena = document.createElement('div');

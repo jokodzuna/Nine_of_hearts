@@ -393,6 +393,14 @@ export class HeuristicBot {
                 return drawMove;
             }
 
+            // 5b3. Opponent has ≤2 cards with deep pile: draw to recover K rather than
+            //      matching. K-match gives opp back powerful drawn cards (K+K+?);
+            //      drawing may expose a top they can't respond to (e.g. Q when opp has J).
+            //      Guard: myTotal≥8 — if we're nearly done ourselves, press instead.
+            if (drawMove !== null && oppMinCards <= 2 && state.pileSize >= 5 && myTotal >= 8) {
+                return drawMove;
+            }
+
             // 5c. Match K — PREFER this over burning an Ace; opp must respond to K again
             // Exception: deep-pile K-loop guard — when pile is large (>=10) and drawing
             // already recovers a K, matching K just recycles power cards and extends the game.

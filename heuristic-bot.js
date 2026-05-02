@@ -275,7 +275,9 @@ export class HeuristicBot {
         // stuck in their hand.  Only worthwhile with Ace surplus and opp still in
         // contention (has an Ace to chain with).
         // ==============================================================
-        if (topRI <= 3 && state.pileSize >= 2 && myAces >= safeAceMin && oppEstAces > 0
+        // Don't burn an Ace on pile-trap when a quad junk dump is ready — Rule 3 handles it
+        const _quadReady = playMoves.some(m => !(m & DRAW_FLAG) && playCnt(m) === 4 && playRI(m) <= 4);
+        if (!_quadReady && topRI <= 3 && state.pileSize >= 2 && myAces >= safeAceMin && oppEstAces > 0
                 && oppMinCards <= 5) {
             const subRI2trap = state.pile[state.pileSize - 2] >> 2;
             if (topRI <= 1 || subRI2trap <= 1) {
@@ -291,7 +293,8 @@ export class HeuristicBot {
         // buried under the quad and restart the escalation loop.
         // ==============================================================
         for (const m of playMoves) {
-            if (playCnt(m) === 4 && playRI(m) <= 4 && myAces >= safeAceMin) {
+            if (playCnt(m) === 4 && playRI(m) <= 4
+                    && (myAces >= safeAceMin || myTotal > oppMinCards + 3)) {
                 const r = playRI(m);
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad

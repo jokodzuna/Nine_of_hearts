@@ -382,6 +382,14 @@ export class HeuristicBot {
                 return drawMove;
             }
 
+            // 5b2. Shallow-pile K recovery: K sits on low junk (e.g. K on 9♥, pileSize≤2).
+            //      Drawing gets the K back for free rather than matching and recycling both Kings.
+            //      Guard: opp not near win (don't open 9♥ top when opp has ≤2 cards).
+            if (drawMove !== null && state.pileSize <= 2 && subRI2 <= 1
+                    && oppMinCards > 2 && myTotal >= 5) {
+                return drawMove;
+            }
+
             // 5c. Match K — PREFER this over burning an Ace; opp must respond to K again
             // Exception: deep-pile K-loop guard — when pile is large (>=10) and drawing
             // already recovers a K, matching K just recycles power cards and extends the game.
@@ -424,6 +432,13 @@ export class HeuristicBot {
         if (myAces === 1 && myTotal > 2) {
             const filtered = safePlays.filter(m => playRI(m) !== 5);
             if (filtered.length > 0) safePlays = filtered;
+        }
+
+        // 6-pre. Shallow-pile Q recovery: Q sits on 9♥ or low junk (pileSize≤2).
+        //        Draw it back rather than play over — don't open 9♥ top when opp has ≤2 cards.
+        if (drawMove !== null && topRI === 3 && state.pileSize <= 2
+                && oppMinCards > 2 && myTotal >= 5) {
+            return drawMove;
         }
 
         // 6a. Opponent near win — maximum pressure

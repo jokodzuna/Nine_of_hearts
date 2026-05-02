@@ -5,7 +5,14 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 // scripts/q-strategist-trainer.mjs
 // Fine-tunes q-table-strategist.json against HeuristicBot (Strategist).
 //
-// Opponent mix per game:
+// Discovered training protocol (burst-then-mix):
+//   1. Pure burst vs HeuristicBot to anchor core knowledge:
+//      node scripts/q-strategist-trainer.mjs --pure --games 20000 --epsilon 0.25
+//   2. Mixed maintenance to broaden without catastrophic forgetting:
+//      node scripts/q-strategist-trainer.mjs --games 10000
+//   Repeat cycle whenever Strategist win rate drops below ~72%.
+//
+// Opponent mix per game (mixed mode):
 //   25%  vs HeuristicBot   (target — learns its rule-based patterns)
 //   25%  vs Pure Q-bot     (q-table.json + fast heuristic — keeps general skill)
 //   25%  vs self           (greedy from frozen snapshot — self-play refinement)
@@ -15,11 +22,13 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 // so the bot learns to FINISH games, not loop.
 //
 // Usage:
-//   node scripts/q-strategist-trainer.mjs [--games N] [--epsilon N]
+//   node scripts/q-strategist-trainer.mjs [--games N] [--epsilon N] [--pure [mode]] [--mcts-iters N]
 //
-// Recommended:
-//   --games   10000
-//   --epsilon 0.25   (higher than before; pre-trained table resists forgetting)
+// Flags:
+//   --games N        number of games (default: 10000)
+//   --epsilon N      start epsilon (default: 0.15)
+//   --pure [mode]    100% vs one opponent: strategist | qbot | self | mcts
+//   --mcts-iters N   MCTS iterations per move (default: 50)
 // ================================================================
 
 import { createInitialState, getPossibleMoves, applyMove,

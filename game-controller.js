@@ -274,9 +274,10 @@ function _startGame(cfgOverride = null) {
         PLAYER_NAMES[0] = _BOT_LABELS[cfg.botP0] ?? 'Bot A';
         PLAYER_NAMES[1] = _BOT_LABELS[cfg.botP1] ?? 'Bot B';
     } else if (isTestBot) {
-        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid'   ? 'Hybrid Q+MCTS'
-                        : cfg.difficulty === 'test-training' ? 'Training Bot'
-                        : cfg.difficulty === 'test-ace50'    ? 'MCTS-ace-50'
+        PLAYER_NAMES[1] = cfg.difficulty === 'test-hybrid'     ? 'Hybrid Q+MCTS'
+                        : cfg.difficulty === 'test-training'  ? 'Training Bot'
+                        : cfg.difficulty === 'test-ace50'     ? 'MCTS-ace-50'
+                        : cfg.difficulty === 'test-heuristic' ? 'Strategist'
                         : 'Pure Q-bot';
     }
     // ===== TEST_BLOCK_END =====

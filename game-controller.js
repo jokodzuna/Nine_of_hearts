@@ -222,7 +222,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
-    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot'; // TEST_BLOCK
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot' || cfg.difficulty === 'test-heuristic'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
@@ -235,6 +235,7 @@ function _startGame(cfgOverride = null) {
         'test-training':[null, null,     null,       null    ], // TEST_BLOCK
         'test-ace50':   [null, null,     null,       null    ], // TEST_BLOCK
         'test-bot-vs-bot': [null, null,  null,       null    ], // TEST_BLOCK
+        'test-heuristic': [null, null,   null,       null    ], // TEST_BLOCK
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
@@ -244,6 +245,7 @@ function _startGame(cfgOverride = null) {
     else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
     else if (cfg.difficulty === 'test-ace50')    _engines[1] = new ISMCTSEngine('mctsAce50'); // TEST_BLOCK
+    else if (cfg.difficulty === 'test-heuristic') _engines[1] = new HeuristicBot();            // TEST_BLOCK
     else if (cfg.difficulty === 'test-bot-vs-bot') {                                          // TEST_BLOCK
         _engines[0] = _makeBotEngine(cfg.botP0 ?? 'mctsAce50');                              // TEST_BLOCK
         _engines[1] = _makeBotEngine(cfg.botP1 ?? 'shark');                                  // TEST_BLOCK

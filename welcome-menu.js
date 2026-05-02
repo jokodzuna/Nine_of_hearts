@@ -1204,10 +1204,11 @@ function _buildTestBotPanel() {
     const list  = document.createElement('div');
     list.className = 'option-list';
     const opts = [
-        ['test-hybrid',   'Hybrid Q+MCTS'],
-        ['test-pureq',    'Pure Q-bot'],
-        ['test-training', '🎓 Training Sandbox'],
-        ['test-ace50',    '🧪 MCTS-ace-50'],
+        ['test-hybrid',     'Hybrid Q+MCTS'],
+        ['test-pureq',      'Pure Q-bot'],
+        ['test-training',   '🎓 Training Sandbox'],
+        ['test-ace50',      '🧪 MCTS-ace-50'],
+        ['test-heuristic',  '🧠 Strategist'],
     ];
     for (const [value, label] of opts) {
         const btn = document.createElement('button');

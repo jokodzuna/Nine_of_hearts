@@ -260,8 +260,8 @@ class HeadlessQBot {
 
     chooseMove(state) {
         const moves = getPossibleMoves(state);
-        const pid   = state.currentPlayer;
-        const key   = encodeState(state, pid);
+        // q-table.json was trained with BOT=1 always — encode from player 1's perspective
+        const key   = encodeState(state, 1);
         const lActs = legalActs(moves);
 
         if (!this.table) return fastHeuristic(state);
@@ -382,7 +382,6 @@ function playGame(eps, oppType) {
         // Notify heuristic bot of our move too (so it tracks the game correctly)
         heuristicBot.observeMove(s, conc);
 
-        const tPen = turnCount[BOT] * 0.015;  // base component (urgency applied inside stepReward)
         qRow(key);   // pre-register state immediately
         hist.push({ key, act, lActs, prev: s, move: conc });
         s = applyMove(s, conc);

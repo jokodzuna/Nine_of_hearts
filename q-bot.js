@@ -37,6 +37,20 @@ function encodeState(s) {
            `|${myA}|${myH}|${opH}|${pdepth(s.pileSize)}|${bkt(pop(oh & (RM[4]|RM[5])))}`;
 }
 
+// perspective-aware version — used by QStrategistEngine so it works as either player
+function encodeStateFor(s, pid) {
+    const h   = s.hands[pid];
+    const oh  = s.hands[1 - pid];
+    const p2  = s.pileSize >= 2 ? pClass(s.pile[s.pileSize - 2] >> 2) : 3;
+    const p3  = s.pileSize >= 3 ? pClass(s.pile[s.pileSize - 3] >> 2) : 3;
+    const myH = Math.min(pop(h),  12);
+    const opH = Math.min(pop(oh), 12);
+    const myA = pop(h & RM[5]);
+    return `${s.topRankIdx}|${p2}|${p3}` +
+           `|${bkt(pop(h  & (RM[0]|RM[1])))}|${bkt(pop(h  & (RM[2]|RM[3])))}` +
+           `|${myA}|${myH}|${opH}|${pdepth(s.pileSize)}|${bkt(pop(oh & (RM[4]|RM[5])))}`;
+}
+
 // ---- Action ↔ concrete move (identical to q-trainer.mjs) ------------
 function moveToAct(m) {
     if (m & DRAW_FLAG) return ACT_DRAW;
@@ -128,7 +142,7 @@ export class QStrategistEngine {
 
         if (!this._table) return this._fallback.chooseMove(state);
 
-        const key  = encodeState(state);
+        const key  = encodeStateFor(state, state.currentPlayer);
         const qrow = this._table[key];
         if (!qrow)  return this._fallback.chooseMove(state);
 

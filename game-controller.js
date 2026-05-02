@@ -28,7 +28,7 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
-import { QBotEngine, HybridQBotEngine, TrainingQBotEngine, QStrategistEngine } from './q-bot.js'; // TEST_BLOCK
+import { QBotEngine, HybridQBotEngine, TrainingQBotEngine, QStrategistEngine, QStrategistMCTSEngine } from './q-bot.js'; // TEST_BLOCK
 import { HeuristicBot } from './heuristic-bot.js'; // TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
@@ -92,7 +92,7 @@ let _botVsBot     = false;
 let _botVsBotFast = false;
 const _BOT_LABELS = { mctsAce50: 'MCTS-ace-50', shark: 'Shark', gambler: 'Gambler',
     newbie: 'Newbie', hybrid: 'Hybrid Q+MCTS', pureq: 'Pure Q-bot', qstrategist: 'Q-Strategist',
-    training: 'Training Bot', heuristic: 'Strategist' };
+    qstrategistmcts: 'Q-Strat-MCTS', training: 'Training Bot', heuristic: 'Strategist' };
 function _makeBotEngine(key) {
     switch (key) {
         case 'mctsAce50': return new ISMCTSEngine('mctsAce50');
@@ -103,6 +103,7 @@ function _makeBotEngine(key) {
         case 'training':  return new TrainingQBotEngine();
         case 'heuristic':  return new HeuristicBot();          // TEST_BLOCK
         case 'qstrategist': return new QStrategistEngine();
+        case 'qstrategistmcts': return new QStrategistMCTSEngine();
         default:           return new ISMCTSEngine('shark');
     }
 }

@@ -403,7 +403,11 @@ export class HeuristicBot {
                 if (lateGame || ((dominant || advantage) && subRI2 < 4)) return aceMoves[0];
             }
 
-            // 5e. Draw (last resort — preserve last K / Aces)
+            // 5e. K fallback — 5c was skipped (late-game) and 5d couldn't fire (lone Ace).
+            //     Playing K is always better than drawing with a hand like K♥ K♦ A♣.
+            if (kingMoves.length > 0) return kingMoves[0];
+
+            // 5f. Draw (absolute last resort — preserve last K / Aces)
             return drawMove ?? playMoves[playMoves.length - 1];
         }
 

@@ -78,7 +78,7 @@ const WIN_R      =  50.0;
 const LOSE_R     = -50.0;
 const STEP_LIMIT = 150;
 const SAVE_EVERY = 200;
-const LOG_EVERY  = 3000;
+const LOG_EVERY  = 500;
 const BOT        = 1;
 
 // ---- Action indices / constants ------------------------------------
@@ -459,13 +459,11 @@ for (let g = 1; g <= GAMES; g++) {
         console.log(
             `    Overall(${logN}): win=${pct(logWins,logN)}  loss=${pct(logLoss,logN)}  TO=${pct(logTO,logN)}`
         );
-        if (TEST_MODE) {
-            for (const [name, c] of Object.entries(profCounters)) {
-                if (c.n > 0) console.log(
-                    `    vs ${name.padEnd(12)} (${String(c.n).padStart(4)}): win=${pct(c.wins,c.n)}` +
-                    `  loss=${pct(c.loss,c.n)}  TO=${pct(c.to,c.n)}`
-                );
-            }
+        for (const [name, c] of Object.entries(profCounters)) {
+            if (c.n > 0) console.log(
+                `    vs ${name.padEnd(12)} (${String(c.n).padStart(4)}): win=${pct(c.wins,c.n)}` +
+                `  loss=${pct(c.loss,c.n)}  TO=${pct(c.to,c.n)}`
+            );
         }
 
         logMoves=0; logN=0; logWins=0; logLoss=0; logTO=0;

@@ -355,6 +355,8 @@ function playGame(eps, oppType) {
 
         if (mctsOpp) {
             mctsOpp.observeMove(s, conc);
+            mctsOpp.advanceTree(conc);
+            mctsOpp.cleanup();
         }
 
         qRow(key);

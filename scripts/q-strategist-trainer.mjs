@@ -22,13 +22,14 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 // so the bot learns to FINISH games, not loop.
 //
 // Usage:
-//   node scripts/q-strategist-trainer.mjs [--games N] [--epsilon N] [--pure [mode]] [--mcts-iters N]
+//   node scripts/q-strategist-trainer.mjs [--games N] [--epsilon N] [--pure [mode]] [--mcts-iters N] [--auto-cycle [N,M]]
 //
 // Flags:
-//   --games N        number of games (default: 10000)
-//   --epsilon N      start epsilon (default: 0.15)
-//   --pure [mode]    100% vs one opponent: strategist | qbot | self | mcts
-//   --mcts-iters N   MCTS iterations per move (default: 50)
+//   --games N            number of games (default: 10000)
+//   --epsilon N          start epsilon (default: 0.15)
+//   --pure [mode]        100% vs one opponent: strategist | qbot | self | mcts
+//   --mcts-iters N       MCTS iterations per move (default: 50)
+//   --auto-cycle [N,M]   auto alternate anchor/generalize phases (default: 20000,10000)
 // ================================================================
 
 import { createInitialState, getPossibleMoves, applyMove,
@@ -52,6 +53,31 @@ const GAMES      = parseInt(getArg('--games',   '10000'), 10);
 const EPS_START  = parseFloat(getArg('--epsilon', '0.15'));
 const EPS_MIN    = 0.03;
 const MCTS_ITERS = parseInt(getArg('--mcts-iters', '50'), 10);
+
+// ---- Auto-cycle mode --------------------------------------------------
+// Automatically alternates anchor (pure strategist) and generalize (mixed) phases.
+// Default: 20k anchor, 10k generalize.  Override with --auto-cycle N,M
+const AUTO_CYCLE = process.argv.includes('--auto-cycle');
+let ANCHOR_GAMES = 20000;
+let GEN_GAMES    = 10000;
+if (AUTO_CYCLE) {
+    const idx = process.argv.indexOf('--auto-cycle');
+    const next = process.argv[idx + 1];
+    if (next && next.includes(',')) {
+        const [a, b] = next.split(',').map(s => parseInt(s.trim(), 10));
+        if (a > 0) ANCHOR_GAMES = a;
+        if (b > 0) GEN_GAMES = b;
+    }
+}
+function cyclePhase(g) {
+    if (!AUTO_CYCLE) return { anchor: false, phaseGames: GAMES, phaseStart: 1 };
+    const cycleLen = ANCHOR_GAMES + GEN_GAMES;
+    const pos = (g - 1) % cycleLen;
+    const isAnchor = pos < ANCHOR_GAMES;
+    const phaseGames = isAnchor ? ANCHOR_GAMES : GEN_GAMES;
+    const phaseStart = g - pos + (isAnchor ? 0 : ANCHOR_GAMES);
+    return { anchor: isAnchor, phaseGames, phaseStart };
+}
 
 // --pure [strategist|qbot|self|mcts]  — run 100% against one opponent (default: strategist)
 function getPureMode() {
@@ -403,10 +429,13 @@ function serialise() {
 console.log(`\nQ-Strategist Trainer`);
 if (PURE_MODE) {
     console.log(`PURE MODE: 100% vs ${PURE_MODE === 'heuristic' ? 'Strategist' : PURE_MODE === 'qbot' ? 'Q-bot' : PURE_MODE === 'mcts' ? 'MCTS-fast' : 'self (frozen snapshot)'}`);
+} else if (AUTO_CYCLE) {
+    console.log(`AUTO-CYCLE: anchor ${ANCHOR_GAMES.toLocaleString()} games → generalize ${GEN_GAMES.toLocaleString()} games (repeats)`);
 } else {
     console.log(`Opponent mix: 25% Strategist | 25% Q-bot | 25% frozen-self | 25% MCTS-fast(${MCTS_ITERS}it/${MCTS_ITERS}ms)`);
 }
 console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN} (smooth decay)  |  α=${ALPHA}  |  γ=${GAMMA}`);
+if (AUTO_CYCLE) console.log(`Anchor phase: pure Strategist, ε=0.25  |  Generalize: mixed, ε=0.15`);
 console.log(`Urgency: turn-penalty × urgency(1+floor(moves/40)) + hand-size shaping + blocking bonus`);
 console.log(`Self-play: frozen snapshot opponent + 2.5× urgency`);
 console.log(`Output: ${STRAT_PATH}\n`);
@@ -418,9 +447,18 @@ let logSWins=0, logSLoss=0, logSTO=0, logSN=0;
 let logMWins=0, logMLoss=0, logMTO=0, logMN=0;
 let logMoves=0, logN=0, logNewStatesSnap=0;
 
+let lastPhase = null;
 for (let g = 1; g <= GAMES; g++) {
-    const eps     = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - (g - 1) / (GAMES - 1), 2);
-    const oppType = PURE_MODE ?? ((r) => r < 0.25 ? 'heuristic' : r < 0.50 ? 'qbot' : r < 0.75 ? 'self' : 'mcts')(Math.random());
+    const { anchor: isAnchor, phaseGames, phaseStart } = cyclePhase(g);
+    const phaseEpsStart = (AUTO_CYCLE && isAnchor) ? 0.25 : EPS_START;
+    const eps = EPS_MIN + (phaseEpsStart - EPS_MIN) * Math.pow(1 - (g - phaseStart) / (phaseGames - 1 || 1), 2);
+    const oppType = PURE_MODE ?? (AUTO_CYCLE && isAnchor ? 'heuristic' : ((r) => r < 0.25 ? 'heuristic' : r < 0.50 ? 'qbot' : r < 0.75 ? 'self' : 'mcts')(Math.random()));
+
+    if (isAnchor !== lastPhase && AUTO_CYCLE) {
+        console.log(`  [phase switch: ${isAnchor ? 'ANCHOR' : 'GENERALIZE'} at game ${g}]`);
+        lastPhase = isAnchor;
+    }
+
     const { winner, totalMoves } = playGame(eps, oppType);
     const botWon = winner === BOT;
     const to     = winner === -1;
@@ -460,8 +498,9 @@ for (let g = 1; g <= GAMES; g++) {
     if (g % LOG_EVERY === 0) {
         const pct = (n, d) => d > 0 ? (n / d * 100).toFixed(1).padStart(5) + '%' : '  n/a';
         const newSt = totalNewStates - logNewStatesSnap;
+        const phaseTag = AUTO_CYCLE ? (cyclePhase(g).anchor ? ' [A]' : ' [G]') : '';
         console.log(
-            `  game ${String(g).padStart(6)}  ε=${eps.toFixed(3)}` +
+            `  game ${String(g).padStart(6)}${phaseTag}  ε=${eps.toFixed(3)}` +
             `  avgMoves=${(logMoves / logN).toFixed(1).padStart(5)}` +
             `  +states=${newSt.toString().padStart(5)}  total=${Q.size}  Qups=${logQUpdates}`
         );

@@ -6,9 +6,10 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 // Fine-tunes q-table-strategist.json against HeuristicBot (Strategist).
 //
 // Opponent mix per game:
-//   50%  vs HeuristicBot   (target — learns its rule-based patterns)
-//   25%  vs Pure Q-bot     (q-table.json + MCTS fallback — keeps general skill)
-//   25%  vs self           (greedy from live table — self-play refinement)
+//   25%  vs HeuristicBot   (target — learns its rule-based patterns)
+//   25%  vs Pure Q-bot     (q-table.json + fast heuristic — keeps general skill)
+//   25%  vs self           (greedy from frozen snapshot — self-play refinement)
+//   25%  vs MCTS           (fast ISMCTS — tactical depth + anti-exploitation)
 //
 // Urgency mechanism: turn penalty escalates as game drags + hand-size shaping
 // so the bot learns to FINISH games, not loop.
@@ -24,6 +25,7 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 import { createInitialState, getPossibleMoves, applyMove,
          isGameOver, getResult, DRAW_FLAG } from '../game-logic.js';
 import { HeuristicBot } from '../heuristic-bot.js';
+import { ISMCTSEngine } from '../ai-engine.js';
 import { writeFileSync, existsSync, readFileSync, copyFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -37,11 +39,12 @@ function getArg(flag, fallback) {
     const i = process.argv.indexOf(flag);
     return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : fallback;
 }
-const GAMES     = parseInt(getArg('--games',   '10000'), 10);
-const EPS_START = parseFloat(getArg('--epsilon', '0.15'));
-const EPS_MIN   = 0.03;
+const GAMES      = parseInt(getArg('--games',   '10000'), 10);
+const EPS_START  = parseFloat(getArg('--epsilon', '0.15'));
+const EPS_MIN    = 0.03;
+const MCTS_ITERS = parseInt(getArg('--mcts-iters', '50'), 10);
 
-// --pure [strategist|qbot|self]  — run 100% against one opponent (default: strategist)
+// --pure [strategist|qbot|self|mcts]  — run 100% against one opponent (default: strategist)
 function getPureMode() {
     const idx = process.argv.indexOf('--pure');
     if (idx === -1) return null;
@@ -51,6 +54,7 @@ function getPureMode() {
         if (m === 'strategist' || m === 'heuristic') return 'heuristic';
         if (m === 'qbot' || m === 'q') return 'qbot';
         if (m === 'self' || m === 'mirror') return 'self';
+        if (m === 'mcts') return 'mcts';
     }
     return 'heuristic'; // default when --pure has no value
 }
@@ -245,6 +249,12 @@ const qbotOpp = new HeadlessQBot(QBOT_PATH);
 // ---- Heuristic opponent (shared instance, reset each game) ----------
 const heuristicBot = new HeuristicBot();
 
+// ---- Fast MCTS opponent (shared instance, reset each game) -----------
+const MCTS_PROFILE = 'shark';
+const BASE_MCTS = ISMCTSEngine.PROFILES[MCTS_PROFILE] ?? ISMCTSEngine.PROFILES.shark;
+const FAST_MCTS = { ...BASE_MCTS, maxIterations: MCTS_ITERS, maxTime: MCTS_ITERS };
+const mctsOpp = new ISMCTSEngine(MCTS_PROFILE);
+
 // ---- Urgency + shaping reward ---------------------------------------
 // isSelfPlay: when true, punish inaction harder (both bots share policy — loops likely)
 function stepReward(prev, move, next, botTurnCount, totalMoves, isSelfPlay) {
@@ -278,11 +288,12 @@ function stepReward(prev, move, next, botTurnCount, totalMoves, isSelfPlay) {
 }
 
 // ---- Single game ----------------------------------------------------
-// oppType: 'heuristic' | 'qbot' | 'self'
+// oppType: 'heuristic' | 'qbot' | 'self' | 'mcts'
 function playGame(eps, oppType) {
     const isSelfPlay = oppType === 'self';
     let s = createInitialState(2);
     heuristicBot.resetKnowledge();
+    mctsOpp.resetKnowledge();
 
     const hist      = [];    // BOT's decision history
     let totalMoves  = 0;
@@ -304,6 +315,8 @@ function playGame(eps, oppType) {
                 const act = qbotOpp.chooseMove(s);
                 // qbotOpp.chooseMove returns a concrete move, not an action
                 conc = act;  // HeadlessQBot already resolves to concrete move
+            } else if (oppType === 'mcts') {
+                conc = mctsOpp.chooseMove(s, FAST_MCTS);
             } else {
                 // self: greedy from FROZEN snapshot (ε=0) — prevents policy chasing its own tail
                 const key = encodeState(s, p);
@@ -317,8 +330,11 @@ function playGame(eps, oppType) {
                 }
             }
 
-            // Notify heuristic bot of opponent's move (for card tracking)
+            // Notify heuristic bot and MCTS of opponent's move
             heuristicBot.observeMove(s, conc);
+            mctsOpp.observeMove(s, conc);
+            mctsOpp.advanceTree(conc);
+            mctsOpp.cleanup();
             s = applyMove(s, conc);
             continue;
         }
@@ -377,9 +393,9 @@ function serialise() {
 // ---- Main loop ------------------------------------------------------
 console.log(`\nQ-Strategist Trainer`);
 if (PURE_MODE) {
-    console.log(`PURE MODE: 100% vs ${PURE_MODE === 'heuristic' ? 'Strategist' : PURE_MODE === 'qbot' ? 'Q-bot' : 'self (frozen snapshot)'}`);
+    console.log(`PURE MODE: 100% vs ${PURE_MODE === 'heuristic' ? 'Strategist' : PURE_MODE === 'qbot' ? 'Q-bot' : PURE_MODE === 'mcts' ? 'MCTS-fast' : 'self (frozen snapshot)'}`);
 } else {
-    console.log(`Opponent mix: 50% Strategist | 25% Q-bot (fast heuristic fallback) | 25% frozen-self`);
+    console.log(`Opponent mix: 25% Strategist | 25% Q-bot | 25% frozen-self | 25% MCTS-fast(${MCTS_ITERS}it/${MCTS_ITERS}ms)`);
 }
 console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN} (smooth decay)  |  α=${ALPHA}  |  γ=${GAMMA}`);
 console.log(`Urgency: turn-penalty × urgency(1+floor(moves/40)) + hand-size shaping + blocking bonus`);
@@ -390,11 +406,12 @@ console.log(`Output: ${STRAT_PATH}\n`);
 let logHWins=0, logHLoss=0, logHTO=0, logHN=0;
 let logQWins=0, logQLoss=0, logQTO=0, logQN=0;
 let logSWins=0, logSLoss=0, logSTO=0, logSN=0;
+let logMWins=0, logMLoss=0, logMTO=0, logMN=0;
 let logMoves=0, logN=0, logNewStatesSnap=0;
 
 for (let g = 1; g <= GAMES; g++) {
     const eps     = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - (g - 1) / (GAMES - 1), 2);
-    const oppType = PURE_MODE ?? ((r) => r < 0.50 ? 'heuristic' : r < 0.75 ? 'qbot' : 'self')(Math.random());
+    const oppType = PURE_MODE ?? ((r) => r < 0.25 ? 'heuristic' : r < 0.50 ? 'qbot' : r < 0.75 ? 'self' : 'mcts')(Math.random());
     const { winner, totalMoves } = playGame(eps, oppType);
     const botWon = winner === BOT;
     const to     = winner === -1;
@@ -412,6 +429,11 @@ for (let g = 1; g <= GAMES; g++) {
         if      (to)     logQTO++;
         else if (botWon) logQWins++;
         else             logQLoss++;
+    } else if (oppType === 'mcts') {
+        logMN++;
+        if      (to)     logMTO++;
+        else if (botWon) logMWins++;
+        else             logMLoss++;
     } else {
         logSN++;
         if      (to)     logSTO++;
@@ -446,10 +468,15 @@ for (let g = 1; g <= GAMES; g++) {
             `    vs self      (${logSN}): win=${pct(logSWins,logSN)}` +
             `  loss=${pct(logSLoss,logSN)}  TO=${pct(logSTO,logSN)}`
         );
+        console.log(
+            `    vs MCTS-fast (${logMN}): win=${pct(logMWins,logMN)}` +
+            `  loss=${pct(logMLoss,logMN)}  TO=${pct(logMTO,logMN)}`
+        );
 
         logHWins=0; logHLoss=0; logHTO=0; logHN=0;
         logQWins=0; logQLoss=0; logQTO=0; logQN=0;
         logSWins=0; logSLoss=0; logSTO=0; logSN=0;
+        logMWins=0; logMLoss=0; logMTO=0; logMN=0;
         logMoves=0; logN=0; logQUpdates=0;
         logNewStatesSnap = totalNewStates;
     }

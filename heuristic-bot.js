@@ -269,6 +269,22 @@ export class HeuristicBot {
         }
 
         // ==============================================================
+        // RULE 2.5 — Pile-trap Ace escalation
+        // When the pile's current top card OR the card one below the top is a 9/10
+        // (rank ≤ 1), escalating with A forces opp to draw and receive that low card
+        // stuck in their hand.  Only worthwhile with Ace surplus and opp still in
+        // contention (has an Ace to chain with).
+        // ==============================================================
+        if (topRI <= 3 && state.pileSize >= 2 && myAces >= safeAceMin && oppEstAces > 0
+                && oppMinCards <= 5) {
+            const subRI2trap = state.pile[state.pileSize - 2] >> 2;
+            if (topRI <= 1 || subRI2trap <= 1) {
+                const aceTrapMoves = playMoves.filter(m => playRI(m) === 5);
+                if (aceTrapMoves.length > 0) return aceTrapMoves[0];
+            }
+        }
+
+        // ==============================================================
         // RULE 3 — 4-of-a-kind junk dump (rank 9–Q only, Ace reserve safe)
         // Only play the quad immediately when there are no playable single cards
         // of a LOWER junk rank — dump small singles first so they don't get

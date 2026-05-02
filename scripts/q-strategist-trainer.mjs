@@ -41,6 +41,21 @@ const GAMES     = parseInt(getArg('--games',   '10000'), 10);
 const EPS_START = parseFloat(getArg('--epsilon', '0.15'));
 const EPS_MIN   = 0.03;
 
+// --pure [strategist|qbot|self]  — run 100% against one opponent (default: strategist)
+function getPureMode() {
+    const idx = process.argv.indexOf('--pure');
+    if (idx === -1) return null;
+    const next = process.argv[idx + 1];
+    if (next && !next.startsWith('-')) {
+        const m = next.toLowerCase();
+        if (m === 'strategist' || m === 'heuristic') return 'heuristic';
+        if (m === 'qbot' || m === 'q') return 'qbot';
+        if (m === 'self' || m === 'mirror') return 'self';
+    }
+    return 'heuristic'; // default when --pure has no value
+}
+const PURE_MODE = getPureMode();
+
 // ---- Hyper-parameters -----------------------------------------------
 const ALPHA      = 0.20;    // raised: needs to adapt quickly to strategist patterns
 const GAMMA      = 0.997;
@@ -240,13 +255,12 @@ function stepReward(prev, move, next, botTurnCount, totalMoves, isSelfPlay) {
     const urgencyMult = isSelfPlay ? 2.5 : 1.0;  // self-play: 2.5× harsher
     r -= botTurnCount * 0.015 * baseUrgency * urgencyMult;
 
-    // 2. Hand-size shaping
+    // 2. Hand-size shaping: small bonus for proactively playing cards (not drawing)
+    // Drawing is strategically valid — we only reward playing to nudge the bot toward
+    // finishing its hand, never punish drawing.
     if (!(move & DRAW_FLAG)) {
         const played = pop(move & 0xFFFFFF);
-        r += (isSelfPlay ? 0.04 : 0.02) * played;   // self-play: 2× reward for playing cards
-    } else {
-        const drawn = pop(next.hands[BOT] & ~prev.hands[BOT]);
-        r -= (isSelfPlay ? 0.03 : 0.015) * drawn;     // self-play: 2× penalty for drawing
+        r += (isSelfPlay ? 0.03 : 0.015) * played;
     }
 
     // 3. Blocking bonus
@@ -362,10 +376,14 @@ function serialise() {
 
 // ---- Main loop ------------------------------------------------------
 console.log(`\nQ-Strategist Trainer`);
+if (PURE_MODE) {
+    console.log(`PURE MODE: 100% vs ${PURE_MODE === 'heuristic' ? 'Strategist' : PURE_MODE === 'qbot' ? 'Q-bot' : 'self (frozen snapshot)'}`);
+} else {
+    console.log(`Opponent mix: 50% Strategist | 25% Q-bot (fast heuristic fallback) | 25% frozen-self`);
+}
 console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN} (smooth decay)  |  α=${ALPHA}  |  γ=${GAMMA}`);
-console.log(`Opponent mix: 50% Strategist | 25% Q-bot (fast heuristic fallback) | 25% frozen-self`);
 console.log(`Urgency: turn-penalty × urgency(1+floor(moves/40)) + hand-size shaping + blocking bonus`);
-console.log(`Self-play: frozen snapshot opponent + 2.5× urgency + 2× hand-size shaping`);
+console.log(`Self-play: frozen snapshot opponent + 2.5× urgency`);
 console.log(`Output: ${STRAT_PATH}\n`);
 
 // Per-log-window counters
@@ -376,8 +394,7 @@ let logMoves=0, logN=0, logNewStatesSnap=0;
 
 for (let g = 1; g <= GAMES; g++) {
     const eps     = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - (g - 1) / (GAMES - 1), 2);
-    const r       = Math.random();
-    const oppType = r < 0.50 ? 'heuristic' : r < 0.75 ? 'qbot' : 'self';
+    const oppType = PURE_MODE ?? ((r) => r < 0.50 ? 'heuristic' : r < 0.75 ? 'qbot' : 'self')(Math.random());
     const { winner, totalMoves } = playGame(eps, oppType);
     const botWon = winner === BOT;
     const to     = winner === -1;

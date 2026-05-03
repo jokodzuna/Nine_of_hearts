@@ -298,10 +298,9 @@ function makeMCTS(profileKey) {
 // ---- Urgency + shaping reward ---------------------------------------
 function stepReward(prev, move, next, botTurnCount, totalMoves) {
     let r = 0;
-    // Aggressive urgency: penalty grows with game length AND bot's own turns
-    const baseUrgency = 1 + Math.floor(totalMoves / 20);   // was /40
-    r -= botTurnCount * 0.050 * baseUrgency;                // was 0.015
-    r -= totalMoves * 0.010;                                 // flat per-move tax
+    // Mild urgency: slightly faster than original to help with timeout-prone opponents
+    const baseUrgency = 1 + Math.floor(totalMoves / 35);
+    r -= botTurnCount * 0.018 * baseUrgency;
 
     if (!(move & DRAW_FLAG)) {
         const played = pop(move & 0xFFFFFF);
@@ -325,7 +324,6 @@ function stepReward(prev, move, next, botTurnCount, totalMoves) {
 // oppType: 'mctsAce50' | 'shark' | 'gambler' | 'newbie' | 'qstrat'
 function playGame(eps, oppType) {
     let s = createInitialState(2);
-    const seenKeys = new Map();   // loop detection: count Q-state revisits
 
     const mctsOpp = ['mctsAce50','shark','gambler','newbie'].includes(oppType)
         ? makeMCTS(oppType)
@@ -359,19 +357,7 @@ function playGame(eps, oppType) {
         // ---- BOT's turn --------------------------------------------
         const key  = encodeState(s, BOT);
 
-        // Loop detection: penalize revisiting the same Q-state in one game
-        const keyVisits = seenKeys.get(key) ?? 0;
-        let loopPenalty = 0;
-        let act  = pickAction(key, lActs, eps);
-        if (keyVisits >= 2) {
-            // Force different action if looping (ε-greedy override)
-            const altActs = lActs.filter(a => a !== act);
-            if (altActs.length > 0 && Math.random() < 0.5) {
-                act = altActs[Math.floor(Math.random() * altActs.length)];
-            }
-            loopPenalty = -2.0 * keyVisits;  // escalating penalty
-        }
-        seenKeys.set(key, keyVisits + 1);
+        const act  = pickAction(key, lActs, eps);
         const conc = actToMove(moves, act) ?? moves[0];
 
         if (mctsOpp) {
@@ -381,7 +367,7 @@ function playGame(eps, oppType) {
         }
 
         qRow(key);
-        hist.push({ key, act, lActs, prev: s, move: conc, loopPenalty });
+        hist.push({ key, act, lActs, prev: s, move: conc });
         s = applyMove(s, conc);
     }
 
@@ -402,9 +388,8 @@ function playGame(eps, oppType) {
     }
 
     for (let i = 0; i < hist.length; i++) {
-        const { key, act, lActs: curLActs, prev, move, loopPenalty } = hist[i];
-        const stepR = stepReward(prev, move, s, turnCount[BOT], totalMoves)
-                      + (loopPenalty ?? 0);
+        const { key, act, lActs: curLActs, prev, move } = hist[i];
+        const stepR = stepReward(prev, move, s, turnCount[BOT], totalMoves);
         if (i < hist.length - 1) {
             const { key: nKey, lActs: nActs } = hist[i + 1];
             updateQ(key, act, stepR, nKey, nActs);

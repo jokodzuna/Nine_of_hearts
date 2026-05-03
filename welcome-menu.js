@@ -1253,9 +1253,10 @@ function _buildBotBattlePanel() {
         ['newbie',      '🐣 Newbie'],
         ['hybrid',      '🔀 Hybrid Q+MCTS'],
         ['pureq',       '📊 Pure Q-bot'],
-        ['qstrategist', '🎯 Q-Strategist'],
-        ['training',    '🎓 Training Bot'],
-        ['heuristic',   '🧠 Strategist'],
+        ['qstrategist',     '🎯 Q-Strategist'],
+        ['qstrategistmcts', '🎯 Q-Strat-MCTS'],
+        ['training',        '🎓 Training Bot'],
+        ['heuristic',       '🧠 Strategist'],
     ];
 
     const arena = document.createElement('div');

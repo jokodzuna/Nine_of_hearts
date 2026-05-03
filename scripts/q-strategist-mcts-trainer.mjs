@@ -6,13 +6,15 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 // Train or evaluate Q-strategist against MCTS + Q-strategist opponent mix.
 //
 // Usage (training):
-//   node scripts/q-strategist-mcts-trainer.mjs [--games N] [--epsilon N] [--pure profile]
+//   node scripts/q-strategist-mcts-trainer.mjs [--games N] [--duration H] [--epsilon N] [--pure profile] [--log-every N]
 //
 // Usage (evaluation / no learning):
-//   node scripts/q-strategist-mcts-trainer.mjs --test [--games N] [--pure profile]
+//   node scripts/q-strategist-mcts-trainer.mjs --test [--games N] [--duration H] [--pure profile]
 //
 // Flags:
 //   --games N            number of games (default: 10000 train / 1000 test)
+//   --duration H         run for H hours instead of fixed game count
+//   --log-every N        report interval (default: 500 games, or 20 in duration mode)
 //   --epsilon N          start epsilon (default: 0.15 train / 0.0 test)
 //   --pure profile       100% vs one opponent:
 //                        mctsAce50 | shark | gambler | newbie | qstrat
@@ -48,11 +50,14 @@ function getArg(flag, fallback) {
     return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : fallback;
 }
 const TEST_MODE  = process.argv.includes('--test');
+const DURATION_H = parseFloat(getArg('--duration', '0'));  // hours; 0 = use --games
 const DEF_GAMES  = TEST_MODE ? '1000' : '10000';
 const DEF_EPS    = TEST_MODE ? '0.0'  : '0.15';
-const GAMES      = parseInt(getArg('--games',   DEF_GAMES), 10);
+const GAMES      = DURATION_H > 0 ? Infinity : parseInt(getArg('--games', DEF_GAMES), 10);
 const EPS_START  = parseFloat(getArg('--epsilon', DEF_EPS));
 const EPS_MIN    = TEST_MODE ? 0.0 : 0.03;
+
+const END_TIME   = DURATION_H > 0 ? Date.now() + DURATION_H * 3600_000 : Infinity;
 
 // --pure [mctsAce50|shark|gambler|newbie|qstrat]
 function getPureMode() {
@@ -77,8 +82,8 @@ const GAMMA      = 0.997;
 const WIN_R      =  50.0;
 const LOSE_R     = -50.0;
 const STEP_LIMIT = 150;
-const SAVE_EVERY = 200;
-const LOG_EVERY  = 500;
+const SAVE_EVERY = DURATION_H > 0 ? 50 : 200;
+const LOG_EVERY  = parseInt(getArg('--log-every', DURATION_H > 0 ? '20' : '500'), 10);
 const BOT        = 1;
 
 // ---- Action indices / constants ------------------------------------
@@ -426,7 +431,11 @@ if (PURE_MODE) {
 } else {
     console.log(`Opponent mix: 10% MCTS-ace-50 | 10% Shark | 30% Gambler | 40% Newbie | 10% Q-Strat-mixed`);
 }
-console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN}  |  α=${ALPHA}  |  γ=${GAMMA}`);
+if (DURATION_H > 0) {
+    console.log(`Duration: ${DURATION_H}h  |  ε: ${EPS_START}→${EPS_MIN}  |  α=${ALPHA}  |  γ=${GAMMA}`);
+} else {
+    console.log(`Games: ${GAMES.toLocaleString()}  |  ε: ${EPS_START}→${EPS_MIN}  |  α=${ALPHA}  |  γ=${GAMMA}`);
+}
 if (TEST_MODE) console.log(`Test mode: no learning, full-strength MCTS`);
 else           console.log(`Training: Shark/MCTS-ace-50 capped at 3000 iters`);
 console.log(`Output: ${OUT_PATH}\n`);
@@ -440,8 +449,13 @@ const profCounters = {};
 let logMoves = 0, logN = 0, logNewStatesSnap = 0;
 let logWins = 0, logLoss = 0, logTO = 0;
 
-for (let g = 1; g <= GAMES; g++) {
-    const eps = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - (g - 1) / (GAMES - 1 || 1), 2);
+let g = 0;
+while (g < GAMES && Date.now() < END_TIME) {
+    g++;
+    const elapsedFrac = DURATION_H > 0
+        ? Math.min(1, (Date.now() - (END_TIME - DURATION_H * 3600_000)) / (DURATION_H * 3600_000))
+        : (g - 1) / (GAMES - 1 || 1);
+    const eps = EPS_MIN + (EPS_START - EPS_MIN) * Math.pow(1 - elapsedFrac, 2);
     const oppType = PURE_MODE ?? selectOpponent();
 
     const { winner, totalMoves } = playGame(eps, oppType);
@@ -491,7 +505,7 @@ for (let g = 1; g <= GAMES; g++) {
 }
 
 // Final summary
-console.log(`\n=== Final Summary (${GAMES} games) ===`);
+console.log(`\n=== Final Summary (${g} games) ===`);
 const totalWins = profCounters.mctsAce50.wins + profCounters.shark.wins + profCounters.gambler.wins + profCounters.newbie.wins + profCounters.qstrat.wins;
 const totalLoss = profCounters.mctsAce50.loss + profCounters.shark.loss + profCounters.gambler.loss + profCounters.newbie.loss + profCounters.qstrat.loss;
 const totalTO   = profCounters.mctsAce50.to   + profCounters.shark.to   + profCounters.gambler.to   + profCounters.newbie.to   + profCounters.qstrat.to;
@@ -507,6 +521,6 @@ for (const [name, c] of Object.entries(profCounters)) {
 }
 
 if (!TEST_MODE) {
-    writeFileSync(OUT_PATH, JSON.stringify({ games: GAMES, stateCount: Q.size, table: serialise() }));
+    writeFileSync(OUT_PATH, JSON.stringify({ games: g, stateCount: Q.size, table: serialise() }));
     console.log(`\nSaved → ${OUT_PATH}  (${Q.size} states, +${totalNewStates} new)`);
 }

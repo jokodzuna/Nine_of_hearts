@@ -369,9 +369,11 @@ export class HeuristicBot {
             //     Guard lowered to myTotal >= 2: Rule 0 handles the 1-card win case.
             //     stuckCount > 0 guard: on A-top, stuckCount = non-Ace card count. When hand is
             //     pure Aces (stuckCount=0) there is nothing to recover — just press A and win.
-            //     oppEstKings > 0 guard: when opp has no K and no A, pressing A forces them to draw
-            //     3 (growing their hand). Drawing ourselves gives them a free turn instead.
-            if (drawMove !== null && oppEstAces === 0 && oppEstKings > 0 && myAces >= safeAceMin
+            //     Drawing is always preferred over pressing when opp has no Aces: pressing A
+            //     would gift them the played A + buried A from pile (two Aces!), creating an
+            //     A-battle loop. Draw instead — the post-draw escalation loop is separately
+            //     blocked by Rule 6a (no A/K press when oppEstKings=0 && oppEstAces=0).
+            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin
                     && myTotal >= 2 && stuckCount > 0) return drawMove;
 
             if (aceMoves.length > 0) {

@@ -356,7 +356,9 @@ export class HeuristicBot {
 
             // 4a. Mid-game: if pile has K below the A-top, drawing recovers A+K — always prefer that
             //     (only when we have 5+ cards; in late-game the K+A finishing line takes over below)
-            if (drawMove !== null && drawHasKing && myTotal >= 5) return drawMove;
+            //     Guard: opp must have >2 cards. With ≤2 cards, drawing gives them a free turn on
+            //     a lower pile top — press with A instead (forces them to spend A or draw 3).
+            if (drawMove !== null && drawHasKing && myTotal >= 5 && oppMinCards > 2) return drawMove;
 
             // 4b. Opp has no Aces — drawing the A back is strictly better than escalating.
             //     Playing another A onto A-top just gifts opp that A (and whatever is below)

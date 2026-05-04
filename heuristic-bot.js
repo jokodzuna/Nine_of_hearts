@@ -431,7 +431,10 @@ export class HeuristicBot {
             //      drawing may expose a top they can't respond to (e.g. Q when opp has J).
             //      Guard: myTotal≥8 — if we're nearly done ourselves, press instead.
             //      NOT when oppMinCards===1: draw lets opp play their last card and win.
-            if (drawMove !== null && oppMinCards === 2 && state.pileSize >= 5 && myTotal >= 8) {
+            //      Also requires oppEstKings>0: if opp has no K, playing K forces them to draw
+            //      (their Q/J can't respond to K-top). Drawing ourselves wastes that advantage.
+            if (drawMove !== null && oppMinCards === 2 && state.pileSize >= 5 && myTotal >= 8
+                    && oppEstKings > 0) {
                 return drawMove;
             }
 
@@ -497,11 +500,17 @@ export class HeuristicBot {
             // actual card; fall through to draw or a safely-higher play.
             let pressPlays = safePlays;
             if (oppMinCards === 1) {
-                // Filter out any play rank that opp could respond to and win with
-                const minSafeRI = (oppEstKings > 0 ? 5 : (oppEstAces > 0 ? 6 : 0));
+                // Filter out any play rank that opp could respond to and win with.
+                // Even with no K/A, opp's last card could be Q (rank 3) — need rank≥4 to be safe.
+                const minSafeRI = oppEstAces > 0 ? 6  // can't beat A — must draw
+                                : oppEstKings > 0 ? 5  // need A to beat K
+                                : 4;                   // opp ≤ Q — need K or A
                 const safe1 = safePlays.filter(m => playRI(m) >= minSafeRI);
-                if (safe1.length > 0) pressPlays = safe1;
-                else return drawMove ?? safePlays[safePlays.length - 1]; // can't safely press
+                if (safe1.length > 0) {
+                    // Return lowest safe card (K before A) to avoid burning Aces unnecessarily
+                    return [...safe1].sort((a, b) => playRI(a) - playRI(b))[0];
+                }
+                return drawMove ?? safePlays[safePlays.length - 1]; // can't safely press
             }
             const sorted = [...pressPlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];

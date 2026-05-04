@@ -301,9 +301,20 @@ export class HeuristicBot {
                 // Never play a quad when opp has ≤1 card: they respond with their
                 // last card on the new top and win (0 cards remaining).
                 if (oppMinCards <= 1) continue;
-                // Low-rank quads (9/10/J) create a top that almost any card can beat.
-                // When opp has ≤4 cards they could have a responsive quad and win in 1 move.
-                if (oppMinCards <= 4 && r <= 2) continue;
+                // Don't play a quad that hands opp an instant win.
+                // P1 wins in one move only when ALL their remaining cards share one rank > r.
+                // Check: for each rank hr > r, if (4 - my_count[hr] - pile_count[hr]) >= oppMinCards
+                // then P1 could hold all oppMinCards cards at that rank → instant-win quad possible.
+                if (oppMinCards <= 4) {
+                    let dangerous = false;
+                    for (let hr = r + 1; hr <= 5 && !dangerous; hr++) {
+                        const mine = _popcount(myHand & RANK_MASK[hr]);
+                        let inP = 0;
+                        for (let i = 0; i < state.pileSize; i++) if ((state.pile[i] >> 2) === hr) inP++;
+                        if (4 - mine - inP >= oppMinCards) dangerous = true;
+                    }
+                    if (dangerous) continue;
+                }
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
                 // dump — opp can respond to the quad with their power cards anyway.

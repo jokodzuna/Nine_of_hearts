@@ -301,6 +301,9 @@ export class HeuristicBot {
                 // Never play a quad when opp has ≤1 card: they respond with their
                 // last card on the new top and win (0 cards remaining).
                 if (oppMinCards <= 1) continue;
+                // Low-rank quads (9/10/J) create a top that almost any card can beat.
+                // When opp has ≤4 cards they could have a responsive quad and win in 1 move.
+                if (oppMinCards <= 4 && r <= 2) continue;
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
                 // dump — opp can respond to the quad with their power cards anyway.
@@ -322,7 +325,7 @@ export class HeuristicBot {
         // of any junk rank, drawing is strictly better than playing a single
         // card: we'll dump all 4 next turn for a net hand reduction.
         // ==============================================================
-        if (drawMove !== null && myAces >= safeAceMin) {
+        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
                 if (inHand === 0 || inHand >= 3) continue; // 3+ in hand: play singles; Rule 3 handles full quads

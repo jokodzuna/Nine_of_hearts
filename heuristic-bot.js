@@ -521,7 +521,16 @@ export class HeuristicBot {
             // When opp has NO power cards (no K, no A): don't escalate at all — fall to 6d/6e
             //   to shed low cards. Giving opp a K or A here gifts them power they didn't have.
             if (hRI >= 4 && myAces >= safeAceMin && (oppEstKings > 0 || oppEstAces > 0)) {
-                if (oppEstAces === 0 && oppEstKings > 0) return highest; // A; K can't respond
+                if (oppEstAces === 0 && oppEstKings > 0) {
+                    // P1 has K but no A. If we dominate the K-battle (more Kings than opp),
+                    // press with K — P1 depletes their Kings, then must draw on the next K.
+                    // If opp has ≥ our Kings, K-cycle is unfavorable — play A to force draw.
+                    if (myKings > oppEstKings) {
+                        const kMove = pressPlays.find(m => playRI(m) === 4);
+                        if (kMove) return kMove;
+                    }
+                    return highest; // A — K-battle unfavorable or no K available
+                }
                 const kMove = pressPlays.find(m => playRI(m) === 4);
                 if (kMove) return kMove;      // K preferred over A when opp has Aces
                 return highest;               // no K — escalate with A

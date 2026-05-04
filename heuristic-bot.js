@@ -504,13 +504,14 @@ export class HeuristicBot {
         }
 
         // 6c. K escalation: press with King on J+ tops
-        // Primary:  opp has no Aces — safe to press freely
-        // Extended: 2+ Ace lead over opp AND stuck junk to shed — K forces opp
-        //           to draw or spend their last Ace, either way we advance
-        if (myKings >= 1 && myAces >= safeAceMin && topRI >= 2) {
+        // Only when opp has Aces: K forces them to draw K back OR spend an Ace.
+        // When opp has no Aces, fall to 6d/6e which pick the lowest safe card —
+        // any play forces a draw anyway, and opponent drawing Q is far less harmful
+        // than opponent drawing K.
+        if (myKings >= 1 && myAces >= safeAceMin && topRI >= 2 && oppEstAces > 0) {
             const kingMoves = safePlays.filter(m => playRI(m) === 4);
             const aceAdvantage = myAces > oppEstAces + 1 && stuckCount > 0;
-            if (kingMoves.length > 0 && (oppEstAces === 0 || aceAdvantage)) {
+            if (kingMoves.length > 0 && aceAdvantage) {
                 return kingMoves[0];
             }
         }

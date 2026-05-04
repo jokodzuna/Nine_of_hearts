@@ -418,10 +418,11 @@ export class HeuristicBot {
                 // K-loop guard: only skip K-match when ANOTHER K is buried below the current
                 // K-top (subRI2/3 === 4). drawHasKing is always true on K-top (the top card
                 // itself is K), so using it here would permanently block K-matching on deep piles.
-                // K-loop only forms when opp also has a K to match back. When oppEstKings===0
-                // they MUST draw on a K-top — no loop possible, matching K is the right move.
+                // K-loop only forms when opp has BOTH K (to match) AND A (to escalate further).
+                // When opp has K but no A, P0's Ace dominance wins the battle — keep pressing.
+                // When opp has neither K nor A, they MUST draw — no loop possible.
                 if (state.pileSize >= 10 && (subRI2 === 4 || subRI3 === 4) && drawMove !== null
-                        && oppEstKings > 0) return drawMove;
+                        && oppEstKings > 0 && oppEstAces > 0) return drawMove;
                 return kingMoves[0];
             }
 
@@ -507,14 +508,17 @@ export class HeuristicBot {
         }
 
         // 6c. K escalation: press with King on J+ tops
-        // Only when opp has Aces: K forces them to draw K back OR spend an Ace.
-        // When opp has no Aces, fall to 6d/6e which pick the lowest safe card —
-        // any play forces a draw anyway, and opponent drawing Q is far less harmful
-        // than opponent drawing K.
-        if (myKings >= 1 && myAces >= safeAceMin && topRI >= 2 && oppEstAces > 0) {
+        // Fire when:
+        //   (a) opp has Aces: K forces them to draw K back OR spend an Ace — classic battle.
+        //   (b) we have stuck junk (stuckCount>0): K escalation exposes a lower pile top
+        //       so stuck Js/10s can be shed next turn. Don't mirror P1's Q plays; press with K.
+        // When neither applies (no Aces on either side, no stuck cards), fall to 6d/6e
+        // which pick the lowest safe card — opp drawing Q is far less harmful than opp drawing K.
+        if (myKings >= 1 && myAces >= safeAceMin && topRI >= 2
+                && (oppEstAces > 0 || stuckCount > 0)) {
             const kingMoves = safePlays.filter(m => playRI(m) === 4);
             const aceAdvantage = myAces > oppEstAces + 1 && stuckCount > 0;
-            if (kingMoves.length > 0 && aceAdvantage) {
+            if (kingMoves.length > 0 && (oppEstAces > 0 || aceAdvantage)) {
                 return kingMoves[0];
             }
         }

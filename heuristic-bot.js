@@ -291,17 +291,22 @@ export class HeuristicBot {
         // Only play the quad immediately when there are no playable single cards
         // of a LOWER junk rank — dump small singles first so they don't get
         // buried under the quad and restart the escalation loop.
+        // NOTE: King quads are excluded — after playing 4K, opp draws 3 Kings
+        //       straight back from the pile top (or responds with A). Never good.
         // ==============================================================
         for (const m of playMoves) {
-            if (playCnt(m) === 4 && playRI(m) <= 4
+            if (playCnt(m) === 4 && playRI(m) <= 3   // rank 9–Q only, NOT K
                     && (myAces >= safeAceMin || myTotal > oppMinCards + 3)) {
                 const r = playRI(m);
+                // Never play a quad when opp has ≤1 card: they respond with their
+                // last card on the new top and win (0 cards remaining).
+                if (oppMinCards <= 1) continue;
                 // When opp has very few cards (<=3) AND still has an Ace AND we have
                 // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
                 // dump — opp can respond to the quad with their power cards anyway.
-                // Only defer when opp has exactly 3 cards (typically all power: Q+K+A);
-                // with ≤2 cards opp is nearly out — dumping the quad is fine.
-                if (oppMinCards === 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
+                if (oppMinCards <= 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
+                // Skip Q-quad if opp is known to hold a King (K beats Q-top → opp escapes).
+                if (r === 3 && oppEstKings > 0 && oppMinCards <= 3) continue;
                 // When opp is near-win press with the quad immediately;
                 // otherwise shed lower singles first so they don't get buried.
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
@@ -454,13 +459,24 @@ export class HeuristicBot {
 
         // 6a. Opponent near win — maximum pressure
         if (oppMinCards <= 4 && safePlays.length > 0) {
-            const sorted = [...safePlays].sort((a, b) => playRI(b) - playRI(a));
+            // When opp has exactly 1 card, don't play a rank ≤ that card — they respond
+            // with their last card (= win).  With card tracking oppEstKings reflects their
+            // actual card; fall through to draw or a safely-higher play.
+            let pressPlays = safePlays;
+            if (oppMinCards === 1) {
+                // Filter out any play rank that opp could respond to and win with
+                const minSafeRI = (oppEstKings > 0 ? 5 : (oppEstAces > 0 ? 6 : 0));
+                const safe1 = safePlays.filter(m => playRI(m) >= minSafeRI);
+                if (safe1.length > 0) pressPlays = safe1;
+                else return drawMove ?? safePlays[safePlays.length - 1]; // can't safely press
+            }
+            const sorted = [...pressPlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];
             const hRI     = playRI(highest);
             // When Aces are the top option, prefer K — it forces opp to respond without
             // burning our Aces; if opp plays A in reply, bot's Ace advantage remains.
             if (hRI >= 4 && myAces >= safeAceMin) {
-                const kMove = safePlays.find(m => playRI(m) === 4);
+                const kMove = pressPlays.find(m => playRI(m) === 4);
                 if (kMove) return kMove;      // K preferred over A
                 return highest;               // no K — escalate with A
             }

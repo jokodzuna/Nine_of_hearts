@@ -294,6 +294,16 @@ export class HeuristicBot {
         // NOTE: King quads are excluded — after playing 4K, opp draws 3 Kings
         //       straight back from the pile top (or responds with A). Never good.
         // ==============================================================
+
+        // RULE 3b — Quad K → Quad A finishing sequence.
+        // When P0 has all 4 Aces and opp has no Aces: 4×K forces opp to draw
+        // (Q/J/10 can't respond to K-top), then P0 plays 4×A → wins in 2 moves.
+        // P1 drawing 3 Kings is irrelevant — they can't use them before P0 wins.
+        if (myAces >= 4 && oppEstAces === 0) {
+            const quadK = playMoves.find(m => playCnt(m) === 4 && playRI(m) === 4);
+            if (quadK) return quadK;
+        }
+
         for (const m of playMoves) {
             if (playCnt(m) === 4 && playRI(m) <= 3   // rank 9–Q only, NOT K
                     && (myAces >= safeAceMin || myTotal > oppMinCards + 3)) {

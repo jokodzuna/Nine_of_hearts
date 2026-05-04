@@ -385,13 +385,7 @@ export class HeuristicBot {
             //     + the buried A from pile (two Aces!), which they'd later use to fight back.
             //     Draw instead — the post-draw escalation loop is blocked by Rule 6a
             //     (no A/K press when oppEstKings=0 && oppEstAces=0).
-            //     Exception: if pile[pileSize-2] is junk (rank≤1, e.g. 9♣) AND P0 holds a
-            //     4-of-a-kind of rank+1 (e.g. 4×10), pressing forces opp to draw that junk
-            //     (it gets stuck on the 10-top) — P0 then immediately dumps the quad. Press.
-            const pile2RI = state.pileSize >= 2 ? state.pile[state.pileSize - 2] >> 2 : -1;
-            const hasExploitQuad = pile2RI >= 0 && pile2RI <= 1
-                    && _popcount(myHand & RANK_MASK[pile2RI + 1]) === 4;
-            if (drawMove !== null && oppEstAces === 0 && !hasExploitQuad
+            if (drawMove !== null && oppEstAces === 0
                     && myAces >= safeAceMin && myTotal >= 2 && stuckCount > 0) return drawMove;
 
             if (aceMoves.length > 0) {

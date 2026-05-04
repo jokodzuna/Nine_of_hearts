@@ -358,7 +358,10 @@ export class HeuristicBot {
             //     (only when we have 5+ cards; in late-game the K+A finishing line takes over below)
             //     Guard: opp must have >2 cards. With ≤2 cards, drawing gives them a free turn on
             //     a lower pile top — press with A instead (forces them to spend A or draw 3).
-            if (drawMove !== null && drawHasKing && myTotal >= 5 && oppMinCards > 2) return drawMove;
+            //     Also requires opp has K or A: if opp has no power cards, pressing A is strictly
+            //     better (forces P1 to draw 3 and grow their hand, while P0 sheds 1 card).
+            if (drawMove !== null && drawHasKing && myTotal >= 5 && oppMinCards > 2
+                    && (oppEstKings > 0 || oppEstAces > 0)) return drawMove;
 
             // 4b. Opp has no Aces — drawing the A back is strictly better than escalating.
             //     Playing another A onto A-top just gifts opp that A (and whatever is below)
@@ -366,7 +369,9 @@ export class HeuristicBot {
             //     Guard lowered to myTotal >= 2: Rule 0 handles the 1-card win case.
             //     stuckCount > 0 guard: on A-top, stuckCount = non-Ace card count. When hand is
             //     pure Aces (stuckCount=0) there is nothing to recover — just press A and win.
-            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin
+            //     oppEstKings > 0 guard: when opp has no K and no A, pressing A forces them to draw
+            //     3 (growing their hand). Drawing ourselves gives them a free turn instead.
+            if (drawMove !== null && oppEstAces === 0 && oppEstKings > 0 && myAces >= safeAceMin
                     && myTotal >= 2 && stuckCount > 0) return drawMove;
 
             if (aceMoves.length > 0) {

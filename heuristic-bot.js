@@ -418,7 +418,10 @@ export class HeuristicBot {
                 // K-loop guard: only skip K-match when ANOTHER K is buried below the current
                 // K-top (subRI2/3 === 4). drawHasKing is always true on K-top (the top card
                 // itself is K), so using it here would permanently block K-matching on deep piles.
-                if (state.pileSize >= 10 && (subRI2 === 4 || subRI3 === 4) && drawMove !== null) return drawMove;
+                // K-loop only forms when opp also has a K to match back. When oppEstKings===0
+                // they MUST draw on a K-top — no loop possible, matching K is the right move.
+                if (state.pileSize >= 10 && (subRI2 === 4 || subRI3 === 4) && drawMove !== null
+                        && oppEstKings > 0) return drawMove;
                 return kingMoves[0];
             }
 

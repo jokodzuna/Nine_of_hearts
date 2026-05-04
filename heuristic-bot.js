@@ -399,9 +399,12 @@ export class HeuristicBot {
             // Skip in late-game (myTotal<=4) OR when hand has no 9s/10s (low junk):
             // any power-only hand (AAAKKK, AAAKKQ, etc.) is already a finishing hand —
             // recovering more Kings is pointless and just delays the close.
+            // Also skip when opp has no power cards (no K, no A): playing K forces opp
+            // to draw immediately (their Q/J can't respond). Drawing wastes the K-top.
             const lowJunk = _popcount(myHand & (RANK_MASK[0] | RANK_MASK[1]));
             if (drawMove !== null && subRI2 === 4 && oppMinCards >= 3
-                    && myTotal > 4 && lowJunk > 0) {
+                    && myTotal > 4 && lowJunk > 0
+                    && (oppEstKings > 0 || oppEstAces > 0)) {
                 return drawMove;
             }
 

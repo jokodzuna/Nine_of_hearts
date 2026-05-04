@@ -1,6 +1,6 @@
 // scripts/heuristic-vs-qstrategist.mjs
 // Benchmark HeuristicBot (P0) vs Q-Strategist (P1)
-// Usage:  node scripts/heuristic-vs-qstrategist.mjs [games]
+// Usage:  node scripts/heuristic-vs-qstrategist.mjs [games] [--pure]
 
 globalThis.window = globalThis.window || { AI_DEBUG: false };
 
@@ -12,7 +12,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join }  from 'path';
 
 const __dir    = dirname(fileURLToPath(import.meta.url));
-const N_GAMES   = parseInt(process.argv[2] ?? '1000', 10);
+const N_GAMES   = parseInt(process.argv.find(a => /^\d+$/.test(a)) ?? '1000', 10);
+const USE_PURE  = process.argv.includes('--pure');
 const BOT = 1;  // Q-strategist is always player 1 (trained perspective)
 
 const RM  = [0x00000F, 0x0000F0, 0x000F00, 0x00F000, 0x0F0000, 0xF00000];
@@ -59,7 +60,7 @@ function actToMove(moves, act) {
 }
 
 // ---- Load Q-strategist table ----------------------------------------
-const TABLE_PATH = join(__dir, '..', 'q-table-strategist.json');
+const TABLE_PATH = join(__dir, '..', USE_PURE ? 'q-table-strategist-pure.json' : 'q-table-strategist.json');
 let QTABLE = null;
 try {
     const saved = JSON.parse(readFileSync(TABLE_PATH, 'utf8'));
@@ -89,7 +90,7 @@ const heuristic = new HeuristicBot();
 let qWins = 0, hWins = 0, draws = 0;
 const STEP_LIMIT = 10000;
 
-console.log(`\nHeuristicBot (P0) vs Q-Strategist (P1)   n=${N_GAMES}\n`);
+console.log(`\nHeuristicBot (P0) vs Q-Strategist${USE_PURE ? ' Pure' : ''} (P1)   n=${N_GAMES}\n`);
 
 for (let g = 1; g <= N_GAMES; g++) {
     heuristic.resetKnowledge?.();

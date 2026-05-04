@@ -125,15 +125,60 @@ export class QBotEngine {
     advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
 
+// ---- Module-level pre-fetch singletons (start loading immediately on import) ------
+const _tableCache = {};
+function _prefetch(url) {
+    if (!_tableCache[url]) {
+        _tableCache[url] = fetch(url)
+            .then(r => r.json())
+            .then(data => data.table)
+            .catch(err => { console.warn(`[Q-bot] Could not load ${url}`, err); return null; });
+    }
+    return _tableCache[url];
+}
+_prefetch('./q-table-strategist.json');
+_prefetch('./q-table-strategist-pure.json');
+_prefetch('./q-table-strategist-mcts.json');
+
 // ---- QStrategistEngine class (loads q-table-strategist.json) --------
 export class QStrategistEngine {
     constructor() {
         this._table    = null;
         this._fallback = new ISMCTSEngine('shark');
-        fetch('./q-table-strategist.json')
-            .then(r => r.json())
-            .then(data => { this._table = data.table; })
-            .catch(err => console.warn('[QStrategist] Could not load q-table-strategist.json — using MCTS fallback.', err));
+        _prefetch('./q-table-strategist.json').then(t => { this._table = t; });
+    }
+
+    chooseMove(state) {
+        const moves = getPossibleMoves(state);
+        if (!moves.length) return 0;
+
+        if (!this._table) return this._fallback.chooseMove(state);
+
+        const key  = encodeStateFor(state, state.currentPlayer);
+        const qrow = this._table[key];
+        if (!qrow)  return this._fallback.chooseMove(state);
+
+        const legal = [...new Set(moves.map(moveToAct))];
+        let best = legal[0], bv = -Infinity;
+        for (const a of legal) {
+            const v = qrow[a] ?? Infinity;
+            if (v > bv) { bv = v; best = a; }
+        }
+        return actToMove(moves, best) ?? this._fallback.chooseMove(state);
+    }
+
+    cleanup()         { this._fallback.cleanup(); }
+    resetKnowledge()  { this._fallback.resetKnowledge(); }
+    observeMove(m, p) { this._fallback.observeMove(m, p); }
+    advanceTree(m, p) { this._fallback.advanceTree(m, p); }
+}
+
+// ---- QStrategistPureEngine class (loads q-table-strategist-pure.json)
+export class QStrategistPureEngine {
+    constructor() {
+        this._table    = null;
+        this._fallback = new ISMCTSEngine('shark');
+        _prefetch('./q-table-strategist-pure.json').then(t => { this._table = t; });
     }
 
     chooseMove(state) {
@@ -166,10 +211,7 @@ export class QStrategistMCTSEngine {
     constructor() {
         this._table    = null;
         this._fallback = new ISMCTSEngine('shark');
-        fetch('./q-table-strategist-mcts.json')
-            .then(r => r.json())
-            .then(data => { this._table = data.table; })
-            .catch(err => console.warn('[QStrategistMCTS] Could not load q-table-strategist-mcts.json — using MCTS fallback.', err));
+        _prefetch('./q-table-strategist-mcts.json').then(t => { this._table = t; });
     }
 
     chooseMove(state) {

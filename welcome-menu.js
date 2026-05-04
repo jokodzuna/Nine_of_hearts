@@ -1255,6 +1255,7 @@ function _buildBotBattlePanel() {
         ['pureq',       '📊 Pure Q-bot'],
         ['qstrategist',     '🎯 Q-Strategist'],
         ['qstrategistmcts', '🎯 Q-Strat-MCTS'],
+        ['qstrategistpure', '🎯 Q-Strat-Pure'],
         ['training',        '🎓 Training Bot'],
         ['heuristic',       '🧠 Strategist'],
     ];

@@ -347,15 +347,16 @@ export class HeuristicBot {
             // 4b. Opp has no Aces — drawing the A back is strictly better than escalating.
             //     Playing another A onto A-top just gifts opp that A (and whatever is below)
             //     when they're forced to draw. Get it back for free instead.
-            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin && myTotal >= 5) return drawMove;
+            //     Guard lowered to myTotal >= 2: Rule 0 handles the 1-card win case.
+            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin && myTotal >= 2) return drawMove;
 
             if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;
                 // Only escalate with a strict buffer: must stay at safeAceMin AND have clear advantage
                 const safeToPlay = (acesAfter >= safeAceMin && myAces > oppEstAces + 1) // 2+ Ace lead over opp who has some
-                                // Late-game (≤4 cards): escalate regardless of hand composition;
-                                // if this is our very last Ace, Rule 0 (instant-win) catches it.
-                                || (myTotal <= 4 && acesAfter >= safeAceMin);
+                                // Late-game (≤4 cards): escalate unless opp has no Aces — if they
+                                // have none, playing A just gifts it back to them when they draw.
+                                || (myTotal <= 4 && acesAfter >= safeAceMin && oppEstAces > 0);
                 if (safeToPlay) return aceMoves[0];
             }
             // Can't safely spend Ace — draw

@@ -112,7 +112,7 @@ export class QBotEngine {
         const legal = [...new Set(moves.map(moveToAct))];
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            const v = qrow[a] ?? Infinity;
+            const v = qrow[a] ?? -Infinity;
             if (v > bv) { bv = v; best = a; }
         }
         return actToMove(moves, best) ?? this._fallback.chooseMove(state);
@@ -161,7 +161,7 @@ export class QStrategistEngine {
         const legal = [...new Set(moves.map(moveToAct))];
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            const v = qrow[a] ?? Infinity;
+            const v = qrow[a] ?? -Infinity;
             if (v > bv) { bv = v; best = a; }
         }
         return actToMove(moves, best) ?? this._fallback.chooseMove(state);
@@ -194,7 +194,7 @@ export class QStrategistPureEngine {
         const legal = [...new Set(moves.map(moveToAct))];
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            const v = qrow[a] ?? Infinity;
+            const v = qrow[a] ?? -Infinity;
             if (v > bv) { bv = v; best = a; }
         }
         return actToMove(moves, best) ?? this._fallback.chooseMove(state);
@@ -227,7 +227,7 @@ export class QStrategistMCTSEngine {
         const legal = [...new Set(moves.map(moveToAct))];
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            const v = qrow[a] ?? Infinity;
+            const v = qrow[a] ?? -Infinity;
             if (v > bv) { bv = v; best = a; }
         }
         return actToMove(moves, best) ?? this._fallback.chooseMove(state);
@@ -272,7 +272,7 @@ export class HybridQBotEngine {
         const legal = [...new Set(moves.map(moveToAct))];
         let best = legal[0], bv = -Infinity;
         for (const a of legal) {
-            const v = qrow[a] ?? Infinity;
+            const v = qrow[a] ?? -Infinity;
             if (v > bv) { bv = v; best = a; }
         }
         return actToMove(moves, best) ?? heuristicMove(moves);

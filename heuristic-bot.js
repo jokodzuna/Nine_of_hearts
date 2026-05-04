@@ -501,11 +501,13 @@ export class HeuristicBot {
             const sorted = [...pressPlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];
             const hRI     = playRI(highest);
-            // When opp has no Aces, A forces guaranteed draw (P1 can't respond to A-top).
-            // K just lets them use their K response — P1 sheds a K without drawing.
-            // When opp has Aces, prefer K to avoid burning ours; opp spending their A is fine.
-            if (hRI >= 4 && myAces >= safeAceMin) {
-                if (oppEstAces === 0) return highest; // highest = A; forces draw
+            // When opp has K but no A: A forces guaranteed draw (K can't beat A-top).
+            //   K would just let them respond with K — play A instead.
+            // When opp has A (±K): prefer K — avoids burning our A, forces opp to spend theirs.
+            // When opp has NO power cards (no K, no A): don't escalate at all — fall to 6d/6e
+            //   to shed low cards. Giving opp a K or A here gifts them power they didn't have.
+            if (hRI >= 4 && myAces >= safeAceMin && (oppEstKings > 0 || oppEstAces > 0)) {
+                if (oppEstAces === 0 && oppEstKings > 0) return highest; // A; K can't respond
                 const kMove = pressPlays.find(m => playRI(m) === 4);
                 if (kMove) return kMove;      // K preferred over A when opp has Aces
                 return highest;               // no K — escalate with A

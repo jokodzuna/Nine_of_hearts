@@ -364,7 +364,10 @@ export class HeuristicBot {
             //     Playing another A onto A-top just gifts opp that A (and whatever is below)
             //     when they're forced to draw. Get it back for free instead.
             //     Guard lowered to myTotal >= 2: Rule 0 handles the 1-card win case.
-            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin && myTotal >= 2) return drawMove;
+            //     stuckCount > 0 guard: on A-top, stuckCount = non-Ace card count. When hand is
+            //     pure Aces (stuckCount=0) there is nothing to recover — just press A and win.
+            if (drawMove !== null && oppEstAces === 0 && myAces >= safeAceMin
+                    && myTotal >= 2 && stuckCount > 0) return drawMove;
 
             if (aceMoves.length > 0) {
                 const acesAfter = myAces - 1;

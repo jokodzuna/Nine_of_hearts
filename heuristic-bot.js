@@ -413,11 +413,12 @@ export class HeuristicBot {
                 return drawMove;
             }
 
-            // 5b3. Opponent has ≤2 cards with deep pile: draw to recover K rather than
+            // 5b3. Opponent has exactly 2 cards with deep pile: draw to recover K rather than
             //      matching. K-match gives opp back powerful drawn cards (K+K+?);
             //      drawing may expose a top they can't respond to (e.g. Q when opp has J).
             //      Guard: myTotal≥8 — if we're nearly done ourselves, press instead.
-            if (drawMove !== null && oppMinCards <= 2 && state.pileSize >= 5 && myTotal >= 8) {
+            //      NOT when oppMinCards===1: draw lets opp play their last card and win.
+            if (drawMove !== null && oppMinCards === 2 && state.pileSize >= 5 && myTotal >= 8) {
                 return drawMove;
             }
 
@@ -492,11 +493,13 @@ export class HeuristicBot {
             const sorted = [...pressPlays].sort((a, b) => playRI(b) - playRI(a));
             const highest = sorted[0];
             const hRI     = playRI(highest);
-            // When Aces are the top option, prefer K — it forces opp to respond without
-            // burning our Aces; if opp plays A in reply, bot's Ace advantage remains.
+            // When opp has no Aces, A forces guaranteed draw (P1 can't respond to A-top).
+            // K just lets them use their K response — P1 sheds a K without drawing.
+            // When opp has Aces, prefer K to avoid burning ours; opp spending their A is fine.
             if (hRI >= 4 && myAces >= safeAceMin) {
+                if (oppEstAces === 0) return highest; // highest = A; forces draw
                 const kMove = pressPlays.find(m => playRI(m) === 4);
-                if (kMove) return kMove;      // K preferred over A
+                if (kMove) return kMove;      // K preferred over A when opp has Aces
                 return highest;               // no K — escalate with A
             }
             if (hRI < 4) return highest;      // J/Q/10: always press

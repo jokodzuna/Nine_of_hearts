@@ -136,16 +136,16 @@ function _prefetch(url) {
     }
     return _tableCache[url];
 }
-_prefetch('./q-table-strategist.json');
-_prefetch('./q-table-strategist-pure.json');
-_prefetch('./q-table-strategist-mcts.json');
+_prefetch('./q-table-strategist.json?v=2');
+_prefetch('./q-table-strategist-pure.json?v=2');
+_prefetch('./q-table-strategist-mcts.json?v=2');
 
 // ---- QStrategistEngine class (loads q-table-strategist.json) --------
 export class QStrategistEngine {
     constructor() {
         this._table    = null;
         this._fallback = new ISMCTSEngine('shark');
-        _prefetch('./q-table-strategist.json').then(t => { this._table = t; });
+        _prefetch('./q-table-strategist.json?v=2').then(t => { this._table = t; });
     }
 
     chooseMove(state) {
@@ -178,7 +178,11 @@ export class QStrategistPureEngine {
     constructor() {
         this._table    = null;
         this._fallback = new ISMCTSEngine('shark');
-        _prefetch('./q-table-strategist-pure.json').then(t => { this._table = t; });
+        _prefetch('./q-table-strategist-pure.json?v=2').then(t => {
+            if (!t) { console.error('[QStrategistPure] Q-table is null — fetch failed or wrong format'); return; }
+            this._table = t;
+            console.log(`[QStrategistPure] Q-table loaded: ${Object.keys(t).length} states`);
+        }).catch(err => console.error('[QStrategistPure] Unexpected error loading Q-table:', err));
     }
 
     chooseMove(state) {
@@ -211,7 +215,7 @@ export class QStrategistMCTSEngine {
     constructor() {
         this._table    = null;
         this._fallback = new ISMCTSEngine('shark');
-        _prefetch('./q-table-strategist-mcts.json').then(t => { this._table = t; });
+        _prefetch('./q-table-strategist-mcts.json?v=2').then(t => { this._table = t; });
     }
 
     chooseMove(state) {

@@ -327,10 +327,6 @@ export class HeuristicBot {
                     }
                     if (dangerous) continue;
                 }
-                // When opp has very few cards (<=3) AND still has an Ace AND we have
-                // surplus Aces, escalating with K/A (Rule 6a) is stronger than a quad
-                // dump — opp can respond to the quad with their power cards anyway.
-                if (oppMinCards <= 3 && oppEstAces > 0 && myAces > safeAceMin) continue;
                 // Skip Q-quad if opp is known to hold a King (K beats Q-top → opp escapes).
                 if (r === 3 && oppEstKings > 0 && oppMinCards <= 3) continue;
                 // When opp is near-win press with the quad immediately;

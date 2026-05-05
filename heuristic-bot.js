@@ -332,7 +332,7 @@ export class HeuristicBot {
                 // When opp is near-win press with the quad immediately;
                 // otherwise shed lower singles first so they don't get buried.
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
-                    pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3
+                    pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) < topRI
                 );
                 if (!hasLowerSingle) return m;
             }
@@ -344,7 +344,7 @@ export class HeuristicBot {
         // of any junk rank, drawing is strictly better than playing a single
         // card: we'll dump all 4 next turn for a net hand reduction.
         // ==============================================================
-        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0) {
+        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0 && oppMinCards > 3) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
                 if (inHand === 0 || inHand >= 3) continue; // 3+ in hand: play singles; Rule 3 handles full quads
@@ -530,7 +530,7 @@ export class HeuristicBot {
             // When opp has A (±K): prefer K — avoids burning our A, forces opp to spend theirs.
             // When opp has NO power cards (no K, no A): don't escalate at all — fall to 6d/6e
             //   to shed low cards. Giving opp a K or A here gifts them power they didn't have.
-            if (hRI >= 4 && myAces >= safeAceMin && (oppEstKings > 0 || oppEstAces > 0)) {
+            if (hRI >= 4 && myAces >= safeAceMin && (oppEstKings > 0 || oppEstAces > 0 || oppMinCards <= 2)) {
                 if (oppEstAces === 0 && oppEstKings > 0) {
                     // P1 has K but no A. If we dominate the K-battle (more Kings than opp),
                     // press with K — P1 depletes their Kings, then must draw on the next K.

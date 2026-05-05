@@ -16,7 +16,7 @@
 //    2000  opp 2-4 card near-win pressure
 //    1800  Ace-battle (Rule 4)
 //    1600  King-battle (Rule 5)
-//     900  junk quad dump (Rule 3)
+//    2500  junk quad dump (Rule 3) — beats Rule 6a's opp-near-win press
 //     550  dominant-hand single play (overrides quad-draw)
 //     500  draw to complete quad (Rule 3.5)
 //     400  stuck-9s draw (Rule 6b)
@@ -263,8 +263,10 @@ export class Strategist2Bot {
                 const hasLowerSingle = !riskFinishingHand && (oppMinCards > 4) && playMoves.some(
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) <= topRI
                 );
-                // Higher quad = higher score when riskFinishingHand; else uniform
-                const score = riskFinishingHand ? 900 + r : 900;
+                // Elevate only when opp has 2 cards with an Ace: playing single
+                // lets opp A-counter then finish with their low card after we draw.
+                const aceFinishThreat = oppMinCards === 2 && oppEstAces > 0;
+                const score = aceFinishThreat ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
                 if (!hasLowerSingle) nominate(m, score);
             }
         }

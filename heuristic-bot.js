@@ -306,17 +306,16 @@ export class HeuristicBot {
             if (quadK) return quadK;
         }
 
-        for (const m of playMoves) {
-            if (playCnt(m) === 4 && playRI(m) <= 3   // rank 9–Q only, NOT K
-                    && (myAces >= safeAceMin || myTotal > oppMinCards + 3)) {
+        // Collect all valid junk quads then play the HIGHEST-ranked one.
+        // Higher quad (Q) forces opp to spend K/A; lower quad (10) lets opp shed junk
+        // (e.g. J) for free, leaving them with a pure power hand.
+        {
+            const quadCandidates = [];
+            for (const m of playMoves) {
+                if (playCnt(m) !== 4 || playRI(m) > 3) continue;
+                if (!(myAces >= safeAceMin || myTotal > oppMinCards + 3)) continue;
                 const r = playRI(m);
-                // Never play a quad when opp has ≤1 card: they respond with their
-                // last card on the new top and win (0 cards remaining).
                 if (oppMinCards <= 1) continue;
-                // Don't play a quad that hands opp an instant win.
-                // P1 wins in one move only when ALL their remaining cards share one rank > r.
-                // Check: for each rank hr > r, if (4 - my_count[hr] - pile_count[hr]) >= oppMinCards
-                // then P1 could hold all oppMinCards cards at that rank → instant-win quad possible.
                 if (oppMinCards <= 4) {
                     let dangerous = false;
                     for (let hr = r + 1; hr <= 5 && !dangerous; hr++) {
@@ -327,14 +326,20 @@ export class HeuristicBot {
                     }
                     if (dangerous) continue;
                 }
-                // Skip Q-quad if opp is known to hold a King (K beats Q-top → opp escapes).
                 if (r === 3 && oppEstKings > 0 && oppMinCards <= 3) continue;
-                // When opp is near-win press with the quad immediately;
-                // otherwise shed lower singles first so they don't get buried.
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) < topRI
                 );
-                if (!hasLowerSingle) return m;
+                if (!hasLowerSingle) quadCandidates.push(m);
+            }
+            if (quadCandidates.length > 0) {
+                // Only prefer highest quad in endgame when opp risks converting to a
+                // finishing hand (only K/A left after shedding their last junk card).
+                const oppNonPowerEst = oppMinCards - oppEstKings - oppEstAces;
+                if (oppMinCards <= 6 && oppNonPowerEst <= 1) {
+                    quadCandidates.sort((a, b) => playRI(b) - playRI(a));
+                }
+                return quadCandidates[0];
             }
         }
 

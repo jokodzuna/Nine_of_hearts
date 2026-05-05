@@ -22,12 +22,15 @@
 //     400  stuck-9s draw (Rule 6b)
 //     340  shallow-pile recovery draw (Rule 6-pre / 6b2)
 //     300  K-escalation (Rule 6c)
+//     350  ace-force: P0 has all Aces + quad ready, opp has no Aces (6-ace-force)
 //   200-r  junk single — lowest rank first (Rule 6d/6e)
 //     100  draw fallback
 // ============================================================
 
 import {
     getPossibleMoves,
+    applyMove,
+    isGameOver,
     DRAW_FLAG,
     RANK_MASK,
 } from './game-logic.js';
@@ -55,6 +58,7 @@ export class Strategist2Bot {
     constructor() {
         this._cardKnowledge = null;
         this._pileSeenMask  = 0;
+        this._inSimulation  = false;  // true → skip endgame search (prevents recursion)
     }
 
     observeMove(state, move) {
@@ -81,6 +85,15 @@ export class Strategist2Bot {
     chooseMove(state) {
         const moves = getPossibleMoves(state);
         if (moves.length === 1) return moves[0];
+
+        // Endgame search: when either player has ≤3 cards, simulate forward
+        // with Strategist2 scoring (full info) to find the best move.
+        if (!this._inSimulation && state.numPlayers === 2) {
+            const _myP  = state.currentPlayer;
+            const _myC  = _popcount(state.hands[_myP]);
+            const _oppC = _popcount(state.hands[1 - _myP]);
+            if (_myC <= 3 || _oppC <= 3) return this._runEndgameSearch(state, moves);
+        }
 
         // ---- State variables (same as HeuristicBot) ----
         const myP     = state.currentPlayer;
@@ -123,7 +136,11 @@ export class Strategist2Bot {
             const kingsElsewhere = Math.max(0, 4 - myKings - kingsInPile);
             let ea = Math.min(acesElsewhere,  oppTotal);
             let ek = Math.min(kingsElsewhere, oppTotal);
-            if (this._cardKnowledge !== null) {
+            if (this._inSimulation) {
+                // Full info in simulation — read exact opp hand
+                ea = _popcount(state.hands[oppP] & RANK_MASK[5]);
+                ek = _popcount(state.hands[oppP] & RANK_MASK[4]);
+            } else if (this._cardKnowledge !== null) {
                 ea = Math.max(ea, _popcount(this._cardKnowledge[oppP] & RANK_MASK[5]));
                 ek = Math.max(ek, _popcount(this._cardKnowledge[oppP] & RANK_MASK[4]));
             }
@@ -425,6 +442,17 @@ export class Strategist2Bot {
                     nominate(kingMoves[0], 300);
             }
 
+            // 6-ace-force: P0 holds all Aces (opp has none) AND has a quad to dump
+            // at the resulting 9♥-top — play Ace to force P1 to draw, then clear quad.
+            // After P1 draws the Ace, oppEstAces increments naturally, preventing re-fire.
+            if (oppEstAces === 0 && myAces >= safeAceMin && topRI >= 2) {
+                const hasQuadFollowUp = [0,1,2,3].some(r => _popcount(myHand & RANK_MASK[r]) === 4);
+                if (hasQuadFollowUp) {
+                    const afMoves = safePlays.filter(m => playRI(m) === 5);
+                    if (afMoves.length > 0) nominate(afMoves[0], 350);
+                }
+            }
+
             // 6d/6e: junk singles — lowest rank first; singles preferred when hand large
             {
                 let candidates = safePlays;
@@ -446,5 +474,41 @@ export class Strategist2Bot {
             if (s > bestScore) { bestScore = s; bestMove = m; }
         }
         return bestMove ?? moves[0];
+    }
+
+    // ============================================================
+    // Endgame search — triggered when myCards ≤ 3 or oppCards ≤ 3
+    // ============================================================
+
+    // Try each candidate move, simulate the rest of the game with Strategist2
+    // scoring (full info, no recursive endgame search), and pick the best outcome.
+    _runEndgameSearch(state, moves) {
+        const myP    = state.currentPlayer;
+        const simBot = new Strategist2Bot();
+        simBot._inSimulation = true;
+        let bestMove = moves[0], bestOutcome = -Infinity;
+        for (const move of moves) {
+            const s1 = applyMove(state, move);
+            let outcome;
+            if (isGameOver(s1)) {
+                outcome = (s1.eliminated & (1 << myP)) ? 10 : -10;
+            } else {
+                outcome = this._simulateWith(s1, myP, simBot, 20);
+            }
+            if (outcome > bestOutcome) { bestOutcome = outcome; bestMove = move; }
+        }
+        return bestMove;
+    }
+
+    // Simulate up to `depth` plies from `state` using `simBot`'s Strategist2
+    // scoring. Returns 10 (myP wins), -10 (myP loses), 0 (depth exceeded).
+    _simulateWith(state, myP, simBot, depth) {
+        let cur = state;
+        for (let d = 0; d < depth; d++) {
+            if (isGameOver(cur)) break;
+            cur = applyMove(cur, simBot.chooseMove(cur));
+        }
+        if (isGameOver(cur)) return (cur.eliminated & (1 << myP)) ? 10 : -10;
+        return 0;
     }
 }

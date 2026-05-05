@@ -92,7 +92,10 @@ export class Strategist2Bot {
             const _myP  = state.currentPlayer;
             const _myC  = _popcount(state.hands[_myP]);
             const _oppC = _popcount(state.hands[1 - _myP]);
-            if (_myC <= 3 || _oppC <= 3) return this._runEndgameSearch(state, moves);
+            if (_myC <= 3 || _oppC <= 3) {
+                const eg = this._runEndgameSearch(state, moves);
+                if (eg !== null) return eg;  // null = all outcomes losing, fall through to scoring
+            }
         }
 
         // ---- State variables (same as HeuristicBot) ----
@@ -282,7 +285,7 @@ export class Strategist2Bot {
                 );
                 // Elevate only when opp has 2 cards with an Ace: playing single
                 // lets opp A-counter then finish with their low card after we draw.
-                const aceFinishThreat = oppMinCards === 2 && oppEstAces > 0;
+                const aceFinishThreat = oppMinCards <= 3 && oppEstAces > 0;
                 const score = aceFinishThreat ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
                 if (!hasLowerSingle) nominate(m, score);
             }
@@ -497,7 +500,9 @@ export class Strategist2Bot {
             }
             if (outcome > bestOutcome) { bestOutcome = outcome; bestMove = move; }
         }
-        return bestMove;
+        // All outcomes are -10 (inevitable loss) — fall through to regular scoring
+        // which has better heuristics (e.g. play 4×Q to block opp low card)
+        return bestOutcome > -10 ? bestMove : null;
     }
 
     // Simulate up to `depth` plies from `state` using `simBot`'s Strategist2

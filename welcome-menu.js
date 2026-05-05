@@ -1209,6 +1209,7 @@ function _buildTestBotPanel() {
         ['test-training',   '🎓 Training Sandbox'],
         ['test-ace50',      '🧪 MCTS-ace-50'],
         ['test-heuristic',  '🧠 Strategist'],
+        ['test-strategist2', '🧠 Strategist 2'],
     ];
     for (const [value, label] of opts) {
         const btn = document.createElement('button');
@@ -1258,6 +1259,7 @@ function _buildBotBattlePanel() {
         ['qstrategistpure', '🎯 Q-Strat-Pure'],
         ['training',        '🎓 Training Bot'],
         ['heuristic',       '🧠 Strategist'],
+        ['strategist2',     '🧠 Strategist 2'],
     ];
 
     const arena = document.createElement('div');

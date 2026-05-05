@@ -328,7 +328,7 @@ export class HeuristicBot {
                 }
                 if (r === 3 && oppEstKings > 0 && oppMinCards <= 3) continue;
                 const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
-                    pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) < topRI
+                    pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) <= topRI
                 );
                 if (!hasLowerSingle) quadCandidates.push(m);
             }

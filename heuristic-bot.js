@@ -310,6 +310,11 @@ export class HeuristicBot {
         // Higher quad (Q) forces opp to spend K/A; lower quad (10) lets opp shed junk
         // (e.g. J) for free, leaving them with a pure power hand.
         {
+            // Pre-compute finishing-hand risk: opp has ≤1 non-power card, so shedding
+            // it (via a 9-exchange) would leave them with a pure K/A hand.
+            const oppNonPowerEst = oppMinCards - oppEstKings - oppEstAces;
+            const riskFinishingHand = oppMinCards <= 6 && oppNonPowerEst <= 1;
+
             const quadCandidates = [];
             for (const m of playMoves) {
                 if (playCnt(m) !== 4 || playRI(m) > 3) continue;
@@ -327,16 +332,16 @@ export class HeuristicBot {
                     if (dangerous) continue;
                 }
                 if (r === 3 && oppEstKings > 0 && oppMinCards <= 3) continue;
-                const hasLowerSingle = (oppMinCards > 4) && playMoves.some(
+                // Hold back the quad only when the lower-single-first approach is safe:
+                // don't do the single-exchange if it would gift opp a finishing hand.
+                const hasLowerSingle = !riskFinishingHand && (oppMinCards > 4) && playMoves.some(
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) <= topRI
                 );
                 if (!hasLowerSingle) quadCandidates.push(m);
             }
             if (quadCandidates.length > 0) {
-                // Only prefer highest quad in endgame when opp risks converting to a
-                // finishing hand (only K/A left after shedding their last junk card).
-                const oppNonPowerEst = oppMinCards - oppEstKings - oppEstAces;
-                if (oppMinCards <= 6 && oppNonPowerEst <= 1) {
+                // Prefer highest quad when opp risks converting to a finishing hand.
+                if (riskFinishingHand) {
                     quadCandidates.sort((a, b) => playRI(b) - playRI(a));
                 }
                 return quadCandidates[0];

@@ -50,6 +50,18 @@ function _moveRankIdx(moveBits) {
 
 function _moveCount(moveBits) { return _popcount(moveBits); }
 
+// Effective hand size for endgame trigger: a playable quad (rank >= topRI)
+// counts as 1 card since it resolves in a single move.
+function _effectiveCards(hand, topRI) {
+    let eff = 0;
+    for (let r = 0; r < 6; r++) {
+        const n = _popcount(hand & RANK_MASK[r]);
+        if (n === 4 && r >= topRI) eff += 1;
+        else eff += n;
+    }
+    return eff;
+}
+
 // ============================================================
 // Strategist2Bot
 // ============================================================
@@ -294,7 +306,10 @@ export class Strategist2Bot {
         // ==============================================================
         // RULE 3.5 — Draw to complete a junk quad (rank 9–Q)
         // ==============================================================
-        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0 && oppMinCards > 3) {
+        // pileSize > 4 guard: drawing when pile is shallow (≤4 cards) fully
+        // resets the pile to 9♥, giving opp a free turn to dump their quad.
+        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0 && oppMinCards > 3
+                && state.pileSize > 4) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
                 if (inHand === 0 || inHand >= 3) continue;
@@ -500,8 +515,10 @@ export class Strategist2Bot {
             }
             if (outcome > bestOutcome) { bestOutcome = outcome; bestMove = move; }
         }
-        // All outcomes are -10 (inevitable loss) — fall through to regular scoring
-        // which has better heuristics (e.g. play 4×Q to block opp low card)
+        // Don't return a draw move when its score is 0 (depth exceeded): this
+        // causes draw-loops when plays give -10 but draw gives 0 (inconclusive).
+        // Play moves with outcome 0 are fine — first candidate is usually best.
+        if ((bestMove & DRAW_FLAG) && bestOutcome === 0) return null;
         return bestOutcome > -10 ? bestMove : null;
     }
 

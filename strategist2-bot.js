@@ -151,8 +151,8 @@ export class Strategist2Bot {
             const kingsElsewhere = Math.max(0, 4 - myKings - kingsInPile);
             let ea = Math.min(acesElsewhere,  oppTotal);
             let ek = Math.min(kingsElsewhere, oppTotal);
-            if (this._inSimulation) {
-                // Full info in simulation — read exact opp hand
+            if (this._inSimulation || state.numPlayers === 2) {
+                // Full info — read exact opp hand (2-player: state is always visible)
                 ea = _popcount(state.hands[oppP] & RANK_MASK[5]);
                 ek = _popcount(state.hands[oppP] & RANK_MASK[4]);
             } else if (this._cardKnowledge !== null) {
@@ -523,8 +523,10 @@ export class Strategist2Bot {
         }
         // Don't return a draw move when its score is 0 (depth exceeded): this
         // causes draw-loops when plays give -10 but draw gives 0 (inconclusive).
-        // Play moves with outcome 0 are fine — first candidate is usually best.
         if ((bestMove & DRAW_FLAG) && bestOutcome === 0) return null;
+        // When S2 has many cards and all sims are inconclusive (0), the position
+        // is too complex for depth-20 — fall through to scoring instead.
+        if (bestOutcome === 0 && _popcount(state.hands[myP]) > 3) return null;
         return bestOutcome > -10 ? bestMove : null;
     }
 

@@ -14,7 +14,7 @@
 //    4000  opp 1-card press
 //    3500  quad-K→A finishing sequence
 //    2000  opp 2-4 card near-win pressure
-//    1800  Ace-battle (Rule 4)
+//    1800  Ace-battle (Rule 4) 
 //    1600  King-battle (Rule 5)
 //    2500  junk quad dump (Rule 3) — beats Rule 6a's opp-near-win press
 //     550  dominant-hand single play (overrides quad-draw)
@@ -369,6 +369,12 @@ export class Strategist2Bot {
             if (drawMove !== null && oppMinCards === 2 && state.pileSize >= 5
                     && myTotal >= 8 && oppEstKings > 0)
                 nominate(drawMove, 1620);
+
+            // Drawing to complete 4K beats playing a single K when opp has
+            // no kings/aces to counter: guarantees the 4K→4A finishing sequence.
+            if (drawMove !== null && drawHasKing && myKings === 3
+                    && oppEstKings === 0 && oppEstAces === 0)
+                nominate(drawMove, 1635);
 
             if (kingMoves.length > 0 && (myKings >= 2 || myAces >= safeAceMin) && myTotal > 4) {
                 if (state.pileSize >= 10 && (subRI2 === 4 || subRI3 === 4) && drawMove !== null

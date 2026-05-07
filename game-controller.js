@@ -246,7 +246,7 @@ function _startGame(cfgOverride = null) {
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     // ===== TEST_BLOCK_START =====
-    if      (cfg.difficulty === 'botfather')     _engines[1] = new TrainingQBotEngine();
+    if      (cfg.difficulty === 'botfather')     _engines[1] = new Strategist2Bot();
     else if (cfg.difficulty === 'test-hybrid')   _engines[1] = new HybridQBotEngine();
     else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK

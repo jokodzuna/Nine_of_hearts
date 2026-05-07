@@ -227,6 +227,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
+    Update('SET_GAME_THEME', { theme: isBotfather ? 'botfather' : '' });
     const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot' || cfg.difficulty === 'test-heuristic' || cfg.difficulty === 'test-strategist2'; // TEST_BLOCK
 
     // ---- Engines ----

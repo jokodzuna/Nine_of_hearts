@@ -217,6 +217,14 @@ export function Update(command, payload = {}) {
             if (infoId) _setAvatarImg(`#${infoId} .avatar`, payload.avatarPath);
             break;
         }
+        case 'SET_GAME_THEME': {
+            const gc = document.querySelector('.game-container');
+            if (gc) {
+                gc.classList.remove('botfather-theme');
+                if (payload.theme) gc.classList.add(`${payload.theme}-theme`);
+            }
+            break;
+        }
         // ===== TEST_BLOCK_START — training sandbox commands =====
         case 'SHOW_REVEAL_WINDOW':
             _startRevealWindow(payload);

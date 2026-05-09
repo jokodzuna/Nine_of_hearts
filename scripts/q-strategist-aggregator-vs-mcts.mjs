@@ -1,8 +1,9 @@
 // scripts/q-strategist-aggregator-vs-mcts.mjs
 // Benchmark trained Q-strategist-aggregator (player 1) vs MCTS (player 0)
-// Usage:  node scripts/q-strategist-aggregator-vs-mcts.mjs [games] [profile] [maxIterations] [--report-every N]
+// Usage:  node scripts/q-strategist-aggregator-vs-mcts.mjs [games] [profile] [maxIterations] [--maxTime N] [--report-every N]
 //   profile: mctsAce50 | shark | gambler | newbie   (default: shark)
 //   maxIterations: default 100 for speed
+//   --maxTime N: MCTS time budget in ms (default: use base profile's value)
 //   --report-every N: report interval (default: 50)
 
 // Stub window for headless MCTS (ai-engine.js references window.AI_DEBUG)
@@ -20,15 +21,17 @@ const N_GAMES   = parseInt(process.argv[2] ?? '1000', 10);
 const PROFILE   = process.argv[3] ?? 'shark';
 const MAX_ITERS = parseInt(process.argv[4] ?? '100', 10);
 
-// Parse --report-every flag
+// Parse flags
 function getFlag(flag, fallback) {
     const i = process.argv.indexOf(flag);
     return i !== -1 && process.argv[i + 1] !== undefined ? parseInt(process.argv[i + 1], 10) : fallback;
 }
 const REPORT_EVERY = getFlag('--report-every', 50);
+const MAX_TIME     = getFlag('--maxTime', null);
 
 const BASE_PROF  = ISMCTSEngine.PROFILES[PROFILE] ?? ISMCTSEngine.PROFILES.shark;
-const TEST_PROF  = { ...BASE_PROF, maxIterations: MAX_ITERS };
+const TEST_PROF  = MAX_TIME !== null ? { ...BASE_PROF, maxIterations: MAX_ITERS, maxTime: MAX_TIME }
+                                      : { ...BASE_PROF, maxIterations: MAX_ITERS };
 
 // ---- Load Q-strategist-aggregator table --------------------------------
 const TABLE_PATH = join(__dir, '..', 'q-table-aggregator.json');

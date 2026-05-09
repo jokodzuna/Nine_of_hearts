@@ -85,7 +85,7 @@ const GAMMA      = 0.997;
 const WIN_R      =  50.0;
 const LOSE_R     = -50.0;
 const STEP_LIMIT = 150;
-const SAVE_EVERY = DURATION_H > 0 ? 50 : 200;
+const SAVE_EVERY = DURATION_H > 0 ? 50 : 1000;
 const LOG_EVERY  = parseInt(getArg('--log-every', DURATION_H > 0 ? '20' : '500'), 10);
 const BOT        = 1;
 

@@ -1,8 +1,9 @@
 // scripts/q-strategist-aggregator-vs-mcts.mjs
 // Benchmark trained Q-strategist-aggregator (player 1) vs MCTS (player 0)
-// Usage:  node scripts/q-strategist-aggregator-vs-mcts.mjs [games] [profile] [maxIterations]
+// Usage:  node scripts/q-strategist-aggregator-vs-mcts.mjs [games] [profile] [maxIterations] [--report-every N]
 //   profile: mctsAce50 | shark | gambler | newbie   (default: shark)
 //   maxIterations: default 100 for speed
+//   --report-every N: report interval (default: 50)
 
 // Stub window for headless MCTS (ai-engine.js references window.AI_DEBUG)
 globalThis.window = globalThis.window || { AI_DEBUG: false };
@@ -18,6 +19,13 @@ const __dir    = dirname(fileURLToPath(import.meta.url));
 const N_GAMES   = parseInt(process.argv[2] ?? '1000', 10);
 const PROFILE   = process.argv[3] ?? 'shark';
 const MAX_ITERS = parseInt(process.argv[4] ?? '100', 10);
+
+// Parse --report-every flag
+function getFlag(flag, fallback) {
+    const i = process.argv.indexOf(flag);
+    return i !== -1 && process.argv[i + 1] !== undefined ? parseInt(process.argv[i + 1], 10) : fallback;
+}
+const REPORT_EVERY = getFlag('--report-every', 50);
 
 const BASE_PROF  = ISMCTSEngine.PROFILES[PROFILE] ?? ISMCTSEngine.PROFILES.shark;
 const TEST_PROF  = { ...BASE_PROF, maxIterations: MAX_ITERS, maxTime: 100 };
@@ -117,7 +125,7 @@ for (let g = 1; g <= N_GAMES; g++) {
     else if (getResult(s, BOT) > 0) qWins++;
     else                            mWins++;
 
-    if (g % 50 === 0) {
+    if (g % REPORT_EVERY === 0) {
         const pct = (qWins / g * 100).toFixed(1);
         process.stdout.write(`  game ${String(g).padStart(4)}  Aggregator: ${qWins}  MCTS: ${mWins}  Agg-win%: ${pct}%\n`);
     }

@@ -28,7 +28,7 @@ function getFlag(flag, fallback) {
 const REPORT_EVERY = getFlag('--report-every', 50);
 
 const BASE_PROF  = ISMCTSEngine.PROFILES[PROFILE] ?? ISMCTSEngine.PROFILES.shark;
-const TEST_PROF  = { ...BASE_PROF, maxIterations: MAX_ITERS, maxTime: 100 };
+const TEST_PROF  = { ...BASE_PROF, maxIterations: MAX_ITERS };
 
 // ---- Load Q-strategist-aggregator table --------------------------------
 const TABLE_PATH = join(__dir, '..', 'q-table-aggregator.json');

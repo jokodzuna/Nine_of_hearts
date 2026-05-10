@@ -17,15 +17,16 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 //   --log-every N        report interval (default: 500 games, or 20 in duration mode)
 //   --epsilon N          start epsilon (default: 0.15 train / 0.0 test)
 //   --pure profile       100% vs one opponent:
-//                        qstrat | qstratpure | qstratmcts | strategist | strategist2
+//                        qstrat | qstratpure | qstratmcts | strategist | strategist2 | shark
 //   --test               evaluation mode: no learning, ε=0, detailed per-profile stats
 //
 // Default opponent mix (training & mixed evaluation):
-//   20%  Q-Strategist (q-table-strategist.json)
-//   20%  Q-Strategist-Pure (q-table-strategist-pure.json)
-//   20%  Q-Strategist-MCTS (q-table-strategist-mcts.json)
-//   20%  Strategist (HeuristicBot)
-//   20%  Strategist2 (Strategist2Bot)
+//   16%  Q-Strategist (q-table-strategist.json)
+//   16%  Q-Strategist-Pure (q-table-strategist-pure.json)
+//   16%  Q-Strategist-MCTS (q-table-strategist-mcts.json)
+//   16%  Strategist (HeuristicBot)
+//   16%  Strategist2 (Strategist2Bot)
+//   20%  Shark (MCTS, 100 iterations)
 //
 // Output: q-table-aggregator.json
 // Warm-start: loads q-table-aggregator.json if it exists,
@@ -34,6 +35,7 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 
 import { createInitialState, getPossibleMoves, applyMove,
          isGameOver, getResult, DRAW_FLAG } from '../game-logic.js';
+import { ISMCTSEngine } from '../ai-engine.js';
 import { HeuristicBot } from '../heuristic-bot.js';
 import { Strategist2Bot } from '../strategist2-bot.js';
 import { writeFileSync, existsSync, readFileSync } from 'fs';
@@ -62,7 +64,7 @@ const EPS_MIN    = TEST_MODE ? 0.0 : 0.03;
 
 const END_TIME   = DURATION_H > 0 ? Date.now() + DURATION_H * 3600_000 : Infinity;
 
-// --pure [qstrat|qstratpure|qstratmcts|strategist|strategist2]
+// --pure [qstrat|qstratpure|qstratmcts|strategist|strategist2|shark]
 function getPureMode() {
     const idx = process.argv.indexOf('--pure');
     if (idx === -1) return null;
@@ -74,6 +76,7 @@ function getPureMode() {
         if (['qstratmcts','q-strategist-mcts','qstrategistmcts','mcts'].includes(m)) return 'qstratmcts';
         if (['strategist','heuristic','heuristicbot','strat'].includes(m)) return 'strategist';
         if (['strategist2','strat2','s2'].includes(m)) return 'strategist2';
+        if (['shark','s'].includes(m)) return 'shark';
     }
     return null;
 }
@@ -272,11 +275,12 @@ function fastHeuristic(state) {
 function selectOpponent() {
     if (PURE_MODE) return PURE_MODE;
     const r = Math.random();
-    if (r < 0.20) return 'qstrat';
-    if (r < 0.40) return 'qstratpure';
-    if (r < 0.60) return 'qstratmcts';
-    if (r < 0.80) return 'strategist';
-    return 'strategist2';
+    if (r < 0.16) return 'qstrat';
+    if (r < 0.32) return 'qstratpure';
+    if (r < 0.48) return 'qstratmcts';
+    if (r < 0.64) return 'strategist';
+    if (r < 0.80) return 'strategist2';
+    return 'shark';
 }
 
 // ---- Urgency + shaping reward ---------------------------------------
@@ -307,6 +311,9 @@ function stepReward(prev, move, next, botTurnCount, totalMoves) {
 function playGame(eps, oppType) {
     let s = createInitialState(2);
 
+    const sharkOpp = oppType === 'shark' ? new ISMCTSEngine('shark') : null;
+    const sharkProf = sharkOpp ? { ...ISMCTSEngine.PROFILES.shark, maxIterations: 100, maxTime: 300 } : null;
+
     const hist      = [];
     let totalMoves  = 0;
     const turnCount = [0, 0];
@@ -336,6 +343,12 @@ function playGame(eps, oppType) {
                 case 'strategist2':
                     conc = strategist2ChooseMove(s);
                     break;
+                case 'shark':
+                    conc = sharkOpp.chooseMove(s, sharkProf);
+                    sharkOpp.observeMove(s, conc);
+                    sharkOpp.advanceTree(conc);
+                    sharkOpp.cleanup();
+                    break;
                 default:
                     conc = fastHeuristic(s);
             }
@@ -347,6 +360,12 @@ function playGame(eps, oppType) {
         const key  = encodeState(s, BOT);
         const act  = pickAction(key, lActs, eps);
         const conc = actToMove(moves, act) ?? moves[0];
+
+        if (sharkOpp) {
+            sharkOpp.observeMove(s, conc);
+            sharkOpp.advanceTree(conc);
+            sharkOpp.cleanup();
+        }
 
         qRow(key);
         hist.push({ key, act, lActs, prev: s, move: conc });
@@ -395,7 +414,7 @@ console.log(`\nQ-Strategist-Aggregator Trainer ${TEST_MODE ? '(EVALUATION MODE)'
 if (PURE_MODE) {
     console.log(`PURE MODE: 100% vs ${PURE_MODE}`);
 } else {
-    console.log(`Opponent mix: 20% Q-Strategist | 20% Q-Strategist-Pure | 20% Q-Strategist-MCTS | 20% Strategist | 20% Strategist2`);
+    console.log(`Opponent mix: 16% Q-Strategist | 16% Q-Strategist-Pure | 16% Q-Strategist-MCTS | 16% Strategist | 16% Strategist2 | 20% Shark (MCTS 100 iters)`);
 }
 if (DURATION_H > 0) {
     console.log(`Duration: ${DURATION_H}h  |  ε: ${EPS_START}→${EPS_MIN}  |  α=${ALPHA}  |  γ=${GAMMA}`);
@@ -408,7 +427,7 @@ console.log(`Output: ${OUT_PATH}\n`);
 
 // Per-profile counters for test mode
 const profCounters = {};
-['qstrat','qstratpure','qstratmcts','strategist','strategist2'].forEach(p => {
+['qstrat','qstratpure','qstratmcts','strategist','strategist2','shark'].forEach(p => {
     profCounters[p] = { n: 0, wins: 0, loss: 0, to: 0 };
 });
 
@@ -472,9 +491,9 @@ while (g < GAMES && Date.now() < END_TIME) {
 
 // Final summary
 console.log(`\n=== Final Summary (${g} games) ===`);
-const totalWins = profCounters.qstrat.wins + profCounters.qstratpure.wins + profCounters.qstratmcts.wins + profCounters.strategist.wins + profCounters.strategist2.wins;
-const totalLoss = profCounters.qstrat.loss + profCounters.qstratpure.loss + profCounters.qstratmcts.loss + profCounters.strategist.loss + profCounters.strategist2.loss;
-const totalTO   = profCounters.qstrat.to + profCounters.qstratpure.to + profCounters.qstratmcts.to + profCounters.strategist.to + profCounters.strategist2.to;
+const totalWins = profCounters.qstrat.wins + profCounters.qstratpure.wins + profCounters.qstratmcts.wins + profCounters.strategist.wins + profCounters.strategist2.wins + profCounters.shark.wins;
+const totalLoss = profCounters.qstrat.loss + profCounters.qstratpure.loss + profCounters.qstratmcts.loss + profCounters.strategist.loss + profCounters.strategist2.loss + profCounters.shark.loss;
+const totalTO   = profCounters.qstrat.to + profCounters.qstratpure.to + profCounters.qstratmcts.to + profCounters.strategist.to + profCounters.strategist2.to + profCounters.shark.to;
 const totalN    = totalWins + totalLoss + totalTO;
 console.log(`  Overall win : ${totalWins}  (${(totalWins/totalN*100).toFixed(1)}%)`);
 console.log(`  Overall loss: ${totalLoss}  (${(totalLoss/totalN*100).toFixed(1)}%)`);

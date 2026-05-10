@@ -649,7 +649,8 @@ function _updateMenuBtnLabels() {
     const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather',
         'test-hybrid': '🧪 Hybrid Q+MCTS', 'test-pureq': '🧪 Pure Q-bot',
         'test-training': '🎓 Training Sandbox', 'test-ace50': '🧪 MCTS-ace-50',
-        'test-bot-vs-bot': '🤖 Bot Battle' }; // TEST_BLOCK
+        'test-heuristic': '🧠 Strategist', 'test-strategist2': '🧠 Strategist 2',
+        'test-aggregator': '🧠 Aggregator', 'test-bot-vs-bot': '🤖 Bot Battle' }; // TEST_BLOCK
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1210,6 +1211,7 @@ function _buildTestBotPanel() {
         ['test-ace50',      '🧪 MCTS-ace-50'],
         ['test-heuristic',  '🧠 Strategist'],
         ['test-strategist2', '🧠 Strategist 2'],
+        ['test-aggregator', '🧠 Aggregator'],
     ];
     for (const [value, label] of opts) {
         const btn = document.createElement('button');
@@ -1260,6 +1262,7 @@ function _buildBotBattlePanel() {
         ['training',        '🎓 Training Bot'],
         ['heuristic',       '🧠 Strategist'],
         ['strategist2',     '🧠 Strategist 2'],
+        ['aggregator',      '🧠 Aggregator'],
     ];
 
     const arena = document.createElement('div');

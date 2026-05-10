@@ -28,7 +28,9 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
-import { TrainingQBotEngine, HeuristicBot, Strategist2Bot, QBotEngine, QStrategistEngine, QStrategistPureEngine, QStrategistMCTSEngine, QStrategistAggregatorEngine, HybridQBotEngine } from './q-bot.js'; // TEST_BLOCK
+import { TrainingQBotEngine, QBotEngine, QStrategistEngine, QStrategistPureEngine, QStrategistMCTSEngine, QStrategistAggregatorEngine, HybridQBotEngine } from './q-bot.js'; // TEST_BLOCK
+import { HeuristicBot } from './heuristic-bot.js'; // TEST_BLOCK
+import { Strategist2Bot } from './strategist2-bot.js'; // TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
 import {

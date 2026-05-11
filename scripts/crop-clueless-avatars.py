@@ -1,8 +1,11 @@
 """
 crop-clueless-avatars.py
-Trims white background from clueless bot avatar webp files,
-squares and centres the crop on the robot circle content,
-then saves back to the same file at 512x512.
+Trims transparent background from clueless bot avatar webp files,
+squares and centres the crop on the robot circle content with padding,
+then saves back to the same file at 512x512 (RGBA, transparency preserved).
+
+Padding ensures the CSS border-radius clip cuts through transparent space
+rather than through the robot's decorative ring, giving a clean edge.
 """
 
 from PIL import Image
@@ -10,23 +13,22 @@ import os
 
 AVATAR_DIR = os.path.join(os.path.dirname(__file__), '..', 'Images', 'bot-avatars', 'clueless')
 OUTPUT_SIZE = 512
-PADDING = 6          # px of margin to leave around the found circle
-BG_THRESHOLD = 8     # max(R,G,B) <= this → treated as black background
+# Padding added around the detected content bbox before squaring.
+# ~5% of 1024px = 52px → robot fills ~90% of final canvas, leaving clean
+# transparent breathing room so the CSS circle clip is smooth.
+PADDING = 52
+ALPHA_THRESHOLD = 32  # alpha < this → transparent background pixel
 
 def find_content_bbox(img: Image.Image):
-    """Return (x0, y0, x1, y1) bounding box of non-background content.
-    Background is near-black (0,0,0) — the transparent area rendered as black."""
-    def is_bg(r, g, b):
-        return max(r, g, b) <= BG_THRESHOLD
-
-    w, h = img.size
-    pixels = img.load()
+    """Return (x0, y0, x1, y1) of non-transparent content using alpha channel."""
+    rgba = img.convert('RGBA')
+    w, h = rgba.size
+    pixels = rgba.load()
 
     x0, y0, x1, y1 = w, h, 0, 0
     for y in range(h):
         for x in range(w):
-            r, g, b = pixels[x, y]
-            if not is_bg(r, g, b):
+            if pixels[x, y][3] >= ALPHA_THRESHOLD:
                 if x < x0: x0 = x
                 if x > x1: x1 = x
                 if y < y0: y0 = y
@@ -34,12 +36,12 @@ def find_content_bbox(img: Image.Image):
     return x0, y0, x1, y1
 
 def process(path: str):
-    img = Image.open(path).convert('RGB')
+    img = Image.open(path).convert('RGBA')
+    w, h = img.size
 
     x0, y0, x1, y1 = find_content_bbox(img)
 
     # expand by padding, clamp to image bounds
-    w, h = img.size
     x0 = max(0, x0 - PADDING)
     y0 = max(0, y0 - PADDING)
     x1 = min(w - 1, x1 + PADDING)
@@ -57,19 +59,15 @@ def process(path: str):
     sx1 = sx0 + side
     sy1 = sy0 + side
 
-    # if clamped at left/top, shift right/down
-    if sx1 > w:
-        sx0 -= sx1 - w
-        sx1 = w
-    if sy1 > h:
-        sy0 -= sy1 - h
-        sy1 = h
+    if sx1 > w: sx0 -= sx1 - w; sx1 = w
+    if sy1 > h: sy0 -= sy1 - h; sy1 = h
 
     cropped = img.crop((sx0, sy0, sx1, sy1))
     resized = cropped.resize((OUTPUT_SIZE, OUTPUT_SIZE), Image.LANCZOS)
 
-    resized.save(path, 'WEBP', quality=92)
-    print(f'  {os.path.basename(path):30s}  bbox=({x0},{y0},{x1},{y1})  crop=({sx0},{sy0},{sx1},{sy1})')
+    resized.save(path, 'WEBP', quality=92, lossless=False)
+    fill_pct = round((x1 - x0 - 2*PADDING) / side * 100)
+    print(f'  {os.path.basename(path):30s}  content={x1-x0-2*PADDING}px  canvas={side}px  fill={fill_pct}%')
 
 def main():
     files = sorted(f for f in os.listdir(AVATAR_DIR) if f.lower().endswith('.webp'))

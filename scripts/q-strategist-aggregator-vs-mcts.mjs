@@ -100,15 +100,13 @@ function qbotMove(s) {
 }
 
 // ---- Main loop ------------------------------------------------------
-const mcts = new ISMCTSEngine(PROFILE);
-
 let qWins = 0, mWins = 0, draws = 0;
 const STEP_LIMIT = 10000;
 
 console.log(`\nQ-Strategist-Aggregator (P1) vs MCTS-${PROFILE} (P0, ${MAX_ITERS} iters/move)   n=${N_GAMES}\n`);
 
 for (let g = 1; g <= N_GAMES; g++) {
-    mcts.resetKnowledge();
+    const mcts = new ISMCTSEngine(PROFILE);
     let s = createInitialState(2);
 
     for (let step = 0; step < STEP_LIMIT; step++) {

@@ -26,7 +26,7 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 //   16%  Q-Strategist-MCTS (q-table-strategist-mcts.json)
 //   16%  Strategist (HeuristicBot)
 //   16%  Strategist2 (Strategist2Bot)
-//   20%  Shark (MCTS, 100 iterations)
+//   20%  Shark (MCTS, 300 iterations)
 //
 // Output: q-table-aggregator.json
 // Warm-start: loads q-table-aggregator.json if it exists,
@@ -312,7 +312,7 @@ function playGame(eps, oppType) {
     let s = createInitialState(2);
 
     const sharkOpp = oppType === 'shark' ? new ISMCTSEngine('shark') : null;
-    const sharkProf = sharkOpp ? { ...ISMCTSEngine.PROFILES.shark, maxIterations: 100, maxTime: 300 } : null;
+    const sharkProf = sharkOpp ? { ...ISMCTSEngine.PROFILES.shark, maxIterations: 300, maxTime: 300 } : null;
 
     const hist      = [];
     let totalMoves  = 0;

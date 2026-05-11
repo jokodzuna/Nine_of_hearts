@@ -115,14 +115,17 @@ for (let g = 1; g <= N_GAMES; g++) {
         let move;
         if (s.currentPlayer === BOT) {
             move = qbotMove(s);
+            mcts.observeMove(s, move);
+            mcts.advanceTree(move);
+            mcts.cleanup();
         } else {
             move = mcts.chooseMove(s, TEST_PROF);
+            mcts.observeMove(s, move);
+            mcts.advanceTree(move);
+            mcts.cleanup();
         }
 
-        mcts.observeMove(s, move);
-        mcts.advanceTree(move);
         s = applyMove(s, move);
-        mcts.cleanup();
     }
 
     if (!isGameOver(s))          draws++;   // step limit hit

@@ -604,6 +604,12 @@ body.welcome-active #tapToStart {
     display: block;
 }
 
+/* Clueless bot avatars have white-background images with the robot circle
+   not filling the full canvas — scale up so the circle fills the avatar. */
+img.avatar-player-img[src*="bot-avatars/clueless"] {
+    transform: scale(1.14);
+}
+
 /* ---- Avatar selection grid (profile panel) ---- */
 .avatar-select-grid {
     display: grid;

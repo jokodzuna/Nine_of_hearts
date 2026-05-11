@@ -66,12 +66,20 @@ function _coinFlip(playMoves) {
     return Math.random() < 0.5 ? _lowestMove(playMoves) : _highestMove(playMoves);
 }
 
-// ---- Personality list --------------------------------------------------
+// ---- Personality metadata ---------------------------------------------
 
-const PERSONALITIES = [
-    'lowest', 'highest', 'random', 'alternator',
-    'hoarder', 'copycat', 'panicker', 'cautious',
-];
+const PERSONALITY_META = {
+    lowest:     { name: 'Bot Tom',      avatar: 'Images/bot-avatars/clueless/Bot-Tom.webp'      },
+    highest:    { name: 'B-Bot',        avatar: 'Images/bot-avatars/clueless/B-bot.webp'        },
+    random:     { name: 'Bot Ox',       avatar: 'Images/bot-avatars/clueless/Bot-Ox.webp'       },
+    alternator: { name: 'Sir Spamalot', avatar: 'Images/bot-avatars/clueless/Sir-Spamalot.webp' },
+    hoarder:    { name: 'Botty',        avatar: 'Images/bot-avatars/clueless/Botty.webp'        },
+    copycat:    { name: 'Baby Bot',     avatar: 'Images/bot-avatars/clueless/Baby-Bot.webp'     },
+    panicker:   { name: 'Bot TLE-1',    avatar: 'Images/bot-avatars/clueless/Bot-TLE-1.webp'   },
+    cautious:   { name: 'Ro Bot',       avatar: 'Images/bot-avatars/clueless/Ro-Bot.webp'      },
+};
+
+const PERSONALITIES = Object.keys(PERSONALITY_META);
 
 // ============================================================
 // CluelessBot
@@ -79,18 +87,21 @@ const PERSONALITIES = [
 
 export class CluelessBot {
     constructor() {
-        this._personality       = null;   // chosen once per game
+        this._personality       = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
         this._altFlag           = false;  // alternator state
         this._lastObservedMoves = {};     // pid => last move (for copycat)
         this._myId              = null;   // discovered on first chooseMove call
     }
+
+    get name()       { return PERSONALITY_META[this._personality].name; }
+    get avatarPath() { return PERSONALITY_META[this._personality].avatar; }
 
     // ----------------------------------------------------------
     // Protocol
     // ----------------------------------------------------------
 
     resetKnowledge() {
-        this._personality       = null;
+        this._personality       = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
         this._altFlag           = false;
         this._lastObservedMoves = {};
         this._myId              = null;
@@ -109,10 +120,6 @@ export class CluelessBot {
 
     chooseMove(state) {
         if (this._myId === null) this._myId = state.currentPlayer;
-
-        if (this._personality === null) {
-            this._personality = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
-        }
 
         const moves     = getPossibleMoves(state);
         if (moves.length === 1) return moves[0];

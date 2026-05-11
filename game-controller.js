@@ -193,7 +193,10 @@ function _startGame(cfgOverride = null) {
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     if (cfg.difficulty === 'clueless') {
-        for (let p = 1; p < 4; p++) _engines[p] = new CluelessBot();
+        for (let p = 1; p < 4; p++) {
+            _engines[p] = new CluelessBot();
+            PLAYER_NAMES[p] = _engines[p].name;
+        }
     }
 
     // ---- Players ----
@@ -221,8 +224,14 @@ function _startGame(cfgOverride = null) {
         Update('SET_PLAYER_NAME',    { playerId: 'player2Cards', name: 'The Botfather' });
     } else {
         Update('SETUP_PLAYERS', { numPlayers: cfg.numPlayers, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
+        const PLAYER_ID_ORDER = ['player3Cards','player2Cards','player1Cards'];
         for (let p = 1; p < 4; p++) {
-            Update('SET_PLAYER_AVATAR', { playerId: ['player3Cards','player2Cards','player1Cards'][p-1], avatarPath: AI_AVATARS[p] ?? DEFAULT_AVATAR });
+            const pid     = PLAYER_ID_ORDER[p - 1];
+            const engine  = _engines[p];
+            const avatar  = engine?.avatarPath ?? AI_AVATARS[p] ?? DEFAULT_AVATAR;
+            const botName = engine?.name;
+            Update('SET_PLAYER_AVATAR', { playerId: pid, avatarPath: avatar });
+            if (botName) Update('SET_PLAYER_NAME', { playerId: pid, name: botName });
         }
     }
 

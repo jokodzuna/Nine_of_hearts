@@ -16,7 +16,7 @@ import * as Economy from './economy.js';
 let _playerName     = 'Player';
 let _avatarPath     = DEFAULT_AVATAR;
 let _numPlayers     = 4;
-let _difficulty     = 'easy';
+let _difficulty     = 'clueless';
 let _gameMode       = 'bots';
 let _mpTakenAvatars = new Set();
 
@@ -638,7 +638,7 @@ function _updateProfileWidget() {
 }
 
 function _updateMenuBtnLabels() {
-    const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard', botfather: 'The Botfather' };
+    const diffLabel = { clueless: 'Clueless Bots', learning: 'Learning Bots', strategic: 'Strategic Bots', sentient: 'Sentient Bots', botfather: 'The Botfather' };
     _updateProfileWidget();
     const pb = document.getElementById('playersBtn');
     if (pb) pb.textContent = `Players: ${_numPlayers}`;
@@ -1074,7 +1074,7 @@ function _buildWelcomeOverlay() {
 
     // ---- Difficulty ----
     const diffPanel = _buildOptionPanel('difficulty', 'Difficulty',
-        [['easy','Easy'],['medium','Medium'],['hard','Hard'],['botfather','The Botfather']],
+        [['clueless','Clueless Bots'],['learning','Learning Bots'],['strategic','Strategic Bots'],['sentient','Sentient Bots'],['botfather','The Botfather']],
         () => _difficulty,
         v => { _difficulty = v; _updateMenuBtnLabels(); }
     );

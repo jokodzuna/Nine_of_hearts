@@ -28,6 +28,7 @@ import {
 } from './game-logic.js';
 
 import { ISMCTSEngine } from './ai-engine.js';
+import { CluelessBot } from './clueless-bot.js';
 
 import {
     Update,
@@ -183,10 +184,17 @@ function _startGame(cfgOverride = null) {
         easy:      [null, 'gambler', 'newbie',  'newbie' ],
         medium:    [null, 'shark',  'gambler', 'gambler'],
         hard:      [null, 'shark',  'shark',   'shark'  ],
+        clueless:  [null, null,     null,      null     ],
+        learning:  [null, 'shark',  'gambler', 'gambler'],
+        strategic: [null, 'shark',  'shark',   'shark'  ],
+        sentient:  [null, 'shark',  'shark',   'shark'  ],
         botfather: [null, 'shark',  null,       null    ],
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
+    if (cfg.difficulty === 'clueless') {
+        for (let p = 1; p < 4; p++) _engines[p] = new CluelessBot();
+    }
 
     // ---- Players ----
     NUM_PLAYERS = isBotfather ? 2 : cfg.numPlayers;

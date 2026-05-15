@@ -10,8 +10,9 @@ rather than through the robot's decorative ring, giving a clean edge.
 
 from PIL import Image
 import os
-
-AVATAR_DIR = os.path.join(os.path.dirname(__file__), '..', 'Images', 'bot-avatars', 'clueless')
+import sys
+_subfolder = sys.argv[1] if len(sys.argv) > 1 else 'clueless'
+AVATAR_DIR = os.path.join(os.path.dirname(__file__), '..', 'Images', 'bot-avatars', _subfolder)
 OUTPUT_SIZE = 512
 # Padding added around the detected content bbox before squaring.
 # ~5% of 1024px = 52px → robot fills ~90% of final canvas, leaving clean

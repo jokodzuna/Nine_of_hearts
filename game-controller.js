@@ -193,6 +193,7 @@ function _startGame(cfgOverride = null) {
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     if (cfg.difficulty === 'clueless') {
+        CluelessBot.prepareGame();
         for (let p = 1; p < 4; p++) {
             _engines[p] = new CluelessBot();
             PLAYER_NAMES[p] = _engines[p].name;

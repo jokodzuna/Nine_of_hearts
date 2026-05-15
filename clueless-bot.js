@@ -81,16 +81,29 @@ const PERSONALITY_META = {
 
 const PERSONALITIES = Object.keys(PERSONALITY_META);
 
+// Module-level pool — shuffled once per game via CluelessBot.prepareGame().
+// Ensures all bots in the same game get distinct personalities.
+let _pool = [];
+function _nextPersonality() {
+    if (_pool.length === 0) _pool = [...PERSONALITIES].sort(() => Math.random() - 0.5);
+    return _pool.pop();
+}
+
 // ============================================================
 // CluelessBot
 // ============================================================
 
 export class CluelessBot {
     constructor() {
-        this._personality       = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+        this._personality       = _nextPersonality();
         this._altFlag           = false;  // alternator state
         this._lastObservedMoves = {};     // pid => last move (for copycat)
         this._myId              = null;   // discovered on first chooseMove call
+    }
+
+    /** Call once before creating bots for a new game to ensure unique personalities. */
+    static prepareGame() {
+        _pool = [...PERSONALITIES].sort(() => Math.random() - 0.5);
     }
 
     get name()       { return PERSONALITY_META[this._personality].name; }
@@ -101,7 +114,7 @@ export class CluelessBot {
     // ----------------------------------------------------------
 
     resetKnowledge() {
-        this._personality       = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+        // Personality is fixed at construction — only reset behavioural state.
         this._altFlag           = false;
         this._lastObservedMoves = {};
         this._myId              = null;

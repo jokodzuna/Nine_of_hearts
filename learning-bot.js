@@ -12,18 +12,16 @@ const LEARNING_META = [
     { name: 'Sam', avatar: 'Images/bot-avatars/learning/Sam.webp' },
 ];
 
+const ITERATIONS = 50;
+
 // Module-level pool — shuffled once per game via LearningBot.prepareGame().
-// All bots in the same game share the same iteration count (10 or 20)
-// and draw unique names from the shuffled pool.
-let _namePool      = [];
-let _gameIter      = 10;
+let _namePool = [];
 
 function _shuffle(arr) { arr.sort(() => Math.random() - 0.5); }
 
 // ============================================================
 // LearningBot — thin wrapper around ISMCTSEngine('newbie')
-//               with per-game iteration count (10 or 20)
-//               and unique name/avatar per instance
+//               at ITERATIONS iterations with unique name/avatar per instance
 // ============================================================
 
 export class LearningBot {
@@ -32,18 +30,16 @@ export class LearningBot {
         const meta       = _namePool.pop();
         this._name       = meta.name;
         this._avatar     = meta.avatar;
-        const profile    = { ...ISMCTSEngine.PROFILES.newbie, maxIterations: _gameIter };
+        const profile    = { ...ISMCTSEngine.PROFILES.newbie, maxIterations: ITERATIONS };
         this._engine     = new ISMCTSEngine(profile);
     }
 
     /**
      * Call once before creating bots for a new game.
-     * Shuffles the name pool and randomly picks 10 or 20 iterations for every
-     * bot in this game.
+     * Shuffles the name pool so every bot in this game gets a unique name.
      */
     static prepareGame() {
         _shuffle(_namePool = [...LEARNING_META]);
-        _gameIter = Math.random() < 0.5 ? 10 : 20;
     }
 
     get name()       { return this._name; }

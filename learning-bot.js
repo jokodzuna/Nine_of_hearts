@@ -12,7 +12,7 @@ const LEARNING_META = [
     { name: 'Sam', avatar: 'Images/bot-avatars/learning/Sam.webp' },
 ];
 
-const ITERATIONS = 50;
+const ITERATIONS = 100;
 
 // Module-level pool — shuffled once per game via LearningBot.prepareGame().
 let _namePool = [];

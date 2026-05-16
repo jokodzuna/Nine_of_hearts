@@ -251,6 +251,77 @@ function _computeRHV(hand) {
     return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
 }
 
+// ============================================================
+// Ace-50 RHV — higher Ace/King weights, lone-Ace protection
+// ============================================================
+
+/** Point values for ace-50 profile (0=9 … 5=A). */
+const _ACE50_VALS = new Int16Array([-25, -5, 5, 15, 30, 50]);
+
+/**
+ * Ace-50 RHV — same averaging logic as _computeRHV but with boosted
+ * high-card weights.  Empty hand → 200 (stronger win incentive).
+ */
+function _computeAce50RHV(hand) {
+    if (!hand) return 200.0;
+    let sum = 0, effCount = 0, quadBonus = 0;
+    for (let r = 0; r < 6; r++) {
+        const group = hand & _RANK_MASK[r];
+        if (!group) continue;
+        const cnt = _popcount(group);
+        if (r === 0 && cnt === 3) {           // Three 9s
+            sum += _ACE50_VALS[0]; effCount += 1;
+        } else if (r === 1 && cnt === 4) {    // Four 10s
+            sum += _ACE50_VALS[1]; effCount += 1;
+        } else {
+            sum += _ACE50_VALS[r] * cnt;
+            effCount += cnt;
+            if (cnt === 4 && r >= 2) quadBonus = 5;
+        }
+    }
+    return effCount > 0 ? (sum + quadBonus) / effCount : 0.0;
+}
+
+/**
+ * Virtual card count: Aces collapse to 1 action; quad Q/K counts as 1 action.
+ * Used by Ace-50 endgame detection.
+ */
+function _virtualCount(hand) {
+    let c = _popcount(hand);
+    const aceCount = _popcount(hand & _RANK_MASK[5]);
+    if (aceCount > 0) c -= (aceCount - 1);
+    for (let r = 3; r <= 4; r++) {
+        if (_popcount(hand & _RANK_MASK[r]) === 4) c -= 3;
+    }
+    return c;
+}
+
+/**
+ * RHV Guard for ace-50 profile.  Uses flat (un-averaged) sum with threshold 20.
+ * Also blocks playing a lone Ace unless it wins the game outright.
+ */
+function _applyAce50RHVGuard(moves, hand) {
+    const curRHV = _computeAce50RHV(hand);
+    const blockLoneAce = _popcount(hand & _RANK_MASK[5]) === 1 && _popcount(hand) > 2;
+    const out = [];
+    let hasDraw = false, hasPlay = false, fallbackMove = 0, fallbackRHV = -Infinity;
+    for (let i = 0; i < moves.length; i++) {
+        const m = moves[i];
+        if (m & DRAW_FLAG) { out.push(m); hasDraw = true; continue; }
+        const bits    = m & 0xFFFFFF;
+        const newHand = (hand & ~bits) | 0;
+        const newRHV  = _computeAce50RHV(newHand);
+        if (blockLoneAce && (bits & _RANK_MASK[5]) !== 0 && newHand !== 0) {
+            if (newRHV > fallbackRHV) { fallbackRHV = newRHV; fallbackMove = m; }
+            continue;
+        }
+        if (curRHV - newRHV <= 20) { out.push(m); hasPlay = true; }
+        else if (newRHV > fallbackRHV) { fallbackRHV = newRHV; fallbackMove = m; }
+    }
+    if (!hasPlay && !hasDraw && fallbackMove !== 0) out.push(fallbackMove);
+    return out.length > 0 ? out : moves;
+}
+
 /**
  * RHV Guard — disqualifies play moves whose resulting-hand RHV would drop
  * by more than 5 points vs the current hand.  Draw moves are always kept.
@@ -334,6 +405,20 @@ export class ISMCTSEngine {
             weightStale:      -0.3,
             maxTime:          500,
             maxTurns:         100,
+        },
+
+        mctsAce50: {
+            name:             'MCTS-Ace-50',
+            difficulty:       'Expert',
+            maxIterations:    10000,
+            explorationParam: 0.4,    // highly exploitative
+            weightStale:      -0.8,
+            maxTime:          3000,
+            maxTurns:         250,
+            useCardTracking:  true,
+            useTreeReuse:     true,
+            endgameCards:     5,      // virtual-card threshold for endgame scoring
+            rhvMode:          'ace50',
         },
     };
 
@@ -684,7 +769,9 @@ export class ISMCTSEngine {
 
             const raw    = getPossibleMoves(s);
             if (raw.length === 0) break;
-            const moves  = _applyRHVGuard(raw, s.hands[s.currentPlayer]);
+            const moves  = this.profile.rhvMode === 'ace50'
+                ? _applyAce50RHVGuard(raw, s.hands[s.currentPlayer])
+                : _applyRHVGuard(raw, s.hands[s.currentPlayer]);
 
             const twoAcesOnTop = s.topRankIdx === 5
                 && s.pileSize >= 2
@@ -693,7 +780,23 @@ export class ISMCTSEngine {
             s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
         }
 
-        // RHV scoring
+        // Ace-50 scoring path (2-player only; 3-4P falls through to standard)
+        if (this.profile.rhvMode === 'ace50' && N === 2) {
+            const myVC   = _virtualCount(s.hands[rootPlayer]);
+            const oppVC  = _virtualCount(s.hands[1 - rootPlayer]);
+            const myRHV  = _computeAce50RHV(s.hands[rootPlayer]);
+            const oppRHV = _computeAce50RHV(s.hands[1 - rootPlayer]);
+            if (myVC <= (this.profile.endgameCards ?? 5) ||
+                oppVC <= (this.profile.endgameCards ?? 5)) {
+                const myBonus  = myVC  < 5 ? (5 - myVC)  * 10 : 0;
+                const oppBonus = oppVC < 5 ? (5 - oppVC) * 10 : 0;
+                return Math.max(-1.0, Math.min(1.0,
+                    ((myRHV + myBonus) - (oppRHV + oppBonus)) / 250));
+            }
+            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 80));
+        }
+
+        // Standard RHV scoring
         const myRHV = _computeRHV(s.hands[rootPlayer]);
         if (N === 2) {
             const opp    = 1 - rootPlayer;

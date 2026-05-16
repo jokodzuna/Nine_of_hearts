@@ -187,7 +187,7 @@ function _startGame(cfgOverride = null) {
         hard:      [null, 'shark',  'shark',   'shark'  ],
         clueless:  [null, null,     null,      null     ],
         learning:  [null, null,     null,      null     ],
-        strategic: [null, 'shark',  'shark',   'shark'  ],
+        strategic: [null, 'mctsAce50', 'mctsAce50', 'mctsAce50'],
         sentient:  [null, 'shark',  'shark',   'shark'  ],
         botfather: [null, 'shark',  null,       null    ],
     };

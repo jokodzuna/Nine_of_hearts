@@ -38,6 +38,7 @@ import {
     DRAW_FLAG,
     RANK_MASK,
 } from './game-logic.js';
+import { Strategist2Bot } from './strategist2-bot.js';
 
 function _pc(x) {
     x = (x | 0);
@@ -72,6 +73,7 @@ export class SentientBot {
         this._cardKnowledge = null;
         this._pileSeenMask  = 0;
         this._inSimulation  = false;
+        this._s2            = new Strategist2Bot(); // full delegate for 2P stage
     }
 
     observeMove(state, move) {
@@ -87,27 +89,34 @@ export class SentientBot {
             this._pileSeenMask     |= played;
             this._cardKnowledge[p] &= ~played;
         }
+        this._s2.observeMove(state, move); // keep S2 knowledge in sync
     }
 
-    advanceTree(_move) {}
-    resetKnowledge() { this._cardKnowledge = null; this._pileSeenMask = 0; }
-    cleanup() {}
+    advanceTree(move)  { this._s2.advanceTree(move); }
+    resetKnowledge()   { this._cardKnowledge = null; this._pileSeenMask = 0; this._s2.resetKnowledge(); }
+    cleanup()          { this._s2.cleanup(); }
 
     chooseMove(state) {
         const moves = getPossibleMoves(state);
         if (moves.length === 1) return moves[0];
 
-        if (_activeCount(state) === 2 && !this._inSimulation) {
+        if (_activeCount(state) === 2) {
             const myP  = state.currentPlayer;
             const oppP = _findOtherActive(state, myP);
-            if (oppP !== -1) {
+            if (oppP !== -1 && !this._inSimulation) {
                 const myC  = _pc(state.hands[myP]);
                 const oppC = _pc(state.hands[oppP]);
+                // Endgame: wrap S2's endgame search with active-count detection
+                // (S2's own endgame search requires state.numPlayers===2 and won't
+                // fire inside a 4P game even when only 2 players remain)
                 if (myC <= 3 || oppC <= 3) {
                     const eg = this._endgameSearch(state, moves, myP);
                     if (eg !== null) return eg;
                 }
             }
+            // Mid-game 2P: delegate fully to S2 — all its nomination rules,
+            // card knowledge and K/A battle logic apply here
+            return this._s2.chooseMove(state);
         }
 
         return this._heuristic(state, moves);
@@ -316,7 +325,7 @@ export class SentientBot {
     // ============================================================
 
     _endgameSearch(state, moves, myP) {
-        const simBot = new SentientBot();
+        const simBot = new Strategist2Bot(); // S2 as rollout policy (full-info in sim mode)
         simBot._inSimulation = true;
         let bestMove = moves[0], bestOutcome = -Infinity;
         for (const move of moves) {

@@ -69,6 +69,44 @@ export function applyNineHeartsGuard(state, move, moves) {
 }
 
 // ============================================================
+// Rule 3 — Anti-human pressure
+// ============================================================
+
+/**
+ * When this bot is the last active player before the human AND the human
+ * has ≤3 cards, override to play the highest available rank (K or A only).
+ * This maximises the pile barrier the human must clear on their turn.
+ *
+ * @param {object}   state     Current game state
+ * @param {number}   move      MCTS-chosen move
+ * @param {number[]} moves     All legal moves
+ * @param {number}   [humanIdx=0]  Player index of the human
+ * @returns {number}           Possibly overridden move
+ */
+export function applyAntiHumanPressure(state, move, moves, humanIdx = 0) {
+    if (state.currentPlayer === humanIdx) return move;
+    if (state.eliminated & (1 << humanIdx)) return move;
+    if (_pc(state.hands[humanIdx]) > 3) return move;
+
+    // Is the next active player the human?
+    let next = (state.currentPlayer + 1) % state.numPlayers;
+    while ((state.eliminated & (1 << next)) && next !== state.currentPlayer)
+        next = (next + 1) % state.numPlayers;
+    if (next !== humanIdx) return move;
+
+    // Find the highest-rank play move (K=4, A=5)
+    let bestMove = null, bestRank = -1;
+    for (const m of moves) {
+        if (m & DRAW_FLAG) continue;
+        const r = _moveRank(m);
+        if (r > bestRank) { bestRank = r; bestMove = m; }
+    }
+    // Only override if we can play K or A — don't sacrifice lower cards
+    if (bestMove !== null && bestRank >= 4) return bestMove;
+    return move;
+}
+
+// ============================================================
 // Rule 2 — Low pile draw guard
 // ============================================================
 

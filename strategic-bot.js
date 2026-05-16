@@ -1,7 +1,8 @@
 import { ISMCTSEngine }              from './ai-engine.js';
 import { getPossibleMoves }           from './game-logic.js';
 import { applyNineHeartsGuard,
-         applyLowPileDrawGuard }      from './bot-guards.js';
+         applyLowPileDrawGuard,
+         applyAntiHumanPressure }     from './bot-guards.js';
 
 // ============================================================
 // StrategicBot — ISMCTSEngine('mctsAce50') with hardwired
@@ -18,6 +19,7 @@ export class StrategicBot {
         let   move  = this._engine.chooseMove(state);
         move = applyNineHeartsGuard(state, move, moves);
         move = applyLowPileDrawGuard(state, move, moves, this._engine);
+        move = applyAntiHumanPressure(state, move, moves);
         return move;
     }
 

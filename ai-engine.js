@@ -420,6 +420,8 @@ export class ISMCTSEngine {
             endgameCards:     5,      // virtual-card threshold for endgame scoring
             depthMultiplier:  6,      // N*6 simulation depth
             rhvMode:          'ace50',
+            teamTarget:       0,      // player index to oppose (human = 0)
+            humanDangerCards: 6,      // safety-check veto threshold for teamTarget
         },
     };
 
@@ -781,20 +783,30 @@ export class ISMCTSEngine {
             s = applyMove(s, _pickQualityMove(moves, s.topRankIdx, s.hands[s.currentPlayer], twoAcesOnTop, drawBonus));
         }
 
-        // Ace-50 scoring path (2-player only; 3-4P falls through to standard)
-        if (this.profile.rhvMode === 'ace50' && N === 2) {
-            const myVC   = _virtualCount(s.hands[rootPlayer]);
-            const oppVC  = _virtualCount(s.hands[1 - rootPlayer]);
-            const myRHV  = _computeAce50RHV(s.hands[rootPlayer]);
-            const oppRHV = _computeAce50RHV(s.hands[1 - rootPlayer]);
-            if (myVC <= (this.profile.endgameCards ?? 5) ||
-                oppVC <= (this.profile.endgameCards ?? 5)) {
-                const myBonus  = myVC  < 5 ? (5 - myVC)  * 10 : 0;
-                const oppBonus = oppVC < 5 ? (5 - oppVC) * 10 : 0;
-                return Math.max(-1.0, Math.min(1.0,
-                    ((myRHV + myBonus) - (oppRHV + oppBonus)) / 250));
+        // Ace-50 scoring path
+        if (this.profile.rhvMode === 'ace50') {
+            if (N === 2) {
+                const myVC   = _virtualCount(s.hands[rootPlayer]);
+                const oppVC  = _virtualCount(s.hands[1 - rootPlayer]);
+                const myRHV  = _computeAce50RHV(s.hands[rootPlayer]);
+                const oppRHV = _computeAce50RHV(s.hands[1 - rootPlayer]);
+                if (myVC <= (this.profile.endgameCards ?? 5) ||
+                    oppVC <= (this.profile.endgameCards ?? 5)) {
+                    const myBonus  = myVC  < 5 ? (5 - myVC)  * 10 : 0;
+                    const oppBonus = oppVC < 5 ? (5 - oppVC) * 10 : 0;
+                    return Math.max(-1.0, Math.min(1.0,
+                        ((myRHV + myBonus) - (oppRHV + oppBonus)) / 250));
+                }
+                return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 80));
             }
-            return Math.max(-1.0, Math.min(1.0, (myRHV - oppRHV) / 80));
+            // 3-4P: team scoring — reward own hand quality, penalise teamTarget's hand
+            const myRHV = _computeAce50RHV(s.hands[rootPlayer]);
+            const tt    = this.profile.teamTarget;
+            if (tt !== undefined && rootPlayer !== tt && !(s.eliminated & (1 << tt))) {
+                const humanRHV = _computeAce50RHV(s.hands[tt]);
+                return Math.max(-1.0, Math.min(1.0, (myRHV * 0.65 - humanRHV * 0.35) / 100));
+            }
+            return Math.max(-1.0, Math.min(1.0, myRHV / _RHV_NORM));
         }
 
         // Standard RHV scoring
@@ -824,14 +836,17 @@ export class ISMCTSEngine {
      * NON-risky alternative, or the original move if none exists.
      */
     _safetyCheck(state, rootPlayer, chosenMove) {
-        const DANGER_CARDS = 4;
+        const DEFAULT_DANGER = 4;
+        const teamTarget     = this.profile.teamTarget;
+        const humanDanger    = this.profile.humanDangerCards ?? DEFAULT_DANGER;
         const N = state.numPlayers;
 
         // Fast exit: no opponent in danger zone
         let anyDanger = false;
         for (let p = 0; p < N; p++) {
             if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
-            if (_popcount(state.hands[p]) <= DANGER_CARDS) { anyDanger = true; break; }
+            const threshold = (p === teamTarget) ? humanDanger : DEFAULT_DANGER;
+            if (_popcount(state.hands[p]) <= threshold) { anyDanger = true; break; }
         }
         if (!anyDanger) return chosenMove;
 
@@ -850,8 +865,9 @@ export class ISMCTSEngine {
 
             for (let p = 0; p < N; p++) {
                 if (p === rootPlayer || (state.eliminated & (1 << p))) continue;
+                const threshold = (p === teamTarget) ? humanDanger : DEFAULT_DANGER;
                 const opSz = _popcount(state.hands[p]);
-                if (opSz > DANGER_CARDS || opSz === 0) continue;
+                if (opSz > threshold || opSz === 0) continue;
 
                 for (let r = newTopRank; r < 6; r++) {
                     if (_popcount(unknownPool & _RANK_MASK[r]) >= opSz) return true;

@@ -31,6 +31,7 @@ import { ISMCTSEngine } from './ai-engine.js';
 import { CluelessBot }   from './clueless-bot.js';
 import { LearningBot }   from './learning-bot.js';
 import { StrategicBot }  from './strategic-bot.js';
+import { SentientBot }   from './sentient-bot.js';
 
 import {
     Update,
@@ -189,7 +190,7 @@ function _startGame(cfgOverride = null) {
         clueless:  [null, null,     null,      null     ],
         learning:  [null, null,     null,      null     ],
         strategic: [null, null,        null,         null        ],
-        sentient:  [null, 'shark',  'shark',   'shark'  ],
+        sentient:  [null, null,     null,      null     ],
         botfather: [null, 'shark',  null,       null    ],
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
@@ -210,6 +211,9 @@ function _startGame(cfgOverride = null) {
     }
     if (cfg.difficulty === 'strategic') {
         for (let p = 1; p < 4; p++) _engines[p] = new StrategicBot();
+    }
+    if (cfg.difficulty === 'sentient') {
+        for (let p = 1; p < 4; p++) _engines[p] = new SentientBot();
     }
 
     // ---- Players ----

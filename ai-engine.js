@@ -418,6 +418,7 @@ export class ISMCTSEngine {
             useCardTracking:  true,
             useTreeReuse:     true,
             endgameCards:     5,      // virtual-card threshold for endgame scoring
+            depthMultiplier:  6,      // N*6 simulation depth
             rhvMode:          'ace50',
         },
     };
@@ -762,7 +763,7 @@ export class ISMCTSEngine {
     _simulate(state, rootPlayer, _unused) {
         let s = state, turns = 0;
         const N          = s.numPlayers;
-        const depthLimit = N * 3;  // 6 / 9 / 12 — 3 rounds per player
+        const depthLimit = (this.profile.depthMultiplier ?? 3) * N;
 
         while (!isGameOver(s)) {
             if (++turns > depthLimit) break;
@@ -880,6 +881,23 @@ export class ISMCTSEngine {
             n.wins += score;
             n = n.parent;
         }
+    }
+
+    /**
+     * Return the highest-visited non-draw move from the current root's children.
+     * Used by external guards to pick the MCTS-preferred play when overriding a draw.
+     * Returns null if the root is gone or no non-draw child was explored.
+     */
+    bestNonDrawMove() {
+        if (!this._root) return null;
+        let bestMove = null, bestVisits = -1;
+        for (const [move, child] of this._root.children) {
+            if (!(move & DRAW_FLAG) && child.visits > bestVisits) {
+                bestVisits = child.visits;
+                bestMove   = move;
+            }
+        }
+        return bestMove;
     }
 
     /**

@@ -43,7 +43,7 @@ const PURE_MODE    = PURE_IDX !== -1 && process.argv[PURE_IDX+1] && !process.arg
 
 // ---- Hyper-parameters ----------------------------------------------
 const ALPHA = 0.20, GAMMA = 0.997;
-const WIN_R = 50.0, LOSE_R = -50.0;
+const WIN_R = 5.0, LOSE_R = -50.0;  // must match R_WIN_2P / R_LOSE_2P in unified trainer
 const STEP_LIMIT = 150;
 const SAVE_EVERY = 1000;
 const BOT = 1;
@@ -181,8 +181,7 @@ function playGame(eps, oppType){
     let termR;
     if(winner===BOT)termR=WIN_R;
     else if(timedOut){
-        const tot=pop(s.hands[0])+pop(s.hands[1]);
-        termR=-30+5*(tot>0?(pop(s.hands[1-BOT])-pop(s.hands[BOT]))/tot:0);
+        termR=-30;  // matches R_TIMEOUT in unified trainer
     }else termR=LOSE_R;
 
     for(let i=0;i<hist.length;i++){

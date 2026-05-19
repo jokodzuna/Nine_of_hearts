@@ -57,7 +57,7 @@ const SELF_PLAY  = process.argv.includes('--self-play');
 const ALPHA=0.20, GAMMA=0.997, SAVE_EVERY=500;
 const STEP_LIMIT = SELF_PLAY ? 500 : 300; // self-play needs more room for 4 strategic bots
 const BOT=1, N_PLAYERS=4;
-const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=5, R_LOSE_2P=-50, R_TIMEOUT=-30, RHV_SCALE=0.08;
+const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=15, R_LOSE_2P=-50, R_TIMEOUT=-30, RHV_SCALE=0.08;
 const R_P0_LOSE_BONUS=8;  // early-clearer bonus when P0 loses 2P
 const R_P0_REACH2P=3;     // all-bots bonus when P0 reaches 2P but wins
 const ACT_QUAD=6, ACT_DRAW=7, N_ACTS=8;

@@ -43,7 +43,7 @@ const PURE_MODE    = PURE_IDX !== -1 && process.argv[PURE_IDX+1] && !process.arg
 
 // ---- Hyper-parameters ----------------------------------------------
 const ALPHA = 0.20, GAMMA = 0.997;
-const WIN_R = 5.0, LOSE_R = -50.0;  // must match R_WIN_2P / R_LOSE_2P in unified trainer
+const WIN_R = 15.0, LOSE_R = -50.0;  // must match R_WIN_2P / R_LOSE_2P in unified trainer
 const STEP_LIMIT = 150;
 const SAVE_EVERY = 1000;
 const BOT = 1;

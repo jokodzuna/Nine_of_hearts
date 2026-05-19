@@ -163,8 +163,8 @@ function playGame(eps){
     const mctsCandidates=[0,2,3];
     const opps=[null,null,null,null]; // BOT slot stays null
     if(SELF_PLAY){
-        opps[0]=new ISMCTSEngine('newbie'); // human proxy
-        // seats 2,3 handled inline via qGreedyMove — leave as null marker
+        // Human proxy: 60% SentientBot (fast), 40% MCTS Newbie (varied) per game
+        opps[0]=Math.random()<0.4?new ISMCTSEngine('newbie'):new SentientBot();
         opps[2]=null; opps[3]=null;
     }else{
         for(let i=0;i<3;i++)
@@ -199,9 +199,8 @@ function playGame(eps){
         }
 
         // SentientBot opponents observe every move for card knowledge
-        if(!SELF_PLAY)
-            for(let i=0;i<N_PLAYERS;i++)
-                if(i!==p&&opps[i] instanceof SentientBot)opps[i].observeMove(s,conc);
+        for(let i=0;i<N_PLAYERS;i++)
+            if(i!==p&&opps[i] instanceof SentientBot)opps[i].observeMove(s,conc);
 
         const sN=applyMove(s,conc);
         // Track outcomes and RHV for all Q-bots
@@ -240,14 +239,17 @@ function playGame(eps){
             else updateQ(key,act,sr+termR,null,[]);
         }
     }
-    return{botOutcome:qOut[BOT],p0Outcome,totalMoves};
+    const p0Type=opps[0] instanceof ISMCTSEngine?'newbie':'sentient';
+    return{botOutcome:qOut[BOT],p0Outcome,p0Type,totalMoves};
 }
 
 function serialise(){const o={};for(const[k,r]of Q)o[k]=Array.from(r).map(v=>isFinite(v)?+v.toFixed(5):null);return o;}
 
-const outcomes={cleared_4p:0,cleared_3p:0,won_2p:0,lost_2p:0,timeout:0};
-const logOut  ={cleared_4p:0,cleared_3p:0,won_2p:0,lost_2p:0,timeout:0};
-let logN=0,logMoves=0,logNewSnap=0;
+const KEYS=['cleared_4p','cleared_3p','won_2p','lost_2p','timeout'];
+const mkCnt=()=>Object.fromEntries(KEYS.map(k=>[k,0]));
+const outcomes={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt()};
+const logOut  ={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt()};
+let logN=0,logNn=0,logNs=0,logMoves=0,logNewSnap=0;
 
 const oppDesc=SELF_PLAY?'seat0=MCTS-Newbie (human), seats2+3=Q-greedy (self-play)'
     :MCTS_NUM===0?'3× SentientBot':MCTS_NUM===3?'3× MCTS-Newbie':`${3-MCTS_NUM}× SentientBot + ${MCTS_NUM}× MCTS-Newbie`;
@@ -260,24 +262,43 @@ console.log(`Output: ${OUT_PATH}\n`);
 
 for(let g=1;g<=GAMES;g++){
     const frac=(g-1)/(GAMES-1||1),eps=EPS_MIN+(EPS_START-EPS_MIN)*Math.pow(1-frac,2);
-    const{botOutcome,p0Outcome,totalMoves}=playGame(eps);
+    const{botOutcome,p0Outcome,p0Type,totalMoves}=playGame(eps);
     const rep=SELF_PLAY?p0Outcome:botOutcome;
-    outcomes[rep]++;logOut[rep]++;logMoves+=totalMoves;logN++;
+    outcomes.all[rep]++;logOut.all[rep]++;
+    if(SELF_PLAY){outcomes[p0Type][rep]++;logOut[p0Type][rep]++;}
+    logMoves+=totalMoves;logN++;
+    if(SELF_PLAY){if(p0Type==='newbie')logNn++;else logNs++;}
     if(!TEST_MODE&&g%SAVE_EVERY===0){writeFileSync(OUT_PATH,JSON.stringify({games:g,stateCount:Q.size,table:serialise()}));process.stdout.write(`  [saved g${g}: ${Q.size} states]\n`);}
     if(g%LOG_EVERY===0){
-        const pct=(k)=>logN>0?(logOut[k]/logN*100).toFixed(1).padStart(5)+'%':'  n/a';
+        const pct=(obj,n,k)=>n>0?(obj[k]/n*100).toFixed(1).padStart(5)+'%':'  n/a';
+        const row=(label,obj,n)=>`    ${label.padEnd(10)} clear4P=${pct(obj,n,'cleared_4p')}  clear3P=${pct(obj,n,'cleared_3p')}  win2P=${pct(obj,n,'won_2p')}  lose2P=${pct(obj,n,'lost_2p')}  TO=${pct(obj,n,'timeout')}`;
         const ns=totalNewStates-logNewSnap;
         console.log(`  game ${String(g).padStart(6)}  ε=${eps.toFixed(3)}  avgMoves=${(logMoves/logN).toFixed(1).padStart(5)}  +states=${ns.toString().padStart(5)}  total=${Q.size}  Qups=${logQUpdates}`);
-        console.log(`    clear4P=${pct('cleared_4p')}  clear3P=${pct('cleared_3p')}  win2P=${pct('won_2p')}  lose2P=${pct('lost_2p')}  TO=${pct('timeout')}`);
-        Object.keys(logOut).forEach(k=>logOut[k]=0);logMoves=0;logN=0;logQUpdates=0;logNewSnap=totalNewStates;
+        if(SELF_PLAY){
+            console.log(row(`vs Sentient(${logNs}):`,logOut.sentient,logNs));
+            console.log(row(`vs Newbie(${logNn}):`,logOut.newbie,logNn));
+        }else console.log(row('',logOut.all,logN));
+        for(const t of['all','newbie','sentient'])KEYS.forEach(k=>logOut[t][k]=0);
+        logMoves=0;logN=0;logNn=0;logNs=0;logQUpdates=0;logNewSnap=totalNewStates;
     }
 }
 
 console.log(`\n=== Final Summary (${GAMES} games) ===`);
-const pf=(k)=>(outcomes[k]/GAMES*100).toFixed(1);
-console.log(`  Cleared in 4P : ${outcomes.cleared_4p} (${pf('cleared_4p')}%)`);
-console.log(`  Cleared in 3P : ${outcomes.cleared_3p} (${pf('cleared_3p')}%)`);
-console.log(`  Won 2P duel   : ${outcomes.won_2p} (${pf('won_2p')}%)`);
-console.log(`  Lost 2P duel  : ${outcomes.lost_2p} (${pf('lost_2p')}%)`);
-if(outcomes.timeout)console.log(`  Timeout       : ${outcomes.timeout} (${pf('timeout')}%)`);
+function printOutcomes(obj,n,label){
+    if(!n)return;
+    const pf=(k)=>(obj[k]/n*100).toFixed(1);
+    console.log(`  [${label}] n=${n}`);
+    console.log(`    Cleared in 4P : ${obj.cleared_4p} (${pf('cleared_4p')}%)`);
+    console.log(`    Cleared in 3P : ${obj.cleared_3p} (${pf('cleared_3p')}%)`);
+    console.log(`    Won 2P duel   : ${obj.won_2p} (${pf('won_2p')}%)`);
+    console.log(`    Lost 2P duel  : ${obj.lost_2p} (${pf('lost_2p')}%)`);
+    if(obj.timeout)console.log(`    Timeout       : ${obj.timeout} (${pf('timeout')}%)`);
+}
+if(SELF_PLAY){
+    const ns=Object.values(outcomes.sentient).reduce((a,b)=>a+b,0);
+    const nn=Object.values(outcomes.newbie).reduce((a,b)=>a+b,0);
+    printOutcomes(outcomes.sentient,ns,'vs SentientBot');
+    printOutcomes(outcomes.newbie,nn,'vs MCTS Newbie');
+    printOutcomes(outcomes.all,GAMES,'COMBINED');
+}else printOutcomes(outcomes.all,GAMES,'all');
 if(!TEST_MODE){writeFileSync(OUT_PATH,JSON.stringify({games:GAMES,stateCount:Q.size,table:serialise()}));console.log(`\nSaved → ${OUT_PATH}  (${Q.size} states, +${totalNewStates} new)`);}

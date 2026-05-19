@@ -134,14 +134,22 @@ if(existsSync(OUT_PATH)){
     console.log(`Warm-start: seeded ${n} 2P states from q-table-aggregator.json (appended |2)`);
 }else{console.log('No seed — starting fresh.');}
 
-// ---- Step reward ---------------------------------------------------
-function stepReward(move,s,botTurns,total){
-    let r=0;r-=botTurns*0.018*(1+Math.floor(total/45));
+// ---- Step reward (perspective-parametrised) -----------------------
+function stepReward(move,s,turns,total,pid){
+    let r=0;r-=turns*0.018*(1+Math.floor(total/45));
     if(!(move&DRAW_FLAG))r+=0.015*pop(move&0xFFFFFF);
     let dP=-1,dMin=Infinity;
-    for(let p=0;p<N_PLAYERS;p++)if(p!==BOT&&!(s.eliminated&(1<<p))){const n=pop(s.hands[p]);if(n<dMin){dMin=n;dP=p;}}
+    for(let p=0;p<N_PLAYERS;p++)if(p!==pid&&!(s.eliminated&(1<<p))){const n=pop(s.hands[p]);if(n<dMin){dMin=n;dP=p;}}
     if(dP!==-1&&dMin>0){let cp=false;for(let rk=s.topRankIdx;rk<=5;rk++)if(s.hands[dP]&RM[rk]){cp=true;break;}if(!cp)r+=0.06;}
     return r;
+}
+function terminalReward(outcome,rhv,s,pid){
+    if(outcome==='cleared_4p')return R_CLEAR_4P;
+    if(outcome==='cleared_3p')return R_CLEAR_3P;
+    if(outcome==='won_2p')return R_WIN_2P+rhv*RHV_SCALE;
+    if(outcome==='lost_2p')return R_LOSE_2P+rhv*RHV_SCALE;
+    let myC=pop(s.hands[pid]),tot=0;for(let p=0;p<N_PLAYERS;p++)tot+=pop(s.hands[p]);
+    return R_TIMEOUT+5*(tot>0?(tot-N_PLAYERS*myC)/tot:0);
 }
 
 const NEWBIE_PROF={...ISMCTSEngine.PROFILES.newbie,maxIterations:100,maxTime:100};
@@ -163,23 +171,31 @@ function playGame(eps){
             opps[mctsCandidates[i]]=i<MCTS_NUM?new ISMCTSEngine('newbie'):new SentientBot();
     }
 
-    const hist=[];let totalMoves=0,botTurns=0,botOutcome=null,rhvAtEntry=0,p0Outcome=null;
+    // Per-Q-bot tracking (indices 1,2,3; index 0 unused)
+    const hists   =[null,[],[],[]]; // Q-learning history per seat
+    const turnCnt =[0,0,0,0];      // turns taken
+    const qOut    =[null,null,null,null]; // game outcome
+    const rhvAt   =[0,0,0,0];      // ace50 RHV at 2P entry
+    let p0Outcome=null,totalMoves=0;
 
     while(!isGameOver(s)&&totalMoves<STEP_LIMIT){
         const p=s.currentPlayer,moves=getPossibleMoves(s);totalMoves++;let conc;
 
-        if(p!==BOT){
+        if(SELF_PLAY&&(p===2||p===3)){
+            // Self-play teammate: Q-table with exploration + learning
+            turnCnt[p]++;
+            const key=encodeStateFor(s,p),lActs=legalActs(moves),act=pickAction(key,lActs,eps,fallback,s);
+            conc=actToMove(moves,act)??moves[0];
+            qRow(key);hists[p].push({key,act,lActs,move:conc});
+        }else if(p!==BOT){
             const opp=opps[p];
-            if(SELF_PLAY&&(p===2||p===3)){
-                // Self-play: Q-table greedy from this seat's perspective (no learning)
-                conc=qGreedyMove(s,p,fallback);
-            }else if(opp instanceof ISMCTSEngine){conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();}
+            if(opp instanceof ISMCTSEngine){conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();}
             else{conc=opp.chooseMove(s);opp.observeMove(s,conc);opp.advanceTree(conc);}
         }else{
-            botTurns++;
+            turnCnt[BOT]++;
             const key=encodeState(s),lActs=legalActs(moves),act=pickAction(key,lActs,eps,fallback,s);
             conc=actToMove(moves,act)??moves[0];
-            qRow(key);hist.push({key,act,lActs,move:conc});
+            qRow(key);hists[BOT].push({key,act,lActs,move:conc});
         }
 
         // SentientBot opponents observe every move for card knowledge
@@ -188,37 +204,43 @@ function playGame(eps){
                 if(i!==p&&opps[i] instanceof SentientBot)opps[i].observeMove(s,conc);
 
         const sN=applyMove(s,conc);
-        if(!botOutcome&&(sN.eliminated&(1<<BOT))&&!(s.eliminated&(1<<BOT))){
-            const ob=pop(s.eliminated&~(1<<BOT));
-            botOutcome=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
+        // Track outcomes and RHV for all Q-bots
+        for(const qp of [BOT,2,3]){
+            if(qp!==BOT&&!SELF_PLAY)continue;
+            if(!qOut[qp]&&(sN.eliminated&(1<<qp))&&!(s.eliminated&(1<<qp))){
+                const ob=pop(s.eliminated&~(1<<qp));
+                qOut[qp]=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
+            }
+            if(rhvAt[qp]===0&&activeCount(sN)===2&&!(sN.eliminated&(1<<qp)))rhvAt[qp]=ace50RHV(sN.hands[qp]);
         }
-        // Track player 0 (human proxy) outcome for self-play reporting
+        // Track player 0 (human proxy) for self-play reporting
         if(SELF_PLAY&&!p0Outcome&&(sN.eliminated&1)&&!(s.eliminated&1)){
             const ob=pop(s.eliminated&~1);
             p0Outcome=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
         }
-        // Snapshot ace50 RHV at the moment game enters 2P with BOT still active
-        if(rhvAtEntry===0&&activeCount(sN)===2&&!(sN.eliminated&(1<<BOT)))rhvAtEntry=ace50RHV(sN.hands[BOT]);
         s=sN;
     }
 
     const timedOut=!isGameOver(s);
-    if(!botOutcome)botOutcome=timedOut?'timeout':'lost_2p';
-    if(SELF_PLAY&&!p0Outcome)p0Outcome=timedOut?'timeout':'lost_2p';
-    let termR;
-    if(botOutcome==='cleared_4p')termR=R_CLEAR_4P;
-    else if(botOutcome==='cleared_3p')termR=R_CLEAR_3P;
-    else if(botOutcome==='won_2p')termR=R_WIN_2P+rhvAtEntry*RHV_SCALE;
-    else if(botOutcome==='lost_2p')termR=R_LOSE_2P+rhvAtEntry*RHV_SCALE;
-    else{let myC=pop(s.hands[BOT]),tot=0;for(let p=0;p<N_PLAYERS;p++)tot+=pop(s.hands[p]);termR=R_TIMEOUT+5*(tot>0?(tot-N_PLAYERS*myC)/tot:0);}
-
-    for(let i=0;i<hist.length;i++){
-        const{key,act,lActs:la,move}=hist[i];
-        const sr=stepReward(move,s,botTurns,totalMoves);
-        if(i<hist.length-1){const{key:nk,lActs:na}=hist[i+1];updateQ(key,act,sr,nk,na);}
-        else updateQ(key,act,sr+termR,null,[]);
+    for(const qp of [BOT,2,3]){
+        if(qp!==BOT&&!SELF_PLAY)continue;
+        if(!qOut[qp])qOut[qp]=timedOut?'timeout':'lost_2p';
     }
-    return{botOutcome,p0Outcome,totalMoves};
+    if(SELF_PLAY&&!p0Outcome)p0Outcome=timedOut?'timeout':'lost_2p';
+
+    // Q-update for all learning Q-bots
+    for(const qp of [BOT,2,3]){
+        if(qp!==BOT&&!SELF_PLAY)continue;
+        const h=hists[qp];if(h.length===0)continue;
+        const termR=terminalReward(qOut[qp],rhvAt[qp],s,qp);
+        for(let i=0;i<h.length;i++){
+            const{key,act,lActs:la,move}=h[i];
+            const sr=stepReward(move,s,turnCnt[qp],totalMoves,qp);
+            if(i<h.length-1){const{key:nk,lActs:na}=h[i+1];updateQ(key,act,sr,nk,na);}
+            else updateQ(key,act,sr+termR,null,[]);
+        }
+    }
+    return{botOutcome:qOut[BOT],p0Outcome,totalMoves};
 }
 
 function serialise(){const o={};for(const[k,r]of Q)o[k]=Array.from(r).map(v=>isFinite(v)?+v.toFixed(5):null);return o;}

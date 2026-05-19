@@ -53,12 +53,13 @@ const MCTS_NUM  = process.argv.includes('--newbie') ? 1
 
 const ALPHA=0.20, GAMMA=0.997, STEP_LIMIT=300, SAVE_EVERY=500;
 const BOT=1, N_PLAYERS=4;
-const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=5, R_LOSE_2P=-50, R_TIMEOUT=-30;
+const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=5, R_LOSE_2P=-50, R_TIMEOUT=-30, RHV_SCALE=0.08;
 const ACT_QUAD=6, ACT_DRAW=7, N_ACTS=8;
 const RM=[0x00000F,0x0000F0,0x000F00,0x00F000,0x0F0000,0xF00000];
 
 function pop(x){x=x-((x>>>1)&0x555555);x=(x&0x333333)+((x>>>2)&0x333333);return(Math.imul((x+(x>>>4))&0x0F0F0F,0x010101)>>>16)&0xFF;}
 function activeCount(s){return N_PLAYERS-pop(s.eliminated);}
+function ace50RHV(h){let v=0;for(let r=0;r<=5;r++){const c=pop(h&RM[r]),rv=r===5?20:r===4?10:(r+1)*2;v+=c*rv*(c>=4?2:c>=3?1.5:1);}return v;}
 function pClass(r){return r<=1?0:r<=3?1:2;}
 function bkt(n){return n>=3?3:n;}
 function pdepth(ps){const d=ps-1;return d<=0?0:d<=2?1:2;}
@@ -142,7 +143,7 @@ function playGame(eps){
         opps[mctsCandidates[i]]=i<MCTS_NUM?new ISMCTSEngine('newbie'):new SentientBot();
     const fallback=new SentientBot(); // heuristic fallback for unknown states
 
-    const hist=[];let totalMoves=0,botTurns=0,botOutcome=null;
+    const hist=[];let totalMoves=0,botTurns=0,botOutcome=null,rhvAtEntry=0;
 
     while(!isGameOver(s)&&totalMoves<STEP_LIMIT){
         const p=s.currentPlayer,moves=getPossibleMoves(s);totalMoves++;let conc;
@@ -167,6 +168,8 @@ function playGame(eps){
             const ob=pop(s.eliminated&~(1<<BOT));
             botOutcome=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
         }
+        // Snapshot ace50 RHV at the moment game enters 2P with BOT still active
+        if(rhvAtEntry===0&&activeCount(sN)===2&&!(sN.eliminated&(1<<BOT)))rhvAtEntry=ace50RHV(sN.hands[BOT]);
         s=sN;
     }
 
@@ -175,8 +178,8 @@ function playGame(eps){
     let termR;
     if(botOutcome==='cleared_4p')termR=R_CLEAR_4P;
     else if(botOutcome==='cleared_3p')termR=R_CLEAR_3P;
-    else if(botOutcome==='won_2p')termR=R_WIN_2P;
-    else if(botOutcome==='lost_2p')termR=R_LOSE_2P;
+    else if(botOutcome==='won_2p')termR=R_WIN_2P+rhvAtEntry*RHV_SCALE;
+    else if(botOutcome==='lost_2p')termR=R_LOSE_2P+rhvAtEntry*RHV_SCALE;
     else{let myC=pop(s.hands[BOT]),tot=0;for(let p=0;p<N_PLAYERS;p++)tot+=pop(s.hands[p]);termR=R_TIMEOUT+5*(tot>0?(tot-N_PLAYERS*myC)/tot:0);}
 
     for(let i=0;i<hist.length;i++){

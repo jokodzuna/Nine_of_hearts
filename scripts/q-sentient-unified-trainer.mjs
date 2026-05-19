@@ -26,6 +26,8 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 //   --test           evaluation mode: no learning, epsilon=0
 //   --newbie         replace 1 SentientBot with MCTS Newbie (100 iters)
 //   --mcts-number N  replace N SentientBots with MCTS Newbie (1-3)
+//   --self-play      simulate actual game: seat 0=MCTS Newbie (human proxy),
+//                    seats 2+3 use Q-table greedily (no learning for them)
 //
 // Report: clear4P% | clear3P% | win2P% | lose2P% | TO%
 // Output: q-table-sentient-unified.json
@@ -48,10 +50,12 @@ const GAMES     = parseInt(getArg('--games',    TEST_MODE?'1000':'10000'),10);
 const EPS_START = parseFloat(getArg('--epsilon', TEST_MODE?'0.0':'0.20'));
 const EPS_MIN   = TEST_MODE ? 0.0 : 0.03;
 const LOG_EVERY = parseInt(getArg('--log-every', TEST_MODE?'100':'500'),10);
-const MCTS_NUM  = process.argv.includes('--newbie') ? 1
+const MCTS_NUM   = process.argv.includes('--newbie') ? 1
     : Math.min(3, Math.max(0, parseInt(getArg('--mcts-number','0'),10)));
+const SELF_PLAY  = process.argv.includes('--self-play');
 
-const ALPHA=0.20, GAMMA=0.997, STEP_LIMIT=300, SAVE_EVERY=500;
+const ALPHA=0.20, GAMMA=0.997, SAVE_EVERY=500;
+const STEP_LIMIT = SELF_PLAY ? 500 : 300; // self-play needs more room for 4 strategic bots
 const BOT=1, N_PLAYERS=4;
 const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=5, R_LOSE_2P=-50, R_TIMEOUT=-30, RHV_SCALE=0.08;
 const ACT_QUAD=6, ACT_DRAW=7, N_ACTS=8;
@@ -64,22 +68,23 @@ function pClass(r){return r<=1?0:r<=3?1:2;}
 function bkt(n){return n>=3?3:n;}
 function pdepth(ps){const d=ps-1;return d<=0?0:d<=2?1:2;}
 
-// Unified encoding — identical to aggregator for 2P, extended with activeCount
-function encodeState(s){
-    const h  = s.hands[BOT];
+// Unified encoding — identical to aggregator for 2P, extended with activeCount.
+// Perspective-parametrised so self-play opponents (seats 2,3) can encode from their own view.
+function encodeStateFor(s, pid){
+    const h  = s.hands[pid];
     const p2 = s.pileSize>=2 ? pClass(s.pile[s.pileSize-2]>>2) : 3;
     const p3 = s.pileSize>=3 ? pClass(s.pile[s.pileSize-3]>>2) : 3;
     const myH=Math.min(pop(h),12), myA=pop(h&RM[5]);
-    // Most-dangerous opponent: fewest cards (in 2P = the single opponent)
     let oppMin=12, oppMinKA=0;
     for(let p=0;p<N_PLAYERS;p++){
-        if(p!==BOT&&!(s.eliminated&(1<<p))){
+        if(p!==pid&&!(s.eliminated&(1<<p))){
             const cnt=Math.min(pop(s.hands[p]),12);
             if(cnt<oppMin){oppMin=cnt;oppMinKA=bkt(pop(s.hands[p]&(RM[4]|RM[5])));}
         }
     }
     return `${s.topRankIdx}|${p2}|${p3}|${bkt(pop(h&(RM[0]|RM[1])))}|${bkt(pop(h&(RM[2]|RM[3])))}|${myA}|${myH}|${oppMin}|${pdepth(s.pileSize)}|${oppMinKA}|${activeCount(s)}`;
 }
+function encodeState(s){ return encodeStateFor(s, BOT); }
 
 function moveToAct(m){if(m&DRAW_FLAG)return ACT_DRAW;const b=m&0xFFFFFF;if(pop(b)>=3)return ACT_QUAD;return(31-Math.clz32(b))>>2;}
 function actToMove(moves,act){
@@ -96,6 +101,14 @@ function pickAction(key,lActs,eps,fb,s){
     const r=Q.get(key);
     if(!r)return moveToAct(fb.chooseMove(s)); // SentientBot heuristic fallback
     let best=lActs[0],bv=-Infinity;for(const a of lActs)if(r[a]>bv){bv=r[a];best=a;}return best;
+}
+// Greedy Q-move for self-play seats 2+3 (no learning, own perspective)
+function qGreedyMove(s, pid, fb){
+    const moves=getPossibleMoves(s),key=encodeStateFor(s,pid),lActs=legalActs(moves);
+    const r=Q.get(key);
+    if(!r)return fb.chooseMove(s);
+    let best=lActs[0],bv=-Infinity;for(const a of lActs)if(r[a]>bv){bv=r[a];best=a;}
+    return actToMove(moves,best)??moves[0];
 }
 function updateQ(key,act,reward,nKey,nActs){
     if(TEST_MODE)return;
@@ -136,12 +149,19 @@ const NEWBIE_PROF={...ISMCTSEngine.PROFILES.newbie,maxIterations:100,maxTime:100
 // ---- Single game ---------------------------------------------------
 function playGame(eps){
     let s=createInitialState(N_PLAYERS);
-    // Opponents: players 0,2,3. MCTS_NUM of them get MCTS Newbie.
-    const mctsCandidates=[0,2,3];
-    const opps=[null,null,null,null]; // index=player, BOT slot stays null
-    for(let i=0;i<3;i++)
-        opps[mctsCandidates[i]]=i<MCTS_NUM?new ISMCTSEngine('newbie'):new SentientBot();
     const fallback=new SentientBot(); // heuristic fallback for unknown states
+    // In self-play: seat 0=MCTS Newbie (human proxy), seats 2+3=Q-greedy (no SentientBot)
+    // Otherwise:    MCTS_NUM of seats [0,2,3] get MCTS Newbie, rest get SentientBot
+    const mctsCandidates=[0,2,3];
+    const opps=[null,null,null,null]; // BOT slot stays null
+    if(SELF_PLAY){
+        opps[0]=new ISMCTSEngine('newbie'); // human proxy
+        // seats 2,3 handled inline via qGreedyMove — leave as null marker
+        opps[2]=null; opps[3]=null;
+    }else{
+        for(let i=0;i<3;i++)
+            opps[mctsCandidates[i]]=i<MCTS_NUM?new ISMCTSEngine('newbie'):new SentientBot();
+    }
 
     const hist=[];let totalMoves=0,botTurns=0,botOutcome=null,rhvAtEntry=0;
 
@@ -150,7 +170,10 @@ function playGame(eps){
 
         if(p!==BOT){
             const opp=opps[p];
-            if(opp instanceof ISMCTSEngine){conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();}
+            if(SELF_PLAY&&(p===2||p===3)){
+                // Self-play: Q-table greedy from this seat's perspective (no learning)
+                conc=qGreedyMove(s,p,fallback);
+            }else if(opp instanceof ISMCTSEngine){conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();}
             else{conc=opp.chooseMove(s);opp.observeMove(s,conc);opp.advanceTree(conc);}
         }else{
             botTurns++;
@@ -159,9 +182,10 @@ function playGame(eps){
             qRow(key);hist.push({key,act,lActs,move:conc});
         }
 
-        // All SentientBot opponents observe every move for card knowledge
-        for(let i=0;i<N_PLAYERS;i++)
-            if(i!==p&&opps[i] instanceof SentientBot)opps[i].observeMove(s,conc);
+        // SentientBot opponents observe every move for card knowledge
+        if(!SELF_PLAY)
+            for(let i=0;i<N_PLAYERS;i++)
+                if(i!==p&&opps[i] instanceof SentientBot)opps[i].observeMove(s,conc);
 
         const sN=applyMove(s,conc);
         if(!botOutcome&&(sN.eliminated&(1<<BOT))&&!(s.eliminated&(1<<BOT))){
@@ -197,7 +221,8 @@ const outcomes={cleared_4p:0,cleared_3p:0,won_2p:0,lost_2p:0,timeout:0};
 const logOut  ={cleared_4p:0,cleared_3p:0,won_2p:0,lost_2p:0,timeout:0};
 let logN=0,logMoves=0,logNewSnap=0;
 
-const oppDesc=MCTS_NUM===0?'3× SentientBot':MCTS_NUM===3?'3× MCTS-Newbie':`${3-MCTS_NUM}× SentientBot + ${MCTS_NUM}× MCTS-Newbie`;
+const oppDesc=SELF_PLAY?'seat0=MCTS-Newbie (human), seats2+3=Q-greedy (self-play)'
+    :MCTS_NUM===0?'3× SentientBot':MCTS_NUM===3?'3× MCTS-Newbie':`${3-MCTS_NUM}× SentientBot + ${MCTS_NUM}× MCTS-Newbie`;
 console.log(`\nQ-Sentient Unified Trainer ${TEST_MODE?'(EVALUATION)':''}`);
 console.log(`BOT=player ${BOT}  Opponents: ${oppDesc}`);
 console.log(`Games: ${GAMES.toLocaleString()}  ε: ${EPS_START}→${EPS_MIN}  α=${ALPHA}  γ=${GAMMA}`);

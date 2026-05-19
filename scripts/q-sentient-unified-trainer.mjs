@@ -163,7 +163,7 @@ function playGame(eps){
             opps[mctsCandidates[i]]=i<MCTS_NUM?new ISMCTSEngine('newbie'):new SentientBot();
     }
 
-    const hist=[];let totalMoves=0,botTurns=0,botOutcome=null,rhvAtEntry=0;
+    const hist=[];let totalMoves=0,botTurns=0,botOutcome=null,rhvAtEntry=0,p0Outcome=null;
 
     while(!isGameOver(s)&&totalMoves<STEP_LIMIT){
         const p=s.currentPlayer,moves=getPossibleMoves(s);totalMoves++;let conc;
@@ -192,6 +192,11 @@ function playGame(eps){
             const ob=pop(s.eliminated&~(1<<BOT));
             botOutcome=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
         }
+        // Track player 0 (human proxy) outcome for self-play reporting
+        if(SELF_PLAY&&!p0Outcome&&(sN.eliminated&1)&&!(s.eliminated&1)){
+            const ob=pop(s.eliminated&~1);
+            p0Outcome=ob===0?'cleared_4p':ob===1?'cleared_3p':'won_2p';
+        }
         // Snapshot ace50 RHV at the moment game enters 2P with BOT still active
         if(rhvAtEntry===0&&activeCount(sN)===2&&!(sN.eliminated&(1<<BOT)))rhvAtEntry=ace50RHV(sN.hands[BOT]);
         s=sN;
@@ -199,6 +204,7 @@ function playGame(eps){
 
     const timedOut=!isGameOver(s);
     if(!botOutcome)botOutcome=timedOut?'timeout':'lost_2p';
+    if(SELF_PLAY&&!p0Outcome)p0Outcome=timedOut?'timeout':'lost_2p';
     let termR;
     if(botOutcome==='cleared_4p')termR=R_CLEAR_4P;
     else if(botOutcome==='cleared_3p')termR=R_CLEAR_3P;
@@ -212,7 +218,7 @@ function playGame(eps){
         if(i<hist.length-1){const{key:nk,lActs:na}=hist[i+1];updateQ(key,act,sr,nk,na);}
         else updateQ(key,act,sr+termR,null,[]);
     }
-    return{botOutcome,totalMoves};
+    return{botOutcome,p0Outcome,totalMoves};
 }
 
 function serialise(){const o={};for(const[k,r]of Q)o[k]=Array.from(r).map(v=>isFinite(v)?+v.toFixed(5):null);return o;}
@@ -223,15 +229,18 @@ let logN=0,logMoves=0,logNewSnap=0;
 
 const oppDesc=SELF_PLAY?'seat0=MCTS-Newbie (human), seats2+3=Q-greedy (self-play)'
     :MCTS_NUM===0?'3× SentientBot':MCTS_NUM===3?'3× MCTS-Newbie':`${3-MCTS_NUM}× SentientBot + ${MCTS_NUM}× MCTS-Newbie`;
+const trackLabel=SELF_PLAY?'P0 (human proxy) — want: clear4P/3P/win2P LOW, lose2P HIGH':'P1 (Q-bot)';
 console.log(`\nQ-Sentient Unified Trainer ${TEST_MODE?'(EVALUATION)':''}`);
 console.log(`BOT=player ${BOT}  Opponents: ${oppDesc}`);
+console.log(`Tracking: ${trackLabel}`);
 console.log(`Games: ${GAMES.toLocaleString()}  ε: ${EPS_START}→${EPS_MIN}  α=${ALPHA}  γ=${GAMMA}`);
 console.log(`Output: ${OUT_PATH}\n`);
 
 for(let g=1;g<=GAMES;g++){
     const frac=(g-1)/(GAMES-1||1),eps=EPS_MIN+(EPS_START-EPS_MIN)*Math.pow(1-frac,2);
-    const{botOutcome,totalMoves}=playGame(eps);
-    outcomes[botOutcome]++;logOut[botOutcome]++;logMoves+=totalMoves;logN++;
+    const{botOutcome,p0Outcome,totalMoves}=playGame(eps);
+    const rep=SELF_PLAY?p0Outcome:botOutcome;
+    outcomes[rep]++;logOut[rep]++;logMoves+=totalMoves;logN++;
     if(!TEST_MODE&&g%SAVE_EVERY===0){writeFileSync(OUT_PATH,JSON.stringify({games:g,stateCount:Q.size,table:serialise()}));process.stdout.write(`  [saved g${g}: ${Q.size} states]\n`);}
     if(g%LOG_EVERY===0){
         const pct=(k)=>logN>0?(logOut[k]/logN*100).toFixed(1).padStart(5)+'%':'  n/a';

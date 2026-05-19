@@ -58,6 +58,8 @@ const ALPHA=0.20, GAMMA=0.997, SAVE_EVERY=500;
 const STEP_LIMIT = SELF_PLAY ? 500 : 300; // self-play needs more room for 4 strategic bots
 const BOT=1, N_PLAYERS=4;
 const R_CLEAR_4P=12, R_CLEAR_3P=8, R_WIN_2P=5, R_LOSE_2P=-50, R_TIMEOUT=-30, RHV_SCALE=0.08;
+const R_P0_LOSE_BONUS=8;  // early-clearer bonus when P0 loses 2P
+const R_P0_REACH2P=3;     // all-bots bonus when P0 reaches 2P but wins
 const ACT_QUAD=6, ACT_DRAW=7, N_ACTS=8;
 const RM=[0x00000F,0x0000F0,0x000F00,0x00F000,0x0F0000,0xF00000];
 
@@ -231,7 +233,12 @@ function playGame(eps){
     for(const qp of [BOT,2,3]){
         if(qp!==BOT&&!SELF_PLAY)continue;
         const h=hists[qp];if(h.length===0)continue;
-        const termR=terminalReward(qOut[qp],rhvAt[qp],s,qp);
+        let p0Bonus=0;
+        if(SELF_PLAY){
+            if(p0Outcome==='lost_2p'&&(qOut[qp]==='cleared_4p'||qOut[qp]==='cleared_3p'))p0Bonus=R_P0_LOSE_BONUS;
+            else if(p0Outcome==='won_2p')p0Bonus=R_P0_REACH2P;
+        }
+        const termR=terminalReward(qOut[qp],rhvAt[qp],s,qp)+p0Bonus;
         for(let i=0;i<h.length;i++){
             const{key,act,lActs:la,move}=h[i];
             const sr=stepReward(move,s,turnCnt[qp],totalMoves,qp);

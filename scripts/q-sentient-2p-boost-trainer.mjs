@@ -14,7 +14,7 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 //   --epsilon N        start epsilon (default: 0.15 train / 0.0 test)
 //   --test             evaluation mode (no learning, ε=0)
 //   --sentient-pct N   fraction of games vs SentientBot (default: 0.6)
-//   --pure [sentient|newbie|s2]   100% vs one opponent type
+//   --pure [sentient|newbie|s2|mctsace50]  100% vs one opponent type
 // ================================================================
 
 import { createInitialState, getPossibleMoves, applyMove,
@@ -22,6 +22,7 @@ import { createInitialState, getPossibleMoves, applyMove,
 import { ISMCTSEngine } from '../ai-engine.js';
 import { SentientBot } from '../sentient-bot.js';
 import { Strategist2Bot } from '../strategist2-bot.js';
+import { HeuristicBot } from '../heuristic-bot.js';
 import { writeFileSync, existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -120,15 +121,65 @@ if(existsSync(UNIFIED_PATH)){
     console.log('Unified table not found — starting fresh.');
 }
 
+// ---- Load opponent Q-tables ----------------------------------------
+function loadOppTable(filename){
+    const p=join(__dir,'..', filename);
+    if(!existsSync(p)){console.warn(`[Booster] ${filename} not found — S2 fallback`);return null;}
+    const d=JSON.parse(readFileSync(p,'utf8').replace(/^\uFEFF/,''));
+    return d.table??d;
+}
+const AGG_TABLE       = loadOppTable('q-table-aggregator.json');
+const STRAT_TABLE     = loadOppTable('q-table-strategist.json');
+const STRAT_MCTS_TABLE= loadOppTable('q-table-strategist-mcts.json');
+const STRAT_PURE_TABLE= loadOppTable('q-table-strategist-pure.json');
+
 // ---- Opponents -----------------------------------------------------
-const s2Bot = new Strategist2Bot();
-const NEWBIE_PROF = {...ISMCTSEngine.PROFILES.newbie, maxIterations:100, maxTime:100};
+const s2Bot   = new Strategist2Bot();
+const heurBot = new HeuristicBot();
+const NEWBIE_PROF  = {...ISMCTSEngine.PROFILES.newbie, maxIterations:100,  maxTime:100 };
+const MCTS1000_PROF= {...ISMCTSEngine.PROFILES.newbie, maxIterations:1000, maxTime:2000};
+
+function qMove(table,s){
+    if(!table)return s2Bot.chooseMove(s);
+    const key=encodeState(s,s.currentPlayer),qrow=table[key];
+    if(!qrow)return s2Bot.chooseMove(s);
+    const moves=getPossibleMoves(s),legal=[...new Set(moves.map(moveToAct))];
+    let best=legal[0],bv=-Infinity;
+    for(const a of legal){const v=qrow[a]??-Infinity;if(v>bv){bv=v;best=a;}}
+    return actToMove(moves,best)??s2Bot.chooseMove(s);
+}
+
+function makeOpp(oppType){
+    if(oppType==='sentient'){
+        const b=new SentientBot();
+        return{cm:s=>b.chooseMove(s), obs:(s,m)=>{b.observeMove(s,m);b.advanceTree&&b.advanceTree(m);}, botObs:(s,m)=>{b.observeMove(s,m);b.advanceTree&&b.advanceTree(m);}};
+    }
+    if(oppType==='newbie'||oppType==='mcts1000'){
+        const prof=oppType==='mcts1000'?MCTS1000_PROF:NEWBIE_PROF;
+        const eng=new ISMCTSEngine('newbie');
+        return{cm:s=>eng.chooseMove(s,prof), obs:(s,m)=>{eng.observeMove(s,m);eng.advanceTree(m);eng.cleanup();}, botObs:(s,m)=>{eng.observeMove(s,m);eng.advanceTree(m);}};
+    }
+    const cm=oppType==='aggregator' ?s=>qMove(AGG_TABLE,s)
+            :oppType==='qstrat'     ?s=>qMove(STRAT_TABLE,s)
+            :oppType==='qstratmcts' ?s=>qMove(STRAT_MCTS_TABLE,s)
+            :oppType==='qstratpure' ?s=>qMove(STRAT_PURE_TABLE,s)
+            :oppType==='heuristic'  ?s=>heurBot.chooseMove(s)
+            :s=>s2Bot.chooseMove(s); // strategist2 + fallback
+    return{cm, obs:()=>{}, botObs:()=>{}};
+}
 
 function selectOpp(){
-    if(PURE_MODE==='sentient')return 'sentient';
-    if(PURE_MODE==='newbie')  return 'newbie';
-    if(PURE_MODE==='s2'||PURE_MODE==='strategist2')return 's2';
-    return Math.random()<SENTIENT_PCT?'sentient':'newbie';
+    if(PURE_MODE==='mctsace50'||PURE_MODE==='mcts1000')return 'mcts1000';
+    if(PURE_MODE==='sentient') return 'sentient';
+    if(PURE_MODE==='newbie')   return 'newbie';
+    if(PURE_MODE==='s2'||PURE_MODE==='strategist2') return 's2';
+    const r=Math.random();
+    if(r<0.20)return 'aggregator';
+    if(r<0.36)return 'qstrat';
+    if(r<0.52)return 'qstratmcts';
+    if(r<0.68)return 'qstratpure';
+    if(r<0.84)return 'heuristic';
+    return 'strategist2';
 }
 
 // ---- Step reward ---------------------------------------------------
@@ -143,24 +194,14 @@ function stepReward(move,s,botTurns,total){
 // ---- Single game ---------------------------------------------------
 function playGame(eps, oppType){
     let s=createInitialState(2);
-    // Fresh opponent instance per game (SentientBot needs fresh card-tracking state)
-    const opp = oppType==='sentient' ? new SentientBot()
-              : oppType==='newbie'   ? new ISMCTSEngine('newbie')
-              : null; // s2 uses singleton
-
+    const opp=makeOpp(oppType);
     const hist=[];let totalMoves=0,botTurns=0;
 
     while(!isGameOver(s)&&totalMoves<STEP_LIMIT){
         const p=s.currentPlayer,moves=getPossibleMoves(s);totalMoves++;let conc;
 
         if(p!==BOT){
-            if(oppType==='sentient'){
-                conc=opp.chooseMove(s);opp.observeMove(s,conc);opp.advanceTree(conc);
-            }else if(oppType==='newbie'){
-                conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();
-            }else{
-                conc=s2Bot.chooseMove(s);
-            }
+            conc=opp.cm(s); opp.obs(s,conc);
             s=applyMove(s,conc);
             continue;
         }
@@ -169,9 +210,7 @@ function playGame(eps, oppType){
         botTurns++;
         const key=encodeState(s,BOT),lActs=legalActs(moves),act=pickAction(key,lActs,eps);
         conc=actToMove(moves,act)??moves[0];
-        // SentientBot/Newbie observes BOT's move for card tracking
-        if(oppType==='sentient'){opp.observeMove(s,conc);opp.advanceTree(conc);}
-        else if(oppType==='newbie'){opp.observeMove(s,conc);opp.advanceTree(conc);}
+        opp.botObs(s,conc);
         qRow(key);hist.push({key,act,lActs,move:conc});
         s=applyMove(s,conc);
     }
@@ -202,14 +241,16 @@ function serialise(){
 }
 
 // ---- Main loop -----------------------------------------------------
-const oppMixDesc=PURE_MODE?`100% ${PURE_MODE}`
-    :`${(SENTIENT_PCT*100).toFixed(0)}% SentientBot + ${((1-SENTIENT_PCT)*100).toFixed(0)}% MCTS Newbie`;
+const oppMixDesc=PURE_MODE?`100% ${PURE_MODE==='mcts1000'?'MCTS-1000 (1k iters)':PURE_MODE}`
+    :'aggregator 20% | qstrat 16% | qstratmcts 16% | qstratpure 16% | heuristic 16% | strategist2 16%';
 console.log(`\nQ-Sentient 2P Boost Trainer ${TEST_MODE?'(EVALUATION)':''}`);
 console.log(`Opponents: ${oppMixDesc}`);
 console.log(`Games: ${GAMES.toLocaleString()}  ε: ${EPS_START}→${EPS_MIN}  α=${ALPHA}  γ=${GAMMA}`);
 console.log(`Output: ${UNIFIED_PATH}  (2P states only; 4P/3P preserved)\n`);
 
-const CTYPES=['sentient','newbie','s2'];
+const CTYPES=PURE_MODE
+    ?[PURE_MODE==='mctsace50'||PURE_MODE==='mcts1000'?'mcts1000':PURE_MODE]
+    :['aggregator','qstrat','qstratmcts','qstratpure','heuristic','strategist2'];
 const cnts=Object.fromEntries(CTYPES.map(k=>[k,{n:0,wins:0,loss:0,to:0}]));
 const total=Object.fromEntries(CTYPES.map(k=>[k,{n:0,wins:0,loss:0,to:0}]));
 let logN=0,logMoves=0,logNewSnap=0;

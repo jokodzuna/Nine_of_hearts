@@ -3,6 +3,7 @@
 // game-controller.js with no other changes.
 
 import { getPossibleMoves, DRAW_FLAG } from './game-logic.js';
+import { SentientBot } from './sentient-bot.js'; // TEST_BLOCK
 import { ISMCTSEngine } from './ai-engine.js'; // TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
@@ -139,6 +140,7 @@ function _prefetch(url) {
 _prefetch('./q-table-strategist.json?v=2');
 _prefetch('./q-table-strategist-pure.json?v=5');
 _prefetch('./q-table-strategist-mcts.json?v=2');
+_prefetch('./q-table-sentient-unified.json?v=1'); // TEST_BLOCK
 
 // ---- QStrategistEngine class (loads q-table-strategist.json) --------
 export class QStrategistEngine {
@@ -242,6 +244,53 @@ export class QStrategistMCTSEngine {
     observeMove(m, p) { this._fallback.observeMove(m, p); }
     advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
+
+// ===== TEST_BLOCK_START — SentientQBotEngine (4P unified Q-table, remove for production) =====
+// Encoding must match encodeStateFor in q-sentient-unified-trainer.mjs exactly.
+function _encodeStateUnified(s, pid) {
+    const h  = s.hands[pid];
+    const p2 = s.pileSize >= 2 ? pClass(s.pile[s.pileSize - 2] >> 2) : 3;
+    const p3 = s.pileSize >= 3 ? pClass(s.pile[s.pileSize - 3] >> 2) : 3;
+    const myH = Math.min(pop(h), 12), myA = pop(h & RM[5]);
+    let oppMin = 12, oppMinKA = 0;
+    for (let p = 0; p < s.numPlayers; p++) {
+        if (p !== pid && !(s.eliminated & (1 << p))) {
+            const cnt = Math.min(pop(s.hands[p]), 12);
+            if (cnt < oppMin) { oppMin = cnt; oppMinKA = bkt(pop(s.hands[p] & (RM[4] | RM[5]))); }
+        }
+    }
+    const ac = s.numPlayers - pop(s.eliminated);
+    return `${s.topRankIdx}|${p2}|${p3}|${bkt(pop(h&(RM[0]|RM[1])))}|${bkt(pop(h&(RM[2]|RM[3])))}|${myA}|${myH}|${oppMin}|${pdepth(s.pileSize)}|${oppMinKA}|${ac}`;
+}
+export class SentientQBotEngine {
+    constructor() {
+        this._table    = null;
+        this._fallback = new SentientBot();
+        _prefetch('./q-table-sentient-unified.json?v=1').then(t => {
+            if (!t) { console.error('[SentientQ] Q-table load failed'); return; }
+            this._table = t;
+            console.log(`[SentientQ] Loaded: ${Object.keys(t).length} states`);
+        });
+    }
+    chooseMove(state) {
+        const moves = getPossibleMoves(state);
+        if (!moves.length) return 0;
+        if (!this._table) return this._fallback.chooseMove(state);
+        const pid  = state.currentPlayer;
+        const key  = _encodeStateUnified(state, pid);
+        const qrow = this._table[key];
+        if (!qrow) return this._fallback.chooseMove(state);
+        const legal = [...new Set(moves.map(moveToAct))];
+        let best = legal[0], bv = -Infinity;
+        for (const a of legal) { const v = qrow[a] ?? -Infinity; if (v > bv) { bv = v; best = a; } }
+        return actToMove(moves, best) ?? this._fallback.chooseMove(state);
+    }
+    cleanup()         { }
+    resetKnowledge()  { }
+    observeMove()     { }
+    advanceTree()     { }
+}
+// ===== TEST_BLOCK_END =====
 
 // ===== TEST_BLOCK_START — delete this class and the ISMCTSEngine import above for production =====
 export class HybridQBotEngine {

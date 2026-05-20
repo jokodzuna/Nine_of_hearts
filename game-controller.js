@@ -228,7 +228,7 @@ function _startGame(cfgOverride = null) {
 
     const isBotfather = cfg.difficulty === 'botfather';
     Update('SET_GAME_THEME', { theme: isBotfather ? 'botfather' : '' });
-    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot' || cfg.difficulty === 'test-heuristic' || cfg.difficulty === 'test-strategist2' || cfg.difficulty === 'test-sentient'; // TEST_BLOCK
+    const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot' || cfg.difficulty === 'test-heuristic' || cfg.difficulty === 'test-strategist2'; // TEST_BLOCK
 
     // ---- Engines ----
     const DIFF_PROFILES = {
@@ -255,7 +255,11 @@ function _startGame(cfgOverride = null) {
     else if (cfg.difficulty === 'test-ace50')    _engines[1] = new ISMCTSEngine('mctsAce50'); // TEST_BLOCK
     else if (cfg.difficulty === 'test-heuristic')  _engines[1] = new HeuristicBot();            // TEST_BLOCK
     else if (cfg.difficulty === 'test-strategist2') _engines[1] = new Strategist2Bot();           // TEST_BLOCK
-    else if (cfg.difficulty === 'test-sentient')    _engines[1] = new SentientQBotEngine();       // TEST_BLOCK
+    else if (cfg.difficulty === 'test-sentient') {                                             // TEST_BLOCK
+        _engines[1] = new SentientQBotEngine();                                               // TEST_BLOCK
+        _engines[2] = new SentientQBotEngine();                                               // TEST_BLOCK
+        _engines[3] = new SentientQBotEngine();                                               // TEST_BLOCK
+    }                                                                                         // TEST_BLOCK
     else if (cfg.difficulty === 'test-bot-vs-bot') {                                          // TEST_BLOCK
         _engines[0] = _makeBotEngine(cfg.botP0 ?? 'mctsAce50');                              // TEST_BLOCK
         _engines[1] = _makeBotEngine(cfg.botP1 ?? 'shark');                                  // TEST_BLOCK

@@ -1222,7 +1222,7 @@ function _buildTestBotPanel() {
             list.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             _difficulty  = value;
-            _numPlayers  = 2;
+            _numPlayers  = value === 'test-sentient' ? 4 : 2;
             import('./game-controller.js').then(m => {
                 m.appState.isTrainingMode = (value === 'test-training');
             });

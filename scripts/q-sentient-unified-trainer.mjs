@@ -26,8 +26,10 @@ globalThis.window = globalThis.window || { AI_DEBUG: false };
 //   --test           evaluation mode: no learning, epsilon=0
 //   --newbie         replace 1 SentientBot with MCTS Newbie (100 iters)
 //   --mcts-number N  replace N SentientBots with MCTS Newbie (1-3)
-//   --self-play      simulate actual game: seat 0=MCTS Newbie (human proxy),
-//                    seats 2+3 use Q-table greedily (no learning for them)
+//   --self-play      simulate actual game: seat 0=SentientBot (human proxy),
+//                    seats 1+2+3 all learn the same Q-table
+//   --v2             (with --self-play) versioned training: seat 0 uses frozen v1,
+//                    seats 1+2+3 learn into q-table-sentient-unified-v2.json
 //
 // Report: clear4P% | clear3P% | win2P% | lose2P% | TO%
 // Output: q-table-sentient-unified.json
@@ -41,8 +43,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dir     = dirname(fileURLToPath(import.meta.url));
-const OUT_PATH  = join(__dir, '..', 'q-table-sentient-unified.json');
-const SEED_PATH = join(__dir, '..', 'q-table-aggregator.json');
+const OUT_PATH   = join(__dir, '..', 'q-table-sentient-unified.json');
+const OUT_PATH_V2= join(__dir, '..', 'q-table-sentient-unified-v2.json');
+const SEED_PATH  = join(__dir, '..', 'q-table-aggregator.json');
 
 function getArg(flag, fb) { const i=process.argv.indexOf(flag); return i!==-1&&process.argv[i+1]!==undefined?process.argv[i+1]:fb; }
 const TEST_MODE = process.argv.includes('--test');
@@ -53,6 +56,7 @@ const LOG_EVERY = parseInt(getArg('--log-every', TEST_MODE?'100':'500'),10);
 const MCTS_NUM   = process.argv.includes('--newbie') ? 1
     : Math.min(3, Math.max(0, parseInt(getArg('--mcts-number','0'),10)));
 const SELF_PLAY  = process.argv.includes('--self-play');
+const V2_MODE    = SELF_PLAY && process.argv.includes('--v2');
 
 const ALPHA=0.20, GAMMA=0.997, SAVE_EVERY=500;
 const STEP_LIMIT = SELF_PLAY ? 500 : 300; // self-play needs more room for 4 strategic bots
@@ -136,6 +140,20 @@ if(existsSync(OUT_PATH)){
     console.log(`Warm-start: seeded ${n} 2P states from q-table-aggregator.json (appended |2)`);
 }else{console.log('No seed — starting fresh.');}
 
+// ---- V2-mode: snapshot v1 as frozen opponent + reload/continue v2 ---
+let Q_v1=null;
+if(V2_MODE){
+    Q_v1=new Map(Array.from(Q.entries()).map(([k,r])=>[k,r.slice()]));
+    if(existsSync(OUT_PATH_V2)){
+        Q.clear();totalNewStates=0;
+        const d2=JSON.parse(readFileSync(OUT_PATH_V2,'utf8')),data2=d2.table??d2;let n2=0;
+        for(const[k,arr]of Object.entries(data2)){const r=new Float64Array(N_ACTS);for(let i=0;i<N_ACTS;i++)r[i]=arr[i]==null?0:arr[i];Q.set(k,r);n2++;}
+        console.log(`V2 mode: reloaded ${n2} states from v2 (continuing); ${Q_v1.size} states frozen as v1`);
+    }else{
+        console.log(`V2 mode: v2 not found — warm-starting from v1 (${Q_v1.size} states); will save to v2`);
+    }
+}
+
 // ---- Step reward (perspective-parametrised) -----------------------
 function stepReward(move,s,turns,total,pid){
     let r=0;r-=turns*0.018*(1+Math.floor(total/45));
@@ -155,6 +173,14 @@ function terminalReward(outcome,rhv,s,pid){
 }
 
 const NEWBIE_PROF={...ISMCTSEngine.PROFILES.newbie,maxIterations:100,maxTime:100};
+const _v1Fb=new SentientBot(); // fallback when frozen-v1 key not found
+function qFrozenMove(s){
+    const key=encodeStateFor(s,0),r=Q_v1?.get(key);
+    if(!r)return _v1Fb.chooseMove(s);
+    const moves=getPossibleMoves(s),lActs=legalActs(moves);
+    let best=lActs[0],bv=-Infinity;for(const a of lActs)if(r[a]>bv){bv=r[a];best=a;}
+    return actToMove(moves,best)??moves[0];
+}
 
 // ---- Single game ---------------------------------------------------
 function playGame(eps){
@@ -165,8 +191,8 @@ function playGame(eps){
     const mctsCandidates=[0,2,3];
     const opps=[null,null,null,null]; // BOT slot stays null
     if(SELF_PLAY){
-        // Human proxy: 60% SentientBot (fast), 40% MCTS Newbie (varied) per game
-        opps[0]=Math.random()<0.4?new ISMCTSEngine('newbie'):new SentientBot();
+        // Seat 0: SentientBot in plain self-play; 70% frozen-v1 + 30% SentientBot in V2 mode
+        opps[0]=V2_MODE&&Math.random()<0.7?null:new SentientBot(); // null = use qFrozenMove
         opps[2]=null; opps[3]=null;
     }else{
         for(let i=0;i<3;i++)
@@ -189,6 +215,8 @@ function playGame(eps){
             const key=encodeStateFor(s,p),lActs=legalActs(moves),act=pickAction(key,lActs,eps,fallback,s);
             conc=actToMove(moves,act)??moves[0];
             qRow(key);hists[p].push({key,act,lActs,move:conc});
+        }else if(V2_MODE&&p===0&&opps[0]===null){
+            conc=qFrozenMove(s); // seat 0: greedy from frozen v1
         }else if(p!==BOT){
             const opp=opps[p];
             if(opp instanceof ISMCTSEngine){conc=opp.chooseMove(s,NEWBIE_PROF);opp.observeMove(s,conc);opp.advanceTree(conc);opp.cleanup();}
@@ -246,7 +274,7 @@ function playGame(eps){
             else updateQ(key,act,sr+termR,null,[]);
         }
     }
-    const p0Type=opps[0] instanceof ISMCTSEngine?'newbie':'sentient';
+    const p0Type=V2_MODE&&opps[0]===null?'v1':opps[0] instanceof ISMCTSEngine?'newbie':'sentient';
     return{botOutcome:qOut[BOT],p0Outcome,p0Type,totalMoves};
 }
 
@@ -254,13 +282,15 @@ function serialise(){const o={};for(const[k,r]of Q)o[k]=Array.from(r).map(v=>isF
 
 const KEYS=['cleared_4p','cleared_3p','won_2p','lost_2p','timeout'];
 const mkCnt=()=>Object.fromEntries(KEYS.map(k=>[k,0]));
-const outcomes={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt()};
-const logOut  ={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt()};
-let logN=0,logNn=0,logNs=0,logMoves=0,logNewSnap=0;
+const outcomes={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt(),v1:mkCnt()};
+const logOut  ={all:mkCnt(),newbie:mkCnt(),sentient:mkCnt(),v1:mkCnt()};
+let logN=0,logNn=0,logNs=0,logNv1=0,logMoves=0,logNewSnap=0;
 
-const oppDesc=SELF_PLAY?'seat0=MCTS-Newbie (human), seats2+3=Q-greedy (self-play)'
+const oppDesc=V2_MODE?'seat0=70% frozen-v1 + 30% SentientBot  |  seats1+2+3 learn v2'
+    :SELF_PLAY?'seat0=SentientBot  |  seats1+2+3 learn same Q-table'
     :MCTS_NUM===0?'3× SentientBot':MCTS_NUM===3?'3× MCTS-Newbie':`${3-MCTS_NUM}× SentientBot + ${MCTS_NUM}× MCTS-Newbie`;
-const trackLabel=SELF_PLAY?'P0 (human proxy) — want: clear4P/3P/win2P LOW, lose2P HIGH':'P1 (Q-bot)';
+const trackLabel=V2_MODE?'P0 (v1/SentientBot) — want: clear4P/3P/win2P LOW, lose2P HIGH'
+    :SELF_PLAY?'P0 (SentientBot) — want: clear4P/3P/win2P LOW, lose2P HIGH':'P1 (Q-bot)';
 console.log(`\nQ-Sentient Unified Trainer ${TEST_MODE?'(EVALUATION)':''}`);
 console.log(`BOT=player ${BOT}  Opponents: ${oppDesc}`);
 console.log(`Tracking: ${trackLabel}`);
@@ -274,19 +304,20 @@ for(let g=1;g<=GAMES;g++){
     outcomes.all[rep]++;logOut.all[rep]++;
     if(SELF_PLAY){outcomes[p0Type][rep]++;logOut[p0Type][rep]++;}
     logMoves+=totalMoves;logN++;
-    if(SELF_PLAY){if(p0Type==='newbie')logNn++;else logNs++;}
-    if(!TEST_MODE&&g%SAVE_EVERY===0){writeFileSync(OUT_PATH,JSON.stringify({games:g,stateCount:Q.size,table:serialise()}));process.stdout.write(`  [saved g${g}: ${Q.size} states]\n`);}
+    if(SELF_PLAY){if(p0Type==='newbie')logNn++;else if(p0Type==='v1')logNv1++;else logNs++;}
+    if(!TEST_MODE&&g%SAVE_EVERY===0){const sp=V2_MODE?OUT_PATH_V2:OUT_PATH;writeFileSync(sp,JSON.stringify({games:g,stateCount:Q.size,table:serialise()}));process.stdout.write(`  [saved g${g}: ${Q.size} states → ${V2_MODE?'v2':'v1'}]\n`);}
     if(g%LOG_EVERY===0){
         const pct=(obj,n,k)=>n>0?(obj[k]/n*100).toFixed(1).padStart(5)+'%':'  n/a';
         const row=(label,obj,n)=>`    ${label.padEnd(10)} clear4P=${pct(obj,n,'cleared_4p')}  clear3P=${pct(obj,n,'cleared_3p')}  win2P=${pct(obj,n,'won_2p')}  lose2P=${pct(obj,n,'lost_2p')}  TO=${pct(obj,n,'timeout')}`;
         const ns=totalNewStates-logNewSnap;
         console.log(`  game ${String(g).padStart(6)}  ε=${eps.toFixed(3)}  avgMoves=${(logMoves/logN).toFixed(1).padStart(5)}  +states=${ns.toString().padStart(5)}  total=${Q.size}  Qups=${logQUpdates}`);
         if(SELF_PLAY){
-            console.log(row(`vs Sentient(${logNs}):`,logOut.sentient,logNs));
-            console.log(row(`vs Newbie(${logNn}):`,logOut.newbie,logNn));
+            if(logNs>0)console.log(row(`vs Sentient(${logNs}):`,logOut.sentient,logNs));
+            if(logNn>0)console.log(row(`vs Newbie(${logNn}):`,logOut.newbie,logNn));
+            if(logNv1>0)console.log(row(`vs FrozenV1(${logNv1}):`,logOut.v1,logNv1));
         }else console.log(row('',logOut.all,logN));
-        for(const t of['all','newbie','sentient'])KEYS.forEach(k=>logOut[t][k]=0);
-        logMoves=0;logN=0;logNn=0;logNs=0;logQUpdates=0;logNewSnap=totalNewStates;
+        for(const t of['all','newbie','sentient','v1'])KEYS.forEach(k=>logOut[t][k]=0);
+        logMoves=0;logN=0;logNn=0;logNs=0;logNv1=0;logQUpdates=0;logNewSnap=totalNewStates;
     }
 }
 
@@ -304,8 +335,10 @@ function printOutcomes(obj,n,label){
 if(SELF_PLAY){
     const ns=Object.values(outcomes.sentient).reduce((a,b)=>a+b,0);
     const nn=Object.values(outcomes.newbie).reduce((a,b)=>a+b,0);
-    printOutcomes(outcomes.sentient,ns,'vs SentientBot');
-    printOutcomes(outcomes.newbie,nn,'vs MCTS Newbie');
+    const nv=Object.values(outcomes.v1).reduce((a,b)=>a+b,0);
+    if(ns>0)printOutcomes(outcomes.sentient,ns,'vs SentientBot');
+    if(nn>0)printOutcomes(outcomes.newbie,nn,'vs MCTS Newbie');
+    if(nv>0)printOutcomes(outcomes.v1,nv,'vs Frozen-v1');
     printOutcomes(outcomes.all,GAMES,'COMBINED');
 }else printOutcomes(outcomes.all,GAMES,'all');
-if(!TEST_MODE){writeFileSync(OUT_PATH,JSON.stringify({games:GAMES,stateCount:Q.size,table:serialise()}));console.log(`\nSaved → ${OUT_PATH}  (${Q.size} states, +${totalNewStates} new)`);}
+if(!TEST_MODE){const fp=V2_MODE?OUT_PATH_V2:OUT_PATH;writeFileSync(fp,JSON.stringify({games:GAMES,stateCount:Q.size,table:serialise()}));console.log(`\nSaved → ${fp}  (${Q.size} states, +${totalNewStates} new)`);}

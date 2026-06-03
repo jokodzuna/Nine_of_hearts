@@ -140,7 +140,7 @@ function _prefetch(url) {
 _prefetch('./q-table-strategist.json?v=2');
 _prefetch('./q-table-strategist-pure.json?v=5');
 _prefetch('./q-table-strategist-mcts.json?v=2');
-_prefetch('./q-table-sentient-unified.json?v=1'); // TEST_BLOCK
+_prefetch('./q-table-sentient-13.json?v=1'); // TEST_BLOCK
 
 // ---- QStrategistEngine class (loads q-table-strategist.json) --------
 export class QStrategistEngine {
@@ -245,28 +245,34 @@ export class QStrategistMCTSEngine {
     advanceTree(m, p) { this._fallback.advanceTree(m, p); }
 }
 
-// ===== TEST_BLOCK_START — SentientQBotEngine (4P unified Q-table, remove for production) =====
-// Encoding must match encodeStateFor in q-sentient-unified-trainer.mjs exactly.
-function _encodeStateUnified(s, pid) {
+// ===== TEST_BLOCK_START — SentientQBotEngine (13-field q-table-sentient-13, remove for production) =====
+// Encoding must match encodeState in q-sentient-13-trainer.mjs exactly.
+function _encodeState13(s, pid) {
     const h  = s.hands[pid];
     const p2 = s.pileSize >= 2 ? pClass(s.pile[s.pileSize - 2] >> 2) : 3;
     const p3 = s.pileSize >= 3 ? pClass(s.pile[s.pileSize - 3] >> 2) : 3;
-    const myH = Math.min(pop(h), 12), myA = pop(h & RM[5]);
-    let oppMin = 12, oppMinKA = 0;
-    for (let p = 0; p < s.numPlayers; p++) {
-        if (p !== pid && !(s.eliminated & (1 << p))) {
-            const cnt = Math.min(pop(s.hands[p]), 12);
-            if (cnt < oppMin) { oppMin = cnt; oppMinKA = bkt(pop(s.hands[p] & (RM[4] | RM[5]))); }
-        }
+    const myLow = bkt(pop(h & (RM[0]|RM[1]))), myMid = bkt(pop(h & (RM[2]|RM[3])));
+    const myA = pop(h & RM[5]), myH = Math.min(pop(h), 12);
+    const th = s.hands[0];
+    const tgtH = Math.min(pop(th), 12), tgtLow = bkt(pop(th & (RM[0]|RM[1])));
+    let minRk = 6; for (let rk = 0; rk <= 5; rk++) if (th & RM[rk]) { minRk = rk; break; }
+    const tgtMinRank = minRk <= 1 ? 0 : minRk <= 3 ? 1 : 2;
+    const active = [];
+    for (let i = 0; i < s.numPlayers; i++) if (!(s.eliminated & (1 << i))) active.push(i);
+    const n = active.length, myIdx = active.indexOf(pid), p0Idx = active.indexOf(0);
+    let tgtPos = 3;
+    if (myIdx !== -1 && p0Idx !== -1) {
+        const diff = (p0Idx - myIdx + n) % n;
+        tgtPos = diff === n - 1 ? 1 : diff === 1 ? 2 : 3;
     }
     const ac = s.numPlayers - pop(s.eliminated);
-    return `${s.topRankIdx}|${p2}|${p3}|${bkt(pop(h&(RM[0]|RM[1])))}|${bkt(pop(h&(RM[2]|RM[3])))}|${myA}|${myH}|${oppMin}|${pdepth(s.pileSize)}|${oppMinKA}|${ac}`;
+    return `${s.topRankIdx}|${p2}|${p3}|${myLow}|${myMid}|${myA}|${myH}|${tgtH}|${tgtLow}|${tgtMinRank}|${tgtPos}|${pdepth(s.pileSize)}|${ac}`;
 }
 export class SentientQBotEngine {
     constructor() {
         this._table    = null;
         this._fallback = new SentientBot();
-        _prefetch('./q-table-sentient-unified.json?v=1').then(t => {
+        _prefetch('./q-table-sentient-13.json?v=1').then(t => {
             if (!t) { console.error('[SentientQ] Q-table load failed'); return; }
             this._table = t;
             console.log(`[SentientQ] Loaded: ${Object.keys(t).length} states`);
@@ -277,7 +283,7 @@ export class SentientQBotEngine {
         if (!moves.length) return 0;
         if (!this._table) return this._fallback.chooseMove(state);
         const pid  = state.currentPlayer;
-        const key  = _encodeStateUnified(state, pid);
+        const key  = _encodeState13(state, pid);
         const qrow = this._table[key];
         if (!qrow) return this._fallback.chooseMove(state);
         const legal = [...new Set(moves.map(moveToAct))];

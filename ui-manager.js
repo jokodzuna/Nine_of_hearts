@@ -49,6 +49,9 @@ let _debugPanel     = null;  // persistent debug-panel DOM element
 
 let _timer = { rafId: null, endTime: 0, isHuman: false, lastTick: null, container: null };
 
+let _bfCd = { rafId: null, endTime: 0, secsLeft: 120, running: false };
+let _cbBfExpired = null;
+
 // ============================================================
 // Bridge — Outgoing Callbacks
 // (registered once by the external controller / ai_trainer)
@@ -60,6 +63,9 @@ let _cbDealComplete  = null;   // () => void
 
 /** Fires when the human player drags/taps cards onto the pile. */
 export function onCardPlayed(fn)    { _cbCardPlayed    = fn; }
+
+/** Fires when the botfather P0 countdown reaches zero. */
+export function onBfTimerExpired(fn) { _cbBfExpired = fn; }
 
 /** Fires when the human player clicks the Draw button. */
 export function onDrawRequested(fn) { _cbDrawRequested = fn; }
@@ -162,6 +168,10 @@ export function Update(command, payload = {}) {
         case 'STOP_TIMER':
             _stopTimer();
             break;
+        case 'SHOW_BF_TIMER':  _showBfTimer();  break;
+        case 'HIDE_BF_TIMER':  _hideBfTimer();  break;
+        case 'START_BF_TIMER': _startBfTimer(); break;
+        case 'STOP_BF_TIMER':  _stopBfTimer();  break;
         case 'ANIMATE_DEAL':
             Animations.animateDealing(payload.hands, payload.humanPlayerId).then(() => {
                 if (_cbDealComplete) _cbDealComplete();
@@ -349,6 +359,60 @@ function _startTimer(playerId, isHuman) {
         if (rem > 0) _timer.rafId = requestAnimationFrame(tick);
     };
     _timer.rafId = requestAnimationFrame(tick);
+}
+
+// ============================================================
+// Botfather P0 countdown timer
+// ============================================================
+
+function _showBfTimer() {
+    const el = document.getElementById('bf-countdown');
+    if (el) el.style.display = 'flex';
+}
+
+function _hideBfTimer() {
+    _stopBfTimer();
+    _bfCd.secsLeft = 120;
+    const el = document.getElementById('bf-countdown');
+    if (!el) return;
+    el.style.display = 'none';
+    el.classList.remove('bf-warn', 'bf-danger');
+    const disp = document.getElementById('bfTimerDisplay');
+    if (disp) disp.textContent = '2:00';
+}
+
+function _startBfTimer() {
+    if (_bfCd.running) return;
+    _bfCd.endTime = performance.now() + _bfCd.secsLeft * 1000;
+    _bfCd.running = true;
+    const el   = document.getElementById('bf-countdown');
+    const disp = document.getElementById('bfTimerDisplay');
+    const tick = () => {
+        const rem  = Math.max(0, _bfCd.endTime - performance.now());
+        _bfCd.secsLeft = rem / 1000;
+        if (disp) {
+            const m = Math.floor(rem / 60000);
+            const s = Math.floor((rem % 60000) / 1000);
+            disp.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+        if (el) {
+            el.classList.remove('bf-warn', 'bf-danger');
+            if (rem <= 10000)      el.classList.add('bf-danger');
+            else if (rem <= 30000) el.classList.add('bf-warn');
+        }
+        if (rem <= 0) {
+            _bfCd.running = false;
+            if (_cbBfExpired) _cbBfExpired();
+            return;
+        }
+        _bfCd.rafId = requestAnimationFrame(tick);
+    };
+    _bfCd.rafId = requestAnimationFrame(tick);
+}
+
+function _stopBfTimer() {
+    if (_bfCd.rafId) { cancelAnimationFrame(_bfCd.rafId); _bfCd.rafId = null; }
+    _bfCd.running = false;
 }
 
 // ============================================================

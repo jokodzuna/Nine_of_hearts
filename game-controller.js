@@ -30,7 +30,8 @@ import {
 import { ISMCTSEngine } from './ai-engine.js';
 import { QBotEngine, HybridQBotEngine, TrainingQBotEngine, QStrategistEngine, QStrategistMCTSEngine, QStrategistPureEngine, SentientQBotEngine } from './q-bot.js'; // TEST_BLOCK
 import { HeuristicBot } from './heuristic-bot.js'; // TEST_BLOCK
-import { Strategist2Bot } from './strategist2-bot.js'; // TEST_BLOCK
+import { Strategist2Bot } from './strategist2-bot.js';
+import { BotfatherBot }   from './strategist2-botfather.js'; // TEST_BLOCK
 import { sandbox } from './training-sandbox.js'; // TEST_BLOCK
 
 import {
@@ -46,6 +47,7 @@ import {
     onMainMenu,
     onHostLeft,
     onDealStart,
+    onBfTimerExpired,
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
@@ -170,6 +172,7 @@ let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min perman
 
 let _state          = null;
 let _gameActive     = false;
+let _isBotfather    = false;   // true when current game is botfather difficulty
 let _pendingHands   = null;   // botfather: hands stored until deal veil clears
 let _humanTimer     = null;    // setTimeout handle for human auto-move
 let _pileAddTimer   = null;    // setTimeout handle for deferred AI card→pile animation
@@ -198,6 +201,7 @@ onDealStart(_triggerDeal);
 onDealComplete(_startTurn);
 onCardPlayed(_humanPlayCards);
 onDrawRequested(_humanDraw);
+onBfTimerExpired(_bfTimerTimeout);
 onMultiplayerReady(_startMPGame);
 onMPHostStart(_handleMPHostStart);
 onNewGame(_handleNewGame);
@@ -227,6 +231,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
+    _isBotfather = isBotfather;
     Update('SET_GAME_THEME', { theme: isBotfather ? 'botfather' : '' });
     const isTestBot   = cfg.difficulty === 'test-hybrid' || cfg.difficulty === 'test-pureq' || cfg.difficulty === 'test-training' || cfg.difficulty === 'test-ace50' || cfg.difficulty === 'test-bot-vs-bot' || cfg.difficulty === 'test-heuristic' || cfg.difficulty === 'test-strategist2'; // TEST_BLOCK
 
@@ -248,7 +253,7 @@ function _startGame(cfgOverride = null) {
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
     // ===== TEST_BLOCK_START =====
-    if      (cfg.difficulty === 'botfather')     _engines[1] = new Strategist2Bot();
+    if      (cfg.difficulty === 'botfather')     _engines[1] = new BotfatherBot();
     else if (cfg.difficulty === 'test-hybrid')   _engines[1] = new HybridQBotEngine();
     else if (cfg.difficulty === 'test-pureq')    _engines[1] = new QBotEngine();
     else if (cfg.difficulty === 'test-training') _engines[1] = new TrainingQBotEngine(); // TEST_BLOCK
@@ -331,6 +336,7 @@ function _startGame(cfgOverride = null) {
     Update('CLEAR_PILE');
     Update('ADD_TO_PILE', { card: ds.pile[0] });
     if (isBotfather) {
+        Update('SHOW_BF_TIMER', {});
         _pendingHands = hands;   // deal fired by _triggerDeal() when veil clears
     } else {
         _pendingHands = null;
@@ -373,6 +379,7 @@ function _startTurn() {
         Update('ENABLE_PLAY', { enabled: true });
         Update('ENABLE_DRAW', { enabled: drawable > 0 });
         Update('START_TIMER', { playerId: PLAYER_IDS[p], isHuman: true });
+        if (_isBotfather) Update('START_BF_TIMER', {});
         _humanTimer = setTimeout(_humanTimerExpired, HUMAN_TURN_MS);
     } else {
         Update('ENABLE_PLAY', { enabled: false });
@@ -486,6 +493,18 @@ function _humanPlayCards(cards) {
         sandbox.recordHumanMove(key, _moveToActLocal(move));
     }
     // ===== TEST_BLOCK_END =====
+    if (BOT_DEBUG) {
+        const hi = _mpMode ? _myMPIdx : HUMAN;
+        const topBit  = _state.pile[_state.pileSize - 1];
+        const topCard = RANK_NAMES[topBit >> 2] + SUIT_NAMES[topBit & 3];
+        console.group(`[P0] turn — top: ${topCard} | pile: ${_state.pileSize}`);
+        for (let p = 0; p < _state.numPlayers; p++) {
+            const tag = p === hi ? '▶' : ' ';
+            console.log(`  ${tag} P${p}: ${_fmtHand(_state.hands[p])}`);
+        }
+        console.log(`  → ${_fmtMove(move)}`);
+        console.groupEnd();
+    }
     if (_mpMode) _applyMPMove(move);
     else         _applyAndAdvance(move);
 }
@@ -498,6 +517,17 @@ function _humanDraw() {
     const drawMove     = moves.find(m => !!(m & DRAW_FLAG));
     if (drawMove === undefined) return;
 
+    if (BOT_DEBUG) {
+        const topBit  = _state.pile[_state.pileSize - 1];
+        const topCard = RANK_NAMES[topBit >> 2] + SUIT_NAMES[topBit & 3];
+        console.group(`[P0] turn — top: ${topCard} | pile: ${_state.pileSize}`);
+        for (let p = 0; p < _state.numPlayers; p++) {
+            const tag = p === hi ? '▶' : ' ';
+            console.log(`  ${tag} P${p}: ${_fmtHand(_state.hands[p])}`);
+        }
+        console.log(`  → ${_fmtMove(drawMove)}`);
+        console.groupEnd();
+    }
     if (_mpMode) _applyMPMove(drawMove);
     else         _applyAndAdvance(drawMove);
 }
@@ -512,6 +542,7 @@ function _applyAndAdvance(move, preState = null, botEngine = null) {
         engine.advanceTree(move);
     }
     Update('STOP_TIMER');
+    if (_isBotfather) Update('STOP_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
     Update('DESELECT_ALL');
@@ -657,9 +688,29 @@ function _allHumansEliminated() {
     return !!(_state.eliminated & (1 << HUMAN));
 }
 
+function _bfTimerTimeout() {
+    if (!_gameActive) return;
+    _gameActive = false;
+    if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+    Update('STOP_TIMER', {});
+    Update('HIDE_BF_TIMER', {});
+    Update('ENABLE_PLAY', { enabled: false });
+    Update('ENABLE_DRAW', { enabled: false });
+    _renderHands(decodeState(_state));
+    Economy.recordGameResult({
+        survived:            false,
+        foursPlayedThisGame: _humanFoursThisGame,
+        gameTimeMs:          Date.now() - _gameStartTime,
+        maxCardsHeld:        _humanMaxCards,
+    }).catch(console.error);
+    Update('SHOW_GAME_OVER_BANNER', { text: "TIME'S UP! YOU ARE THE LOSER!", isMP: false, isHost: false });
+    _mpMode = false;
+}
+
 function _endGame() {
     _gameActive = false;
     Update('STOP_TIMER');
+    if (_isBotfather) Update('HIDE_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 
@@ -713,6 +764,7 @@ function _bannerText(loserIdx) {
 function _forceEndGame() {
     _gameActive = false;
     Update('STOP_TIMER');
+    if (_isBotfather) Update('HIDE_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 

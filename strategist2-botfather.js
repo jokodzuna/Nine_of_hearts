@@ -369,7 +369,11 @@ export class BotfatherBot {
                 const aceFinishThreat = oppMinCards <= 3 && oppEstAces > 0 && _oppBelowQuadR;
                 const blocksThreat = oppMaxQuadRank >= topRI && oppMaxQuadRank < r;
                 const score = (aceFinishThreat || blocksThreat) ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
-                if (!hasLowerSingle || blocksThreat) nominate(m, score);
+                // Even with aceFinishThreat, prefer a lower single in [topRI, r) over the quad:
+                // that single achieves the same trapping without burning 4 cards.
+                const hasLowerSingleAtTop = playMoves.some(pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) >= topRI);
+                if ((!hasLowerSingle || blocksThreat) && !(aceFinishThreat && !blocksThreat && hasLowerSingleAtTop))
+                    nominate(m, score);
             }
         }
 

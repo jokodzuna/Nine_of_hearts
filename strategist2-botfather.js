@@ -94,7 +94,10 @@ export class BotfatherBot {
                     for (let p = 0; p < state.numPlayers; p++)
                         if (p !== _myP2 && !(state.eliminated & (1 << p)))
                             _omc2 = Math.min(_omc2, _popcount(state.hands[p]));
-                    if (_ace2 >= _sam2 && _ace2 < 4 && _omc2 > 2) {
+                    let _stuck2 = 0;
+                    for (let _r2 = 0; _r2 < state.topRankIdx; _r2++)
+                        _stuck2 += _popcount(state.hands[_myP2] & RANK_MASK[_r2]);
+                    if (_ace2 >= _sam2 && _ace2 < 4 && _myK2 <= 2 && _omc2 > 2 && _stuck2 > 0) {
                         const dm2 = moves.find(m => !!(m & DRAW_FLAG));
                         if (dm2) return dm2;
                     }
@@ -114,8 +117,9 @@ export class BotfatherBot {
             // myAces<=2: always draw to complete 4A.
             // myAces===3: only draw when BF is heavily inflated vs opp AND has stuck cards
             //   (playing A would hand opp back 2 Aces from pile, while draw reclaims them).
+            const _nonKA3 = _tot3 - _myA3 - _popcount(state.hands[_myP3] & RANK_MASK[4]);
             const _draw4ASensible = _myA3 <= 2
-                || (_myA3 === 3 && (_tot3 - _myA3) > 0 && _tot3 > _omc3 + 4);
+                || (_myA3 === 3 && _omc3 > 1 && _nonKA3 > 1);
             if (_myA3 >= 1 && _draw4ASensible) {
                 const _dc3 = Math.min(3, state.pileSize - 1);
                 let _da3 = 0;
@@ -311,7 +315,7 @@ export class BotfatherBot {
             // dumping 4K — opp draws A back + pile cards, uncovering lower tops for BF's stuck cards.
             const aceMoves4A = playMoves.filter(m => playRI(m) === 5);
             if (myAces === 4 && stuckCount > 0 && topRI < 5 && aceMoves4A.length > 0
-                    && !playMoves.some(m => playCnt(m) === 1 && playRI(m) < 4))
+                    && !playMoves.some(m => playCnt(m) === 1 && playRI(m) < 5 && (playRI(m) < 4 || oppEstKings === 0)))
                 nominate(aceMoves4A[0], 950);
 
             // 4K dump: hand is nearly all K+A (≤1 non-KA card), junk is stuck
@@ -328,6 +332,12 @@ export class BotfatherBot {
         // ==============================================================
         // RULE 3 — 4-of-a-kind quad dump (rank 9–Q)
         // ==============================================================
+        const oppHasQuad = opps.some(p => [0,1,2,3,4,5].some(r => _popcount(state.hands[p] & RANK_MASK[r]) >= 4));
+        let oppMaxQuadRank = -1;
+        if (oppHasQuad) {
+            for (const p of opps) for (let r = 5; r >= 0; r--)
+                if (_popcount(state.hands[p] & RANK_MASK[r]) >= 4) { oppMaxQuadRank = Math.max(oppMaxQuadRank, r); break; }
+        }
         {
             const oppNonPowerEst  = oppMinCards - oppEstKings - oppEstAces;
             const riskFinishingHand = oppMinCards <= 6 && oppNonPowerEst <= 1;
@@ -354,25 +364,30 @@ export class BotfatherBot {
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) >= topRI
                 );
                 const aceFinishThreat = oppMinCards <= 3 && oppEstAces > 0;
-                const score = aceFinishThreat ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
-                if (!hasLowerSingle) nominate(m, score);
+                const blocksThreat = oppMaxQuadRank >= 0 && oppMaxQuadRank < r;
+                const score = (aceFinishThreat || blocksThreat) ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
+                if (!hasLowerSingle || blocksThreat) nominate(m, score);
             }
         }
 
         // ==============================================================
         // RULE 3.5 — Draw to complete a junk quad (rank 9–Q)
         // ==============================================================
-        const oppHasQuad = opps.some(p => [0,1,2,3,4,5].some(r => _popcount(state.hands[p] & RANK_MASK[r]) >= 4));
-        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0 && oppMinCards > 3
+        // oppHasQuad / oppMaxQuadRank defined above before R3.
+        if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0
+                && (oppMinCards > 3 || (oppEstAces === 0 && oppEstKings === 0 && oppMinCards > 1))
                 && state.pileSize > 4 && !oppHasQuad) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
-                if (inHand <= 1 || inHand >= 3) continue;
+                if (inHand < 1 || inHand > 3) continue;
                 let inDraw = 0;
                 for (let i = 0; i < drawCount; i++) {
                     if ((state.pile[state.pileSize - 1 - i] >> 2) === r) inDraw++;
                 }
-                if (inHand + inDraw >= 4) {
+                // Skip if r === topRI and BF already has a single of that rank:
+                // just play it directly to force opp to draw — no need to inflate hand.
+                if (inHand + inDraw >= 4
+                        && !(r === topRI && playMoves.some(m => playCnt(m) === 1 && playRI(m) === r))) {
                     nominate(drawMove, 500);
                 }
             }
@@ -412,14 +427,22 @@ export class BotfatherBot {
             // Beats playing a single Ace since opp immediately draws the played Ace back.
             // draw-4A: always when myAces<=2; also for myAces=3 when BF is heavily
             // inflated vs opp and has stuck cards (else playing A gives opp 2 Aces back).
+            const nonKA = myTotal - myKings - myAces;
             const draw4ASensible = myAces <= 2
-                || (myAces === 3 && stuckCount > 0 && myTotal > oppMinCards + 4);
+                || (myAces === 3 && oppEstAces === 0 && oppMinCards > 1 && nonKA > 1);
             if (drawMove !== null && myAces >= 1 && draw4ASensible) {
                 let drawableAces = 0;
                 for (let i = 0; i < drawCount; i++)
                     if ((state.pile[state.pileSize - 1 - i] >> 2) === 5) drawableAces++;
                 if (myAces + drawableAces >= 4) nominate(drawMove, 1840);
             }
+
+            // Large-hand A-top draw: when both players have large hands, drawing to reclaim
+            // the pile Ace beats Ace-battling. With oppEstAces>0, opp just answers with their
+            // Ace — mutual waste. Score 1805 beats aceScore(1800) when oppEstAces>=1 but loses
+            // to aceScore(1825) when oppEstAces=0 (opp must draw helplessly, play A is correct).
+            if (drawMove !== null && topRI === 5 && myTotal >= 8 && oppMinCards >= 7 && stuckCount > 0)
+                nominate(drawMove, 1805);
 
             const aceMoves = playMoves.filter(m => playRI(m) === 5);
             if (aceMoves.length > 0) {
@@ -462,13 +485,16 @@ export class BotfatherBot {
                     && myTotal >= 8 && oppEstKings > 0 && !hasQuad)
                 nominate(drawMove, 1620);
 
-            if (drawMove !== null && drawHasKing && myKings === 3
+            if (drawMove !== null && drawHasKing && myKings === 3 && drawHighCount >= 2
                     && oppEstKings === 0 && oppEstAces === 0 && oppMinCards > 2)
                 nominate(drawMove, 1635);
 
             // Opp has no Kings — don't play K or they draw all pile Kings back next turn.
             // Drawing is better: BF reclaims them and opp stays K-starved.
-            if (drawMove !== null && drawHighCount >= 2 && oppEstKings === 0 && oppMinCards > 4)
+            // Guard: skip if BF already has K×3 (no need for more) or opp has Ace
+            // (opp will play A at K-top, not draw pile Kings — premise invalid).
+            if (drawMove !== null && drawHighCount >= 2 && oppEstKings === 0 && oppEstAces === 0
+                    && myKings <= 2 && oppMinCards > 4 && stuckCount > 0)
                 nominate(drawMove, 1625);
 
             // K-dump recovery: opp just played all Ks into pile — draw to reclaim 3 rather than
@@ -478,7 +504,7 @@ export class BotfatherBot {
 
             // Draw to complete 4K: BF has 2-3 Kings and a King is in drawable pile cards
             // Completing the quad is worth far more than playing a K (which opp draws back)
-            if (drawMove !== null && myKings >= 1 && myAces >= safeAceMin && myAces < 4 && oppMinCards > 2) {
+            if (drawMove !== null && myKings >= 1 && myKings <= 2 && myAces >= safeAceMin && myAces < 4 && oppMinCards > 2 && stuckCount > 0) {
                 let drawableKings = 0;
                 for (let i = 0; i < drawCount; i++)
                     if ((state.pile[state.pileSize - 1 - i] >> 2) === 4) drawableKings++;
@@ -514,7 +540,7 @@ export class BotfatherBot {
                 }
             }
 
-            if (aceMoves.length > 0) {
+            if (aceMoves.length > 0 && kingMoves.length === 0) {
                 const acesAfter = myAces - 1;
                 const dominant  = oppEstAces === 0 && acesAfter >= safeAceMin;
                 const advantage = acesAfter >= safeAceMin && myAces > oppEstAces + 1;
@@ -557,6 +583,17 @@ export class BotfatherBot {
                 const oppQs  = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[3]), 0);
                 const oppJs  = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[2]), 0);
 
+                // R6-J-skip: at 9/10-top, skip over opp's 10s by jumping to J.
+                // Playing a 10 lets opp immediately answer with their 10; J-top locks it.
+                // Only useful when opp has Aces or Kings — if their ceiling is Q or lower,
+                // BF's K×4 forces draws at will, so just dump 9s/10s naturally.
+                const myJs   = _popcount(myHand & RANK_MASK[2]);
+                const opp10s = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[1]), 0);
+                if (myJs >= 1 && opp10s >= 1 && state.pileSize > 3 && (oppEstAces > 0 || (oppEstKings > 0 && myKings <= oppEstKings))) {
+                    const jSkip = safePlays.filter(m => playRI(m) === 2 && playCnt(m) === 1);
+                    if (jSkip.length > 0) nominate(jSkip[0], 240);
+                }
+
                 // R6-Q-skip: BF has more Qs than opp — Q-top freezes opp's Jacks.
                 // Guard: don't skip if BF has any single lower-rank card to dump first.
                 if (myQs >= 2 && myQs < 4 && oppJs >= 1 && myQs > oppQs
@@ -570,10 +607,21 @@ export class BotfatherBot {
                 // Playing K forces opp to draw (gains low cards) instead of shedding Jacks.
                 // Guard: only skip if BF has no low junk (9/10) to dump first.
                 if (oppJs >= 1 && myKings >= 2 && myKings > oppEstKings && myAces >= safeAceMin
-                        && !safePlays.some(m => playCnt(m) === 1 && playRI(m) < 4)) {
+                        && (!safePlays.some(m => playCnt(m) === 1 && playRI(m) < 4)
+                            || (myAces > oppEstAces && stuckCount > 0))) {
                     const kSkip = safePlays.filter(m => playRI(m) === 4);
                     if (kSkip.length > 0) nominate(kSkip[0], 480);
                 }
+            }
+
+            // R6-K-skip at J/Q-top: opp has no K, so all non-A opp cards are stuck at K-top.
+            // Fires when opp has no A (all stuck) OR BF has Ace advantage (extra A absorbs
+            // opp's reply at A-top, then opp's Js/Qs stay stuck through the A-chain).
+            if (topRI >= 2 && oppEstKings === 0 && stuckCount > 0
+                    && myKings >= 2 && myAces >= safeAceMin
+                    && (oppEstAces === 0 || myAces > oppEstAces)) {
+                const kJtop = safePlays.filter(m => playRI(m) === 4 && playCnt(m) === 1);
+                if (kJtop.length > 0) nominate(kJtop[0], 480);
             }
 
             // 3-ace aggression: BF has 3+ Aces vs opp's ≤1 — play A to drain opp's last ace
@@ -585,13 +633,29 @@ export class BotfatherBot {
                     && myAces - 1 >= safeAceMin && oppMinCards >= 5
                     && myTotal <= oppMinCards + 4 && topRI >= 1
                     && (!hasQuad || my9s >= 1)
-                    && (stuckCount > 0 || myTotal > 10))
+                    && (stuckCount > 0 || myTotal > 10)
+                    && !playMoves.some(m => playCnt(m) === 1 && playRI(m) === 4))
                 nominate(triAceMoves[0], 600);
 
+            // Draw to reclaim top-rank cards: when BF has many stuck cards and pile has
+            // 2+ of topRI rank in drawable window, drawing maintains high pile top that
+            // freezes opp's low cards — better than playing a King into the pile.
+            if (drawMove !== null && stuckCount >= 2 && myTotal > oppMinCards + 4
+                    && oppMinCards > 1 && state.pileSize > 3
+                    && !playMoves.some(m => playCnt(m) === 1 && playRI(m) === topRI)) {
+                let topRankInDraw = 0;
+                for (let i = 0; i < drawCount; i++)
+                    if ((state.pile[state.pileSize - 1 - i] >> 2) === topRI) topRankInDraw++;
+                if (topRankInDraw >= 2) nominate(drawMove, 460);
+            }
+
             // 6a: opponent near win
-            if (oppMinCards <= 4 && safePlays.length > 0) {
+            if (oppMinCards <= 3 && safePlays.length > 0) {
                 if (oppMinCards === 1) {
-                    const minSafeRI = oppEstAces > 0 ? 6 : oppEstKings > 0 ? 5 : 4;
+                    let _oppHiRI = 0;
+                    for (const p of opps) for (let r = 5; r >= 0; r--)
+                        if (state.hands[p] & RANK_MASK[r]) { _oppHiRI = Math.max(_oppHiRI, r); break; }
+                    const minSafeRI = oppEstAces > 0 ? 6 : oppEstKings > 0 ? 5 : Math.max(topRI, _oppHiRI + 1);
                     const safe1 = safePlays.filter(m => playRI(m) >= minSafeRI)
                                            .sort((a, b) => playRI(a) - playRI(b));
                     if (safe1.length > 0) nominate(safe1[0], 4000);
@@ -611,7 +675,9 @@ export class BotfatherBot {
                                     if (_popcount(state.hands[p] & RANK_MASK[r]) > 0 && r < oppLowest) oppLowest = r;
                                 }
                             }
-                            const qm = safePlays.find(m => _popcount(m & 0xFFFFFF) >= 4 && playRI(m) <= 4 && (playRI(m) > oppLowest || oppLowest >= topRI));
+                            // Never dump 4K in R6a: opp either draws all 3 Kings back (oppEstAces=0)
+                            // or plays their Ace forcing A-top while BF's Jacks stay stuck (oppEstAces>0).
+                            const qm = safePlays.find(m => _popcount(m & 0xFFFFFF) >= 4 && playRI(m) < 4 && (playRI(m) > oppLowest || oppLowest >= topRI));
                             if (qm) nominate(qm, 2100);
                         }
                         if (oppEstAces === 0 && oppEstKings > 0) {
@@ -629,10 +695,10 @@ export class BotfatherBot {
                                 const minSingle = safePlays.filter(m => playCnt(m) === 1 && playRI(m) < 4)
                                                            .sort((a, b) => playRI(a) - playRI(b))[0];
                                 if (minSingle) nominate(minSingle, 2050);
+                                const kMove = safePlays.find(m => playRI(m) === 4);
+                                if (kMove) nominate(kMove, 2000);
+                                else nominate(highest, 2000);
                             }
-                            const kMove = safePlays.find(m => playRI(m) === 4);
-                            if (kMove) nominate(kMove, 2000);
-                            else nominate(highest, 2000);
                         }
                     } else if (hRI < 4) {
                         nominate(highest, 2000);
@@ -655,15 +721,27 @@ export class BotfatherBot {
                 if (kEscMoves.length > 0) nominate(kEscMoves[0], 380);
             }
 
-            // 6-pileup: stuck 9s at 10-top — play J/Q to raise pile above opp's 10s
-            // rather than drawing low cards (which resets pile to 9-top, freeing opp's 10s)
+            // 6-pileup: stuck 9s at 10-top — play J/Q to raise pile above ALL opp cards.
+            // Prefer the lowest single whose rank strictly exceeds opp's highest card (full trap).
+            // Fall back to any non-quad-ruining J/Q single if no full-trap option exists.
             if (my9s >= 1 && topRI === 1) {
-                const jqMoves = safePlays.filter(m => playRI(m) === 2 || playRI(m) === 3);
-                if (jqMoves.length > 0) {
-                    const lowestJQ = jqMoves.reduce((a, b) => playRI(a) <= playRI(b) ? a : b);
-                    const wouldRuinQuad = playCnt(lowestJQ) === 1
-                        && _popcount(myHand & RANK_MASK[playRI(lowestJQ)]) >= 4;
-                    if (!wouldRuinQuad) nominate(lowestJQ, 450);
+                let oppHighestRI = 0;
+                for (const p of opps) for (let r = 5; r >= 0; r--) if (state.hands[p] & RANK_MASK[r]) { oppHighestRI = Math.max(oppHighestRI, r); break; }
+                const trapMoves = safePlays.filter(m => playCnt(m) === 1 && playRI(m) > oppHighestRI && playRI(m) <= 3);
+                if (trapMoves.length > 0) {
+                    nominate(trapMoves.reduce((a, b) => playRI(a) <= playRI(b) ? a : b), 450);
+                } else {
+                    // Don't elevate if BF has same-rank (topRI) singles to dump first —
+                    // those would be stranded above the elevated pile top.
+                    const hasTopRankSingle = safePlays.some(m => playCnt(m) === 1 && playRI(m) === topRI);
+                    if (!hasTopRankSingle) {
+                        const jqSingles = safePlays.filter(m => playCnt(m) === 1 && (playRI(m) === 2 || playRI(m) === 3));
+                        if (jqSingles.length > 0) {
+                            const lowestJQ = jqSingles.reduce((a, b) => playRI(a) <= playRI(b) ? a : b);
+                            if (_popcount(myHand & RANK_MASK[playRI(lowestJQ)]) < 4)
+                                nominate(lowestJQ, 450);
+                        }
+                    }
                 }
             }
 

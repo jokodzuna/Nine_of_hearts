@@ -162,10 +162,12 @@ export class BotfatherBot {
 
         let drawRankMask = 0;
         let drawHighCount = 0;  // how many Q/K/A are in the top 3 pile cards
+        let drawMidCount  = 0;  // how many Jacks (rank 2) are in the top 3 pile cards
         for (let i = 0; i < drawCount; i++) {
             const dri = state.pile[state.pileSize - 1 - i] >> 2;
             drawRankMask |= (1 << dri);
             if (dri >= 3) drawHighCount++;
+            if (dri === 2) drawMidCount++;
         }
         const drawHasAce  = !!(drawRankMask & (1 << 5));
         const drawHasKing = !!(drawRankMask & (1 << 4));
@@ -363,8 +365,9 @@ export class BotfatherBot {
                 const hasLowerSingle = !riskFinishingHand && (oppMinCards > 4) && playMoves.some(
                     pm => playCnt(pm) === 1 && playRI(pm) < r && playRI(pm) <= 3 && playRI(pm) >= topRI
                 );
-                const aceFinishThreat = oppMinCards <= 3 && oppEstAces > 0;
-                const blocksThreat = oppMaxQuadRank >= 0 && oppMaxQuadRank < r;
+                const _oppBelowQuadR = opps.some(p => { for (let _r = 0; _r < r; _r++) if (_popcount(state.hands[p] & RANK_MASK[_r]) > 0) return true; return false; });
+                const aceFinishThreat = oppMinCards <= 3 && oppEstAces > 0 && _oppBelowQuadR;
+                const blocksThreat = oppMaxQuadRank >= topRI && oppMaxQuadRank < r;
                 const score = (aceFinishThreat || blocksThreat) ? 2500 + r : (riskFinishingHand ? 900 + r : 900);
                 if (!hasLowerSingle || blocksThreat) nominate(m, score);
             }
@@ -374,9 +377,12 @@ export class BotfatherBot {
         // RULE 3.5 — Draw to complete a junk quad (rank 9–Q)
         // ==============================================================
         // oppHasQuad / oppMaxQuadRank defined above before R3.
+        const _newTopRI35 = state.pileSize > drawCount ? (state.pile[state.pileSize - 1 - drawCount] >> 2) : 0;
+        const _drawFreesOpp = _newTopRI35 < topRI
+                && opps.some(p => { for (let _r = 0; _r < topRI; _r++) if (_popcount(state.hands[p] & RANK_MASK[_r]) > 0) return true; return false; });
         if (drawMove !== null && myAces >= safeAceMin && stuckCount > 0
                 && (oppMinCards > 3 || (oppEstAces === 0 && oppEstKings === 0 && oppMinCards > 1))
-                && state.pileSize > 4 && !oppHasQuad) {
+                && state.pileSize > 4 && !oppHasQuad && !_drawFreesOpp) {
             for (let r = 0; r <= 3; r++) {
                 const inHand = _popcount(myHand & RANK_MASK[r]);
                 if (inHand < 1 || inHand > 3) continue;
@@ -497,6 +503,13 @@ export class BotfatherBot {
                     && myKings <= 2 && oppMinCards > 4 && stuckCount > 0)
                 nominate(drawMove, 1625);
 
+            // R5-reclaim-kings: pile has ≥2 high cards incl. a King, opp has ≤2 cards with no K.
+            // Playing K would grow the pile; opp then draws those Kings back.
+            // Drawing now reclaims them for BF while opp stays stuck.
+            if (drawMove !== null && drawHasKing && drawHighCount >= 2
+                    && oppMinCards <= 2 && oppEstKings === 0 && stuckCount > 0)
+                nominate(drawMove, 1603);
+
             // K-dump recovery: opp just played all Ks into pile — draw to reclaim 3 rather than
             // wasting Aces (which opp would draw back along with Ks)
             if (drawMove !== null && myKings === 0 && oppEstKings === 0 && state.pileSize > 4)
@@ -549,6 +562,20 @@ export class BotfatherBot {
                     nominate(aceMoves[0], 1580);
             }
 
+            // R5-draw-lower-quad: drawing completes a rank<4 quad (Q/J/10/9) at K-top.
+            // A one-shot 4-card dump later is worth more than playing a lone K now,
+            // especially when BF is K-disadvantaged and the quad unblocks stuck lower cards.
+            if (drawMove !== null && stuckCount > 0 && myAces >= safeAceMin) {
+                for (let _r5 = 0; _r5 <= 3; _r5++) {
+                    const _ih = _popcount(myHand & RANK_MASK[_r5]);
+                    if (_ih < 1 || _ih > 3) continue;
+                    let _id = 0;
+                    for (let i = 0; i < drawCount; i++)
+                        if ((state.pile[state.pileSize - 1 - i] >> 2) === _r5) _id++;
+                    if (_ih + _id >= 4) { nominate(drawMove, 1595); break; }
+                }
+            }
+
             // R5-quad-K-play: BF has a winning quad — play K to escalate even if K-disadvantaged.
             // The quad (4Q/4J) clears the hand once top drops to Q/J level; K count is irrelevant.
             if (kingMoves.length > 0 && hasQuad)
@@ -562,6 +589,22 @@ export class BotfatherBot {
         // RULE 6 — Top ≤ Q: junk-dump phase
         // ==============================================================
         if (topRI <= 3) {
+            // R6-steal-pile: pile has ≥2 high/mid cards (Q+) that opp would absorb on their
+            // forced-draw turn if BF escalates with A. Drawing intercepts them first.
+            // Score 960 beats R3c-4A-dominance (950) to override the A-play in this case.
+            if (drawMove !== null && drawHighCount >= 2 && myAces >= safeAceMin
+                    && stuckCount > 0 && oppMinCards >= 2)
+                nominate(drawMove, 960);
+
+            // R6-steal-jacks: pile has ≥2 drawable Jacks and opp holds Jacks.
+            // If BF escalates Q→A, opp's forced draw picks up those Jacks giving opp J×3+.
+            // Drawing now intercepts them. Score 961 (above R6-steal-pile when Qs are absent).
+            if (drawMove !== null && drawMidCount >= 2 && myAces >= safeAceMin
+                    && stuckCount > 0 && oppMinCards >= 2) {
+                const _oppJsSJ = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[2]), 0);
+                if (_oppJsSJ >= 1) nominate(drawMove, 961);
+            }
+
             let safePlays = [...playMoves];
             if (myAces === 1 && myTotal > 2) {
                 const filtered = safePlays.filter(m => playRI(m) !== 5);
@@ -589,7 +632,8 @@ export class BotfatherBot {
                 // BF's K×4 forces draws at will, so just dump 9s/10s naturally.
                 const myJs   = _popcount(myHand & RANK_MASK[2]);
                 const opp10s = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[1]), 0);
-                if (myJs >= 1 && opp10s >= 1 && state.pileSize > 3 && (oppEstAces > 0 || (oppEstKings > 0 && myKings <= oppEstKings))) {
+                if (myJs >= 1 && opp10s >= 1 && state.pileSize > 3 && (oppEstAces > 0 || (oppEstKings > 0 && myKings <= oppEstKings))
+                        && !safePlays.some(m => playCnt(m) === 1 && playRI(m) === 1)) {
                     const jSkip = safePlays.filter(m => playRI(m) === 2 && playCnt(m) === 1);
                     if (jSkip.length > 0) nominate(jSkip[0], 240);
                 }
@@ -608,9 +652,28 @@ export class BotfatherBot {
                 // Guard: only skip if BF has no low junk (9/10) to dump first.
                 if (oppJs >= 1 && myKings >= 2 && myKings > oppEstKings && myAces >= safeAceMin
                         && (!safePlays.some(m => playCnt(m) === 1 && playRI(m) < 4)
-                            || (myAces > oppEstAces && stuckCount > 0))) {
+                            || (myAces > oppEstAces && stuckCount > 0 && oppJs >= 3))) {
                     const kSkip = safePlays.filter(m => playRI(m) === 4);
                     if (kSkip.length > 0) nominate(kSkip[0], 480);
+                }
+
+                // R6-Q-elevate: at 9/10-top with stuck 9s, jump to Q to trap opp's J/10/9 and
+                // burn opp's Q response. Better than playing A prematurely — saves A/K for later.
+                // Score 955 beats R3c-4A-dominance (950) so Q is preferred over A here.
+                if (myQs >= 1 && stuckCount > 0 && oppQs >= 1 && myAces >= safeAceMin) {
+                    const qElev = safePlays.filter(m => playCnt(m) === 1 && playRI(m) === 3);
+                    if (qElev.length > 0) nominate(qElev[0], 955);
+                }
+            }
+
+            // R6-Q-elevate-Jtop: at J-top, opp still has Jacks — skip to Q to trap them.
+            // Playing BF's J lets opp shed their J; Q-top keeps opp's Js stuck.
+            // Guard: pileSize > 3 — on shallow pile the escalated card comes right back.
+            if (topRI === 2 && myAces >= safeAceMin && state.pileSize > 3) {
+                const _oppJsJt = opps.reduce((s, p) => s + _popcount(state.hands[p] & RANK_MASK[2]), 0);
+                if (_oppJsJt >= 1) {
+                    const qElevJ = safePlays.filter(m => playCnt(m) === 1 && playRI(m) === 3);
+                    if (qElevJ.length > 0) nominate(qElevJ[0], 430);
                 }
             }
 
@@ -619,7 +682,9 @@ export class BotfatherBot {
             // opp's reply at A-top, then opp's Js/Qs stay stuck through the A-chain).
             if (topRI >= 2 && oppEstKings === 0 && stuckCount > 0
                     && myKings >= 2 && myAces >= safeAceMin
-                    && (oppEstAces === 0 || myAces > oppEstAces)) {
+                    && (oppEstAces === 0 || myAces > oppEstAces)
+                    && state.pileSize > 3
+                    && !safePlays.some(m => playCnt(m) === 1 && playRI(m) === 3)) {
                 const kJtop = safePlays.filter(m => playRI(m) === 4 && playCnt(m) === 1);
                 if (kJtop.length > 0) nominate(kJtop[0], 480);
             }
@@ -668,7 +733,9 @@ export class BotfatherBot {
                             || (oppEstKings === 0 && oppEstAces === 0 && myKings >= 1))) {
                         // Quad priority: play quad (rank ≤ K) to trap opp's low cards or force
                         // them to waste high cards — applies before any K/A escalation logic.
-                        if (hasQuad) {
+                        // Skip when BF has strict K-advantage and opp has a K to answer the
+                        // quad-elevation: K-play (2000 below) is more direct and preserves quad.
+                        if (hasQuad && !(myKings > oppEstKings && oppEstKings > 0 && myAces >= safeAceMin)) {
                             let oppLowest = 5;
                             for (const p of opps) {
                                 for (let r = 0; r < 6; r++) {
@@ -678,7 +745,10 @@ export class BotfatherBot {
                             // Never dump 4K in R6a: opp either draws all 3 Kings back (oppEstAces=0)
                             // or plays their Ace forcing A-top while BF's Jacks stay stuck (oppEstAces>0).
                             const qm = safePlays.find(m => _popcount(m & 0xFFFFFF) >= 4 && playRI(m) < 4 && (playRI(m) > oppLowest || oppLowest >= topRI));
-                            if (qm) nominate(qm, 2100);
+                            if (qm) {
+                                const _qSingle = safePlays.find(m => playCnt(m) === 1 && playRI(m) === playRI(qm));
+                                nominate(_qSingle ?? qm, 2100);
+                            }
                         }
                         if (oppEstAces === 0 && oppEstKings > 0) {
                             if (myKings > oppEstKings) {
@@ -825,14 +895,20 @@ export class BotfatherBot {
                        : bestScore >= 1625  ? 'R5-opp-no-K-draw'
                        : bestScore >= 1615  ? 'R5-K-shallow-draw'
                        : bestScore >= 1605  ? 'R5-Q-recovery-draw'
+                       : bestScore >= 1603  ? 'R5-reclaim-kings'
                        : bestScore >= 1600  ? 'R5-K-top-play-K'
+                       : bestScore >= 1595  ? 'R5-draw-lower-quad'
                        : bestScore >= 1540  ? 'R5-K-top-fallback'
+                       : bestScore >= 961   ? 'R6-steal-jacks'
+                       : bestScore >= 960   ? 'R6-steal-pile'
+                       : bestScore >= 955   ? 'R6-Q-elevate'
                        : bestScore >= 950   ? 'R3c-4A-dominance'
                        : bestScore >= 900   ? 'R3-quad-dump'
                        : bestScore >= 600   ? 'R6-3ace-aggro'
                        : bestScore >= 500   ? 'R3.5-draw-for-quad'
                        : bestScore >= 480   ? 'R6-K-skip'
                        : bestScore >= 450   ? 'R6-pile-elevation'
+                       : bestScore >= 430   ? 'R6-Q-elevate-Jtop'
                        : bestScore >= 400   ? 'R6b-stuck9s-draw'
                        : bestScore >= 380   ? 'R6-equal-escalate'
                        : bestScore >= 350   ? 'R6-ace-force'

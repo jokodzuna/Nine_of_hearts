@@ -740,6 +740,14 @@ export class BotfatherBot {
                 if (kMoves.length > 0) nominate(kMoves[0], 957);
             }
 
+            // R6-K-reclaim: BF has 3K vs opp's exactly 1K — play K to force opp to spend their
+            // only King, then BF draws to reclaim it (reaching 4K). Next K play traps all opp
+            // non-A cards. Beats R6-Q-elevate (955) so K is preferred over Q here.
+            if (myKings >= 3 && oppEstKings === 1 && myAces >= safeAceMin && stuckCount > 0) {
+                const _kReclaimM = safePlays.find(m => playCnt(m) === 1 && playRI(m) === 4);
+                if (_kReclaimM) nominate(_kReclaimM, 970);
+            }
+
             // R6-Q-elevate-Jtop: at J-top, opp still has Jacks — skip to Q to trap them.
             // Playing BF's J lets opp shed their J; Q-top keeps opp's Js stuck.
             // Guard: pileSize > 3 — on shallow pile the escalated card comes right back.
@@ -1049,6 +1057,7 @@ export class BotfatherBot {
                        : bestScore >= 1600  ? 'R5-K-top-play-K'
                        : bestScore >= 1595  ? 'R5-draw-lower-quad'
                        : bestScore >= 1540  ? 'R5-K-top-fallback'
+                       : bestScore >= 970   ? 'R6-K-reclaim'
                        : bestScore >= 961   ? 'R6-steal-jacks'
                        : bestScore >= 960   ? 'R6-steal-pile'
                        : bestScore >= 957   ? 'R6-K4-no-opp-K'

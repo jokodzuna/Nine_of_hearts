@@ -114,19 +114,26 @@ export function triggerFourOfAKindRipple(pileEl) {
     // Base diameter = 1.5× viewport diagonal so the ring covers all edges at scale 1
     const base  = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2) * 1.5;
 
-    gsap.set(rings, { width: base, height: base, left: cx - base / 2, top: cy - base / 2, scale: 0, opacity: 0 });
-    gsap.fromTo(
-        rings,
-        { scale: 0, opacity: 0.8 },
-        {
-            scale:    1,
-            opacity:  0,
-            duration: 1.2,
-            ease:     'power1.out',
-            stagger:  0.2,
-            onComplete() { gsap.set(rings, { scale: 0, opacity: 0 }); },
-        }
-    );
+    gsap.set(rings, { width: base, height: base, left: cx - base / 2, top: cy - base / 2, scale: 0, opacity: 0, borderWidth: '6px' });
+
+    // Increasing delays so gaps between rings grow outward, mimicking real ripple physics
+    const delays = [0, 0.25, 0.6];
+    rings.forEach((ring, i) => {
+        gsap.fromTo(ring,
+            { scale: 0, opacity: 1, borderWidth: '6px' },
+            {
+                scale:       1,
+                opacity:     0,
+                borderWidth: '1px',
+                duration:    2.2,
+                ease:        'power1.out',
+                delay:       delays[i],
+                onComplete:  i === rings.length - 1
+                    ? () => gsap.set(rings, { scale: 0, opacity: 0, borderWidth: '6px' })
+                    : undefined,
+            }
+        );
+    });
 }
 
 // ---- Deal animation ---------------------------------------------------------

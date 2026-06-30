@@ -82,36 +82,44 @@ function _getSizeForVar(wVar, hVar) {
 
 // ---- Four-of-a-kind ripple -------------------------------------------------
 
-/** Rings are created once per pile element and reused. */
-const _rippleRings = new WeakMap();
+/** Rings are created once (appended to body) and reused across all calls. */
+let _rings = null;
 
-function _getOrCreateRings(pileEl) {
-    if (_rippleRings.has(pileEl)) return _rippleRings.get(pileEl);
-    const rings = [];
+function _getOrCreateRings() {
+    if (_rings) return _rings;
+    _rings = [];
     for (let i = 0; i < 3; i++) {
         const ring = document.createElement('div');
         ring.className = 'pile-ripple-ring';
-        pileEl.appendChild(ring);
-        rings.push(ring);
+        document.body.appendChild(ring);
+        _rings.push(ring);
     }
-    _rippleRings.set(pileEl, rings);
-    return rings;
+    return _rings;
 }
 
 /**
  * Triggers a 3-ring expanding ripple centred on the pile element.
+ * Rings are fixed to the viewport, sized to reach the screen edges.
  * Requires GSAP loaded globally via script tag.
  *
  * @param {HTMLElement} pileEl
  */
 export function triggerFourOfAKindRipple(pileEl) {
     if (!pileEl || typeof gsap === 'undefined') return;
-    const rings = _getOrCreateRings(pileEl);
+    const rings = _getOrCreateRings();
+
+    const rect  = pileEl.getBoundingClientRect();
+    const cx    = rect.left + rect.width  / 2;
+    const cy    = rect.top  + rect.height / 2;
+    // Base diameter = 1.5× viewport diagonal so the ring covers all edges at scale 1
+    const base  = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2) * 1.5;
+
+    gsap.set(rings, { width: base, height: base, left: cx - base / 2, top: cy - base / 2, scale: 0, opacity: 0 });
     gsap.fromTo(
         rings,
         { scale: 0, opacity: 0.8 },
         {
-            scale:    4,
+            scale:    1,
             opacity:  0,
             duration: 1.2,
             ease:     'power1.out',

@@ -222,7 +222,7 @@ function _startGame(cfgOverride = null) {
         PLAYER_IDS[1]   = 'player2Cards';   // Botfather sits at top
         PLAYER_NAMES[1] = 'The Botfather';
     }
-    _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS);
+    _state = isBotfather ? createBotfatherState() : createInitialState(NUM_PLAYERS, cfg.difficulty);
 
     PLAYER_NAMES[0]     = cfg.playerName || 'Player';
     _gameActive         = true;

@@ -50,7 +50,41 @@ export const RANK_VALUES = new Int32Array([9, 10, 11, 12, 13, 14]);
 export const RANK_NAMES  = ['9', '10', 'J', 'Q', 'K', 'A'];
 export const SUIT_NAMES  = ['\u2660', '\u2665', '\u2666', '\u2663'];  // ♠ ♥ ♦ ♣
 
+/** RHV point scores per rank (0=9 … 5=A), used for difficulty-based dealing. */
+export const RHV_VALS = new Float32Array([-25, -5, 5, 15, 30, 50]);
+
 const CARDS_PER_PLAYER = Object.freeze({ 2: 12, 3: 8, 4: 6 });
+
+/** [min, max] RHV interval per difficulty string. */
+const RHV_INTERVALS = {
+    clueless:  [17.5, 25.0],
+    learning:  [10.0, 17.5],
+    strategic: [ 2.5, 10.0],
+    sentient:  [-5.0,  2.5],
+};
+
+// ============================================================
+// RHV Helper
+// ============================================================
+
+/**
+ * Relative Hand Value: sum of RHV_VALS scores for each card in the hand,
+ * divided by the number of cards.  Returns 0 for an empty hand.
+ *
+ * @param {number} mask  24-bit hand bitmask
+ * @returns {number}
+ */
+export function handRHV(mask) {
+    let sum = 0, count = 0;
+    let m = (mask & 0xFFFFFF) | 0;
+    while (m) {
+        const lb = m & (-m);
+        sum += RHV_VALS[(31 - Math.clz32(lb)) >> 2];
+        count++;
+        m &= ~lb;
+    }
+    return count > 0 ? sum / count : 0;
+}
 
 // ============================================================
 // Bit Utilities  (no allocation, no branches in hot path)
@@ -153,14 +187,30 @@ function shuffle(arr) {
  *       2      |       12         |  9♥ holder ends up with 11
  *
  * @param {2|3|4} numPlayers
+ * @param {string|null} [difficulty]  Optional difficulty key ('clueless'|'learning'|'strategic'|'sentient').
+ *   When provided, the deal is resampled until player 0's hand RHV falls within
+ *   the matching [min, max] interval defined in RHV_INTERVALS.
  * @returns {object}  game state ready for getPossibleMoves
  */
-export function createInitialState(numPlayers = 4) {
+export function createInitialState(numPlayers = 4, difficulty = null) {
     const cardsEach = CARDS_PER_PLAYER[numPlayers];
+    const interval  = difficulty ? (RHV_INTERVALS[difficulty] ?? null) : null;
 
     const deck = new Uint8Array(24);
     for (let i = 0; i < 24; i++) deck[i] = i;
-    shuffle(deck);
+
+    // Shuffle, Check, Repeat — reshuffle until player 0's hand RHV is in range.
+    while (true) {
+        shuffle(deck);
+        if (interval) {
+            let hand0 = 0;
+            for (let c = 0; c < cardsEach; c++) hand0 |= (1 << deck[c]);
+            if (hand0 & NINE_HEARTS_BIT) hand0 &= ~NINE_HEARTS_BIT;
+            const rhv = handRHV(hand0);
+            if (rhv < interval[0] || rhv > interval[1]) continue;
+        }
+        break;
+    }
 
     const state = createState(numPlayers);
 

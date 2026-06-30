@@ -38,7 +38,7 @@ import {
     DRAW_FLAG,
     RANK_MASK,
 } from './game-logic.js';
-import { Strategist2Bot } from './strategist2-bot.js';
+import { BotfatherBot } from './strategist2-botfather.js';
 
 function _pc(x) {
     x = (x | 0);
@@ -73,7 +73,7 @@ export class SentientBot {
         this._cardKnowledge = null;
         this._pileSeenMask  = 0;
         this._inSimulation  = false;
-        this._s2            = new Strategist2Bot(); // full delegate for 2P stage
+        this._s2            = new BotfatherBot(); // full delegate for 2P stage
     }
 
     observeMove(state, move) {
@@ -325,7 +325,7 @@ export class SentientBot {
     // ============================================================
 
     _endgameSearch(state, moves, myP) {
-        const simBot = new Strategist2Bot(); // S2 as rollout policy (full-info in sim mode)
+        const simBot = new BotfatherBot(); // BF as rollout policy (full-info in sim mode)
         simBot._inSimulation = true;
         let bestMove = moves[0], bestOutcome = -Infinity;
         for (const move of moves) {

@@ -513,6 +513,17 @@ function _addCardToPile(cardData) {
     card.classList.add('dealt');
     pile.appendChild(card);
     if (!isBase) setTimeout(() => Audio.playCardSound(), 60);
+
+    // Detect four-of-a-kind: last 4 pile children all share the same rank
+    const n = pile.children.length;
+    if (n >= 4) {
+        const rank = pile.children[n - 1].dataset.rank;
+        if (pile.children[n - 2].dataset.rank === rank &&
+            pile.children[n - 3].dataset.rank === rank &&
+            pile.children[n - 4].dataset.rank === rank) {
+            Animations.triggerFourOfAKindRipple(pile);
+        }
+    }
 }
 
 function _removeFromPile(count) {

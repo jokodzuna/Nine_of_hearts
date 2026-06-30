@@ -6,7 +6,8 @@
 // Add new animation functions here as the game grows.
 //
 // Current animations:
-//   - animateDealing   (card deal from pile to all players)
+//   - animateDealing          (card deal from pile to all players)
+//   - triggerFourOfAKindRipple (3-ring pulse on the pile when a quad is played)
 // ============================================================
 
 import { HUMAN_ID, SIDE_IDS, DEAL_ORDER } from './constants.js';
@@ -79,7 +80,48 @@ function _getSizeForVar(wVar, hVar) {
     return { w: r.width, h: r.height };
 }
 
-// ---- Animations -------------------------------------------------------------
+// ---- Four-of-a-kind ripple -------------------------------------------------
+
+/** Rings are created once per pile element and reused. */
+const _rippleRings = new WeakMap();
+
+function _getOrCreateRings(pileEl) {
+    if (_rippleRings.has(pileEl)) return _rippleRings.get(pileEl);
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+        const ring = document.createElement('div');
+        ring.className = 'pile-ripple-ring';
+        pileEl.appendChild(ring);
+        rings.push(ring);
+    }
+    _rippleRings.set(pileEl, rings);
+    return rings;
+}
+
+/**
+ * Triggers a 3-ring expanding ripple centred on the pile element.
+ * Requires GSAP loaded globally via script tag.
+ *
+ * @param {HTMLElement} pileEl
+ */
+export function triggerFourOfAKindRipple(pileEl) {
+    if (!pileEl || typeof gsap === 'undefined') return;
+    const rings = _getOrCreateRings(pileEl);
+    gsap.fromTo(
+        rings,
+        { scale: 0, opacity: 0.8 },
+        {
+            scale:    4,
+            opacity:  0,
+            duration: 1.2,
+            ease:     'power1.out',
+            stagger:  0.2,
+            onComplete() { gsap.set(rings, { scale: 0, opacity: 0 }); },
+        }
+    );
+}
+
+// ---- Deal animation ---------------------------------------------------------
 
 /**
  * Animates cards flying from the pile/deck to each player's container, one

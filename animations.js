@@ -99,26 +99,10 @@ export function triggerFourOfAKindRipple(pileEl) {
     if (_activeTl) {
         _activeTl.kill();
         gsap.set(pileEl, { clearProps: 'transform,boxShadow' });
-        if (gameTable) gsap.set(gameTable, { clearProps: 'x,y' });
+        if (gameTable) gameTable.classList.remove('board-shaking');
     }
 
     gsap.set(pileEl, { transformOrigin: '50% 50%' });
-
-    // Board shake sub-timeline — added to the main tl at 'springBack'
-    // 10 steps × 55 ms = 0.55 s, x/y amplitude tapering to 0
-    let shakeTl = null;
-    if (gameTable) {
-        gsap.killTweensOf(gameTable);
-        const steps = [
-            [ 9, -4], [-8,  3], [ 7, -3], [-6,  2], [ 5, -2],
-            [-4,  1], [ 3, -1], [-2,  0], [ 1,  0], [ 0,  0],
-        ];
-        shakeTl = gsap.timeline({
-            paused:     true,
-            onComplete: () => gsap.set(gameTable, { clearProps: 'x,y' }),
-        });
-        steps.forEach(([x, y]) => shakeTl.to(gameTable, { x, y, duration: 0.055, ease: 'none' }));
-    }
 
     const tl = gsap.timeline({
         onComplete() {
@@ -153,8 +137,19 @@ export function triggerFourOfAKindRipple(pileEl) {
         ease:      'back.out(2)',
     }, 'springBack');
 
-    // Board shake — runs in parallel with Stage 3 (starts at springBack)
-    if (shakeTl) tl.add(shakeTl, 'springBack');
+    // Board shake — CSS animation triggered at springBack via tl.call
+    if (gameTable) {
+        tl.call(() => {
+            gameTable.classList.remove('board-shaking'); // force re-trigger if already shaking
+            void gameTable.offsetWidth;                  // reflow to restart animation
+            gameTable.classList.add('board-shaking');
+            gameTable.addEventListener(
+                'animationend',
+                () => gameTable.classList.remove('board-shaking'),
+                { once: true }
+            );
+        }, [], 'springBack');
+    }
 }
 
 // ---- Deal animation ---------------------------------------------------------

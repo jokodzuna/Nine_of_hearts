@@ -8,22 +8,6 @@
     <script src="gsap.min.js"></script>
 </head>
 <body>
-    <!-- SVG filter for four-of-a-kind fabric distortion ripple -->
-    <svg id="felt-ripple-svg" xmlns="http://www.w3.org/2000/svg"
-         style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
-        <defs>
-            <filter id="felt-ripple-filter" x="-50%" y="-50%" width="200%" height="200%"
-                    color-interpolation-filters="sRGB">
-                <feTurbulence type="fractalNoise" baseFrequency="0.04 0.025"
-                              numOctaves="3" seed="5" result="noise"/>
-                <feDisplacementMap id="felt-ripple-displace"
-                                   in="SourceGraphic" in2="noise"
-                                   scale="0"
-                                   xChannelSelector="R" yChannelSelector="G"/>
-            </filter>
-        </defs>
-    </svg>
-
     <div id="welcomeScreen">
         <!-- Split title screen — each half clips 50 % of the same centred title.
              After 2 s the two halves slide apart as lift doors. -->

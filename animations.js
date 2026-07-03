@@ -80,55 +80,13 @@ function _getSizeForVar(wVar, hVar) {
     return { w: r.width, h: r.height };
 }
 
-// ---- Four-of-a-kind ripple -------------------------------------------------
+// ---- Four-of-a-kind pile slam ----------------------------------------------
 
-/** Active ripple timeline — tracked so a rapid re-trigger kills the previous one cleanly. */
+/** Active slam timeline — tracked so a rapid re-trigger resets cleanly. */
 let _activeTl = null;
 
-/** Rings — created once on body, reused. */
-let _rings = null;
-
-function _getOrCreateRings() {
-    if (_rings) return _rings;
-    _rings = [];
-    for (let i = 0; i < 3; i++) {
-        const ring = document.createElement('div');
-        ring.className = 'pile-ripple-ring';
-        document.body.appendChild(ring);
-        _rings.push(ring);
-    }
-    return _rings;
-}
-
 /**
- * Felt overlay — same gradient as .game-container, z-index 4 (below rings),
- * has the SVG displacement filter applied so it distorts like fabric.
- */
-let _feltOverlay = null;
-
-function _getOrCreateFeltOverlay() {
-    if (_feltOverlay) return _feltOverlay;
-    _feltOverlay = document.createElement('div');
-    _feltOverlay.style.cssText = [
-        'position:fixed',
-        'inset:0',
-        'background:radial-gradient(ellipse at center,#1a7a3e 0%,#0d5c2b 50%,#084018 100%)',
-        'filter:url(#felt-ripple-filter)',
-        'opacity:0',
-        'pointer-events:none',
-        'z-index:4',
-    ].join(';');
-    document.body.appendChild(_feltOverlay);
-    return _feltOverlay;
-}
-
-/**
- * Four-stage sequence — heavy card slam → fabric ripple:
- *   Stage 1  Pile compresses into felt (175 ms, power2.in)
- *   Stage 2  Hold at compressed state (75 ms)
- *   Stage 3  Spring back with overshoot (450 ms, back.out) — rings + distortion fire here
- *   Stage 4  Rings expand to screen edges; SVG displacement overlay fades in/out
- *
+ * Pile compress → hold → spring-back sequence on four-of-a-kind.
  * Requires GSAP loaded globally via script tag (gsap.min.js).
  *
  * @param {HTMLElement} pileEl
@@ -136,42 +94,13 @@ function _getOrCreateFeltOverlay() {
 export function triggerFourOfAKindRipple(pileEl) {
     if (!pileEl || typeof gsap === 'undefined') return;
 
-    const RING_DURATION = 2.2;
-    console.log(
-        `[4-of-a-kind] ring duration: ${RING_DURATION}s | ` +
-        `total sequence ≈ ${(0.25 + 0.5 + RING_DURATION).toFixed(2)}s`
-    );
-
-    const rings       = _getOrCreateRings();
-    const feltOverlay = _getOrCreateFeltOverlay();
-    const displaceEl  = document.getElementById('felt-ripple-displace');
-
-    // Kill any running sequence from a rapid re-trigger
     if (_activeTl) {
         _activeTl.kill();
-        gsap.set(pileEl,      { clearProps: 'transform,boxShadow' });
-        gsap.set(rings,       { scale: 0, opacity: 0, borderWidth: '5px' });
-        gsap.set(feltOverlay, { opacity: 0 });
-        if (displaceEl) gsap.set(displaceEl, { attr: { scale: 0 } });
+        gsap.set(pileEl, { clearProps: 'transform,boxShadow' });
     }
 
-    // Position rings centred on pile; size to cover every screen edge at scale 1
-    const rect = pileEl.getBoundingClientRect();
-    const cx   = rect.left + rect.width  / 2;
-    const cy   = rect.top  + rect.height / 2;
-    const base = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2) * 1.5;
-    gsap.set(rings, {
-        width: base, height: base,
-        left: cx - base / 2, top: cy - base / 2,
-        scale: 0, opacity: 0, borderWidth: '5px',
-    });
     gsap.set(pileEl, { transformOrigin: '50% 50%' });
-    if (displaceEl) gsap.set(displaceEl, { attr: { scale: 0 } });
 
-    const fromRing = { scale: 0, opacity: 0.9, borderWidth: '5px' };
-    const toRing   = { scale: 1, opacity: 0, borderWidth: '1px', duration: RING_DURATION, ease: 'power2.in' };
-
-    // ── GSAP timeline ──────────────────────────────────────────────────────
     const tl = gsap.timeline({
         onComplete() {
             gsap.set(pileEl, { clearProps: 'transform,boxShadow' });
@@ -191,32 +120,13 @@ export function triggerFourOfAKindRipple(pileEl) {
     // Stage 2 — hold
     tl.to(pileEl, { duration: 0.075 });
 
-    // ── Label at the exact start of the spring-back ───────────────────────
-    tl.addLabel('springBack');
-
-    // Stage 3 — spring back with overshoot (at springBack)
+    // Stage 3 — spring back with overshoot
     tl.to(pileEl, {
         scale:     1.0,
         boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         duration:  0.45,
         ease:      'back.out(2)',
-    }, 'springBack');
-
-    // Stage 4a — rings start at springBack, gaps grow with increasing offsets
-    tl.fromTo(rings[0], fromRing, { ...toRing },                                                              'springBack');
-    tl.fromTo(rings[1], fromRing, { ...toRing },                                                              'springBack+=0.2');
-    tl.fromTo(rings[2], fromRing, { ...toRing,
-        onComplete: () => gsap.set(rings, { scale: 0, opacity: 0, borderWidth: '5px' }),
-    },                                                                                                        'springBack+=0.5');
-
-    // Stage 4b — SVG fabric distortion: burst in then decay (at springBack)
-    if (displaceEl) {
-        tl.to(displaceEl,  { attr: { scale: 40 }, duration: 0.35, ease: 'power2.out' }, 'springBack');
-        tl.to(displaceEl,  { attr: { scale: 0  }, duration: 1.8,  ease: 'power1.in'  }, 'springBack+=0.35');
-        tl.fromTo(feltOverlay, { opacity: 0 },
-            { opacity: 0.28, duration: 0.35, ease: 'power2.out' },                      'springBack');
-        tl.to(feltOverlay, { opacity: 0, duration: 1.8, ease: 'power1.in' },            'springBack+=0.35');
-    }
+    });
 }
 
 // ---- Deal animation ---------------------------------------------------------

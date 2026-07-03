@@ -1891,10 +1891,10 @@ body.welcome-active #tapToStart {
 .pile-ripple-ring {
     position: fixed;
     border-radius: 50%;
-    border: 5px solid rgba(0, 35, 12, 0.28);
+    border: 5px solid rgba(255, 255, 255, 0.6);
     background: transparent;
-    box-shadow: 0 0 10px 4px rgba(0, 25, 8, 0.12);
-    mix-blend-mode: multiply;
+    box-shadow: 0 0 12px 5px rgba(255, 255, 255, 0.15);
+    mix-blend-mode: overlay;
     opacity: 0;
     pointer-events: none;
     z-index: 5;

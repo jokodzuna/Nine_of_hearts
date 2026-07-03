@@ -82,6 +82,9 @@ function _getSizeForVar(wVar, hVar) {
 
 // ---- Four-of-a-kind ripple -------------------------------------------------
 
+/** Active ripple timeline — tracked so a rapid re-trigger kills the previous one cleanly. */
+let _activeTl = null;
+
 /** Rings — created once on body, reused. */
 let _rings = null;
 
@@ -134,21 +137,23 @@ export function triggerFourOfAKindRipple(pileEl) {
     if (!pileEl || typeof gsap === 'undefined') return;
 
     const RING_DURATION = 2.2;
-    const RING_DELAYS   = [0, 0.2, 0.5];
     console.log(
-        `[4-of-a-kind] ring duration: ${RING_DURATION}s | delays: ${RING_DELAYS} | ` +
-        `total sequence ≈ ${(0.25 + RING_DELAYS[2] + RING_DURATION).toFixed(2)}s`
+        `[4-of-a-kind] ring duration: ${RING_DURATION}s | ` +
+        `total sequence ≈ ${(0.25 + 0.5 + RING_DURATION).toFixed(2)}s`
     );
 
     const rings       = _getOrCreateRings();
     const feltOverlay = _getOrCreateFeltOverlay();
     const displaceEl  = document.getElementById('felt-ripple-displace');
 
-    // Kill any in-flight tweens from a rapid double-trigger
-    gsap.killTweensOf(pileEl);
-    gsap.killTweensOf(rings);
-    gsap.killTweensOf(feltOverlay);
-    if (displaceEl) gsap.killTweensOf(displaceEl);
+    // Kill any running sequence from a rapid re-trigger
+    if (_activeTl) {
+        _activeTl.kill();
+        gsap.set(pileEl,      { clearProps: 'transform,boxShadow' });
+        gsap.set(rings,       { scale: 0, opacity: 0, borderWidth: '5px' });
+        gsap.set(feltOverlay, { opacity: 0 });
+        if (displaceEl) gsap.set(displaceEl, { attr: { scale: 0 } });
+    }
 
     // Position rings centred on pile; size to cover every screen edge at scale 1
     const rect = pileEl.getBoundingClientRect();
@@ -161,11 +166,19 @@ export function triggerFourOfAKindRipple(pileEl) {
         scale: 0, opacity: 0, borderWidth: '5px',
     });
     gsap.set(pileEl, { transformOrigin: '50% 50%' });
+    if (displaceEl) gsap.set(displaceEl, { attr: { scale: 0 } });
 
-    // ── GSAP timeline: stages 1–3 on the pile element ──────────────────────
+    const fromRing = { scale: 0, opacity: 0.9, borderWidth: '5px' };
+    const toRing   = { scale: 1, opacity: 0, borderWidth: '1px', duration: RING_DURATION, ease: 'power2.in' };
+
+    // ── GSAP timeline ──────────────────────────────────────────────────────
     const tl = gsap.timeline({
-        onComplete: () => gsap.set(pileEl, { clearProps: 'transform,boxShadow' }),
+        onComplete() {
+            gsap.set(pileEl, { clearProps: 'transform,boxShadow' });
+            _activeTl = null;
+        },
     });
+    _activeTl = tl;
 
     // Stage 1 — press into felt
     tl.to(pileEl, {
@@ -178,64 +191,32 @@ export function triggerFourOfAKindRipple(pileEl) {
     // Stage 2 — hold
     tl.to(pileEl, { duration: 0.075 });
 
-    // Stage 3 — spring back; kick off Stage 4 at the exact moment the pile rebounds
+    // ── Label at the exact start of the spring-back ───────────────────────
+    tl.addLabel('springBack');
+
+    // Stage 3 — spring back with overshoot (at springBack)
     tl.to(pileEl, {
         scale:     1.0,
         boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         duration:  0.45,
         ease:      'back.out(2)',
-        onStart() {
-            // ── Stage 4a: rings expand to screen edges ──────────────────
-            rings.forEach((ring, i) => {
-                gsap.fromTo(ring,
-                    { scale: 0, opacity: 0.9, borderWidth: '5px' },
-                    {
-                        scale:       1,
-                        opacity:     0,
-                        borderWidth: '1px',
-                        duration:    RING_DURATION,
-                        ease:        'power2.in',
-                        delay:       RING_DELAYS[i],
-                        onComplete:  i === rings.length - 1
-                            ? () => gsap.set(rings, { scale: 0, opacity: 0, borderWidth: '5px' })
-                            : undefined,
-                    }
-                );
-            });
+    }, 'springBack');
 
-            // ── Stage 4b: SVG felt distortion ───────────────────────────
-            if (displaceEl) {
-                gsap.set(displaceEl, { attr: { scale: 0 } });
+    // Stage 4a — rings start at springBack, gaps grow with increasing offsets
+    tl.fromTo(rings[0], fromRing, { ...toRing },                                                              'springBack');
+    tl.fromTo(rings[1], fromRing, { ...toRing },                                                              'springBack+=0.2');
+    tl.fromTo(rings[2], fromRing, { ...toRing,
+        onComplete: () => gsap.set(rings, { scale: 0, opacity: 0, borderWidth: '5px' }),
+    },                                                                                                        'springBack+=0.5');
 
-                // Displacement burst: 0 → 40 (fast), then 40 → 0 (slow decay)
-                gsap.to(displaceEl, {
-                    attr:     { scale: 40 },
-                    duration: 0.35,
-                    ease:     'power2.out',
-                    onComplete() {
-                        gsap.to(displaceEl, {
-                            attr:     { scale: 0 },
-                            duration: 1.8,
-                            ease:     'power1.in',
-                        });
-                    },
-                });
-
-                // Felt overlay fades in with the burst then fades back out
-                gsap.fromTo(feltOverlay,
-                    { opacity: 0 },
-                    {
-                        opacity:  0.28,
-                        duration: 0.35,
-                        ease:     'power2.out',
-                        onComplete() {
-                            gsap.to(feltOverlay, { opacity: 0, duration: 1.8, ease: 'power1.in' });
-                        },
-                    }
-                );
-            }
-        },
-    });
+    // Stage 4b — SVG fabric distortion: burst in then decay (at springBack)
+    if (displaceEl) {
+        tl.to(displaceEl,  { attr: { scale: 40 }, duration: 0.35, ease: 'power2.out' }, 'springBack');
+        tl.to(displaceEl,  { attr: { scale: 0  }, duration: 1.8,  ease: 'power1.in'  }, 'springBack+=0.35');
+        tl.fromTo(feltOverlay, { opacity: 0 },
+            { opacity: 0.28, duration: 0.35, ease: 'power2.out' },                      'springBack');
+        tl.to(feltOverlay, { opacity: 0, duration: 1.8, ease: 'power1.in' },            'springBack+=0.35');
+    }
 }
 
 // ---- Deal animation ---------------------------------------------------------

@@ -40,6 +40,11 @@ let _longPressTimer = null;
 
 let _connOverlay = null;  // full-screen connection-lost overlay element
 
+// Batch counter for 4-of-a-kind detection
+let _4kCount = 0;
+let _4kRank  = null;
+let _4kTimer = null;
+
 let _timer = { rafId: null, endTime: 0, isHuman: false, lastTick: null, container: null };
 
 // ============================================================
@@ -514,16 +519,16 @@ function _addCardToPile(cardData) {
     pile.appendChild(card);
     if (!isBase) setTimeout(() => Audio.playCardSound(), 60);
 
-    // Detect four-of-a-kind: last 4 pile children all share the same rank
-    const n = pile.children.length;
-    if (n >= 4) {
-        const rank = pile.children[n - 1].dataset.rank;
-        if (pile.children[n - 2].dataset.rank === rank &&
-            pile.children[n - 3].dataset.rank === rank &&
-            pile.children[n - 4].dataset.rank === rank) {
-            Animations.triggerFourOfAKindRipple(pile);
-        }
-    }
+    // Detect four-of-a-kind: only when 4 cards of the same rank are played
+    // in a single move (all arrive synchronously in one loop iteration).
+    if (cardData.rank === _4kRank) { _4kCount++; }
+    else { _4kCount = 1; _4kRank = cardData.rank; }
+    clearTimeout(_4kTimer);
+    _4kTimer = setTimeout(() => {
+        if (_4kCount === 4) Animations.triggerFourOfAKindRipple(pile);
+        _4kCount = 0;
+        _4kRank  = null;
+    }, 0);
 }
 
 function _removeFromPile(count) {

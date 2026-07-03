@@ -137,6 +137,22 @@ export function triggerFourOfAKindRipple(pileEl) {
         ease:      'back.out(2)',
     }, 'springBack');
 
+    // "FOUR OF A KIND!" message — springs in right as pile finishes rebounding
+    tl.call(() => {
+        const r  = pileEl.getBoundingClientRect();
+        const msg = document.createElement('div');
+        msg.className = 'fourofakind-msg';
+        msg.textContent = 'FOUR OF A KIND!';
+        msg.style.left = `${r.left + r.width / 2}px`;
+        msg.style.top  = `${r.top  + r.height / 2}px`;
+        msg.style.animation = 'fourofakind-spring 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards';
+        document.body.appendChild(msg);
+        setTimeout(() => {
+            msg.style.animation = 'fourofakind-fade 0.15s ease-in forwards';
+            setTimeout(() => msg.remove(), 150);
+        }, 800);
+    }, [], 'springBack+=0.45');
+
     // Board shake — CSS animation triggered at springBack via tl.call
     if (gameTable) {
         tl.call(() => {

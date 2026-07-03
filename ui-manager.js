@@ -525,7 +525,8 @@ function _addCardToPile(cardData) {
     else { _4kCount = 1; _4kRank = cardData.rank; }
     clearTimeout(_4kTimer);
     _4kTimer = setTimeout(() => {
-        if (_4kCount === 4) Animations.triggerFourOfAKindRipple(pile);
+        if (_4kCount === 4)                        Animations.triggerFourOfAKindRipple(pile, 'four');
+        else if (_4kCount === 3 && _4kRank === '9') Animations.triggerFourOfAKindRipple(pile, 'three-nines');
         _4kCount = 0;
         _4kRank  = null;
     }, 0);

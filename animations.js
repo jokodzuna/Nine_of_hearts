@@ -91,7 +91,7 @@ let _activeTl = null;
  *
  * @param {HTMLElement} pileEl
  */
-export function triggerFourOfAKindRipple(pileEl) {
+export function triggerFourOfAKindRipple(pileEl, type = 'four') {
     if (!pileEl || typeof gsap === 'undefined') return;
 
     const gameTable = document.querySelector('.game-table');
@@ -142,7 +142,7 @@ export function triggerFourOfAKindRipple(pileEl) {
         const r  = pileEl.getBoundingClientRect();
         const msg = document.createElement('div');
         msg.className = 'fourofakind-msg';
-        msg.innerHTML = 'FOUR OF<br>A KIND!';
+        msg.innerHTML = type === 'three-nines' ? 'THREE<br>NINES' : 'FOUR OF<br>A KIND!';
         msg.style.left = `${r.left + r.width / 2}px`;
         msg.style.top  = `${r.top  + r.height / 2}px`;
         msg.style.animation = 'fourofakind-spring 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards';

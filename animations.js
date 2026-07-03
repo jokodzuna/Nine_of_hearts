@@ -94,12 +94,31 @@ let _activeTl = null;
 export function triggerFourOfAKindRipple(pileEl) {
     if (!pileEl || typeof gsap === 'undefined') return;
 
+    const gameTable = document.querySelector('.game-table');
+
     if (_activeTl) {
         _activeTl.kill();
         gsap.set(pileEl, { clearProps: 'transform,boxShadow' });
+        if (gameTable) gsap.set(gameTable, { clearProps: 'x,y' });
     }
 
     gsap.set(pileEl, { transformOrigin: '50% 50%' });
+
+    // Board shake sub-timeline — added to the main tl at 'springBack'
+    // 10 steps × 55 ms = 0.55 s, x/y amplitude tapering to 0
+    let shakeTl = null;
+    if (gameTable) {
+        gsap.killTweensOf(gameTable);
+        const steps = [
+            [ 9, -4], [-8,  3], [ 7, -3], [-6,  2], [ 5, -2],
+            [-4,  1], [ 3, -1], [-2,  0], [ 1,  0], [ 0,  0],
+        ];
+        shakeTl = gsap.timeline({
+            paused:     true,
+            onComplete: () => gsap.set(gameTable, { clearProps: 'x,y' }),
+        });
+        steps.forEach(([x, y]) => shakeTl.to(gameTable, { x, y, duration: 0.055, ease: 'none' }));
+    }
 
     const tl = gsap.timeline({
         onComplete() {
@@ -117,16 +136,25 @@ export function triggerFourOfAKindRipple(pileEl) {
         ease:      'power2.in',
     });
 
+    // Vibration at hold moment (end of Stage 1 / start of Stage 2)
+    tl.call(() => { if (navigator.vibrate) navigator.vibrate([30, 20, 80, 20, 150]); });
+
     // Stage 2 — hold
     tl.to(pileEl, { duration: 0.075 });
 
-    // Stage 3 — spring back with overshoot
+    // ── springBack label ─────────────────────────────────────────────────
+    tl.addLabel('springBack');
+
+    // Stage 3 — spring back with overshoot (at springBack)
     tl.to(pileEl, {
         scale:     1.0,
         boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
         duration:  0.45,
         ease:      'back.out(2)',
-    });
+    }, 'springBack');
+
+    // Board shake — runs in parallel with Stage 3 (starts at springBack)
+    if (shakeTl) tl.add(shakeTl, 'springBack');
 }
 
 // ---- Deal animation ---------------------------------------------------------

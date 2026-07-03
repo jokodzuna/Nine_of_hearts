@@ -19,7 +19,7 @@ import {
     updateHandLayout,
     updateTopHandLayout,
 } from './card-helpers.js';
-import { playDealSound } from './audio.js';
+import { playDealSound, playSubwooferBlast } from './audio.js';
 
 // ---- Card interaction handlers (set once by ui-manager after defining them) -
 
@@ -120,8 +120,11 @@ export function triggerFourOfAKindRipple(pileEl, type = 'four') {
         ease:      'power2.in',
     });
 
-    // Vibration at hold moment (end of Stage 1 / start of Stage 2)
-    tl.call(() => { if (navigator.vibrate) navigator.vibrate([30, 20, 80, 20, 150]); });
+    // Subwoofer blast + vibration at hold moment (end of Stage 1 / start of Stage 2)
+    tl.call(() => {
+        playSubwooferBlast();
+        if (navigator.vibrate) navigator.vibrate([30, 20, 80, 20, 150]);
+    });
 
     // Stage 2 — hold
     tl.to(pileEl, { duration: 0.075 });

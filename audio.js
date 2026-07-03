@@ -466,6 +466,44 @@ export function playVIPFanfareSound() {
     });
 }
 
+// ---- Subwoofer slam (four-of-a-kind impact) ---------------------------------
+
+export function playSubwooferBlast() {
+    if (!_audioCtx) return;
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    const ctx = _audioCtx;
+    const now = ctx.currentTime;
+
+    // Sub sine: instant attack, pitch dives 80 → 22 Hz, long rumble decay
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(22, now + 0.08);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, now);
+    og.gain.exponentialRampToValueAtTime(0.9,    now + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
+    osc.connect(og); og.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.68);
+
+    // Low noise body (< 120 Hz): sharp crack of impact, fades by 280 ms
+    const sRate  = ctx.sampleRate;
+    const bufLen = Math.floor(sRate * 0.30);
+    const buf    = ctx.createBuffer(1, bufLen, sRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 120; lp.Q.value = 0.5;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, now);
+    ng.gain.exponentialRampToValueAtTime(0.6,    now + 0.003);
+    ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    src.connect(lp); lp.connect(ng); ng.connect(ctx.destination);
+    src.start(now); src.stop(now + 0.30);
+}
+
 export function playDealSound() {
     if (!_audioCtx) return;
     const nowMs = performance.now();

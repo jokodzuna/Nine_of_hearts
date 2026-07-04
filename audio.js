@@ -474,19 +474,31 @@ export function playSubwooferBlast() {
     const ctx = _audioCtx;
     const now = ctx.currentTime;
 
-    // Sub sine: instant attack, pitch dives 80 → 22 Hz, long rumble decay
+    // Sub sine: instant attack, kick-drum pitch dive 130 → 42 Hz (audible range)
     const osc = ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(80, now);
-    osc.frequency.exponentialRampToValueAtTime(22, now + 0.08);
+    osc.frequency.setValueAtTime(130, now);
+    osc.frequency.exponentialRampToValueAtTime(42, now + 0.09);
     const og = ctx.createGain();
     og.gain.setValueAtTime(0.0001, now);
     og.gain.exponentialRampToValueAtTime(0.9,    now + 0.004);
-    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
+    og.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
     osc.connect(og); og.connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.68);
+    osc.start(now); osc.stop(now + 0.58);
 
-    // Low noise body (< 120 Hz): sharp crack of impact, fades by 280 ms
+    // Mid thump body at 180 Hz — presence on phone/laptop speakers
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(180, now);
+    osc2.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+    const og2 = ctx.createGain();
+    og2.gain.setValueAtTime(0.0001, now);
+    og2.gain.exponentialRampToValueAtTime(0.55,   now + 0.004);
+    og2.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc2.connect(og2); og2.connect(ctx.destination);
+    osc2.start(now); osc2.stop(now + 0.25);
+
+    // Impact noise burst (< 200 Hz): physical crack of the slam
     const sRate  = ctx.sampleRate;
     const bufLen = Math.floor(sRate * 0.30);
     const buf    = ctx.createBuffer(1, bufLen, sRate);
@@ -495,10 +507,10 @@ export function playSubwooferBlast() {
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 120; lp.Q.value = 0.5;
+    lp.type = 'lowpass'; lp.frequency.value = 200; lp.Q.value = 0.5;
     const ng = ctx.createGain();
     ng.gain.setValueAtTime(0.0001, now);
-    ng.gain.exponentialRampToValueAtTime(0.6,    now + 0.003);
+    ng.gain.exponentialRampToValueAtTime(0.75,   now + 0.003);
     ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
     src.connect(lp); lp.connect(ng); ng.connect(ctx.destination);
     src.start(now); src.stop(now + 0.30);

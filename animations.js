@@ -182,14 +182,16 @@ export function triggerFourOfAKindRipple(pileEl, type = 'four') {
  * @param {string}      playerId — destination container ID
  */
 export function triggerDrawFlight(pileEl, count, playerId) {
+    console.log('[flight] called', count, playerId, 'gsap=', typeof gsap);
     if (!pileEl || !playerId || typeof gsap === 'undefined') return;
     const destEl = document.getElementById(playerId);
-    if (!destEl) return;
+    if (!destEl) { console.log('[flight] destEl not found for', playerId); return; }
 
     // Source: top card of pile; destination: centre of hand container
     const srcEl = pileEl.lastElementChild ?? pileEl;
     const srcR  = srcEl.getBoundingClientRect();
     const dstR  = destEl.getBoundingClientRect();
+    console.log('[flight] src=', srcR.left, srcR.top, srcR.width, srcR.height, 'dst=', dstR.left, dstR.top, dstR.width, dstR.height);
 
     const srcX  = srcR.left  + srcR.width  / 2;
     const srcY  = srcR.top   + srcR.height / 2;

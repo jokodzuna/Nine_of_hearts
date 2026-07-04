@@ -535,6 +535,7 @@ function _addCardToPile(cardData) {
 }
 
 function _removeFromPile(count, playerId) {
+    console.log('[draw] count=', count, 'playerId=', playerId);
     const pile = document.getElementById('pile');
     if (!pile) return;
     if (playerId) Animations.triggerDrawFlight(pile, count, playerId);

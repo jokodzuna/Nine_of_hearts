@@ -222,15 +222,27 @@ export function triggerDrawFlight(pileEl, count, playerId) {
         clone.appendChild(back);
         document.body.appendChild(clone);
 
-        // GSAP x/y are transform offsets relative to the CSS left/top origin
-        const midX = (dstX - srcX) / 2 + bowX + drift;
-        const midY = (dstY - srcY) / 2 + bowY;
-        const endX = dstX - srcX;
-        const endY = dstY - srcY;
+        const endW = cardW * endScale;
+        const endH = cardH * endScale;
 
-        const tl = gsap.timeline({ delay: i * 0.08, onComplete: () => clone.remove() });
-        tl.to(clone, { x: midX, y: midY, rotation: rot,  scale: 1.05, duration: 0.25, ease: 'power1.out' });
-        tl.to(clone, { x: endX, y: endY, rotation:   0,  scale: 0.3,  duration: 0.25, ease: 'power2.in'  });
+        // Fly to midpoint
+        const midX = srcX + (dstX - srcX) / 2 + bowX + drift;
+        const midY = srcY + (dstY - srcY) / 2 + bowY;
+        const delay = i * 0.08;
+
+        const tl = gsap.timeline({ delay, onComplete: () => clone.remove() });
+        // Phase 1: fly to arc midpoint (slight billow)
+        tl.to(clone, {
+            left: midX - cardW / 2, top: midY - cardH / 2,
+            rotation: rot, width: cardW * 1.05, height: cardH * 1.05,
+            duration: 0.25, ease: 'power1.out',
+        });
+        // Phase 2: land at destination, shrink to hand-card size
+        tl.to(clone, {
+            left: dstX - endW / 2, top: dstY - endH / 2,
+            rotation: 0, width: endW, height: endH,
+            duration: 0.25, ease: 'power2.in',
+        });
     }
 }
 

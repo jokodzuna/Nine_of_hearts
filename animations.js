@@ -182,17 +182,14 @@ export function triggerFourOfAKindRipple(pileEl, type = 'four') {
  * @param {string}      playerId — destination container ID
  */
 export function triggerDrawFlight(pileEl, count, playerId) {
-    console.log('[flight] called', count, playerId, 'gsap=', typeof gsap);
     if (!pileEl || !playerId || typeof gsap === 'undefined') return;
     const destEl = document.getElementById(playerId);
-    if (!destEl) { console.log('[flight] destEl not found for', playerId); return; }
+    if (!destEl) return;
 
     // Source: top card of pile; destination: centre of hand container
     const srcEl = pileEl.lastElementChild ?? pileEl;
     const srcR  = srcEl.getBoundingClientRect();
     const dstR  = destEl.getBoundingClientRect();
-    console.log('[flight] src=', srcR.left, srcR.top, srcR.width, srcR.height, 'dst=', dstR.left, dstR.top, dstR.width, dstR.height);
-
     const srcX  = srcR.left  + srcR.width  / 2;
     const srcY  = srcR.top   + srcR.height / 2;
     const dstX  = dstR.left  + dstR.width  / 2;
@@ -211,6 +208,7 @@ export function triggerDrawFlight(pileEl, count, playerId) {
         const rot   = (Math.random() - 0.5) * 30;  // mid-flight tilt
 
         const clone = createCardBack();
+        clone.classList.add('dealt');
         clone.style.cssText = `position:fixed;left:${srcX - cardW / 2}px;top:${srcY - cardH / 2}px;` +
                               `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;`;
         document.body.appendChild(clone);

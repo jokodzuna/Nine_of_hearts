@@ -134,7 +134,6 @@ export function Update(command, payload = {}) {
             _addCardToPile(payload.card);
             break;
         case 'REMOVE_FROM_PILE':
-            console.warn('[UPDATE] REMOVE_FROM_PILE', payload, 'active=', _activePlayerId);
             Audio.playDrawSound();
             _removeFromPile(payload.count ?? 1, _activePlayerId);
             break;
@@ -536,7 +535,6 @@ function _addCardToPile(cardData) {
 }
 
 function _removeFromPile(count, playerId) {
-    console.log('[draw] count=', count, 'playerId=', playerId);
     const pile = document.getElementById('pile');
     if (!pile) return;
     if (playerId) Animations.triggerDrawFlight(pile, count, playerId);
@@ -776,7 +774,7 @@ function _setupListeners() {
     WelcomeMenu.setup();  // builds overlay + wires all welcome-screen buttons
 
     document.getElementById('drawButton')
-        ?.addEventListener('click', () => { console.warn('[DRAW BTN] clicked, cb=', !!_cbDrawRequested); if (_cbDrawRequested) _cbDrawRequested(); });
+        ?.addEventListener('click', () => { if (_cbDrawRequested) _cbDrawRequested(); });
 
     const pile = document.getElementById('pile');
     if (pile) {

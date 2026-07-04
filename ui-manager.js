@@ -39,6 +39,7 @@ let _mouseTap      = { card: null, startX: 0, startY: 0 };
 let _longPressTimer = null;
 
 let _connOverlay = null;  // full-screen connection-lost overlay element
+let _activePlayerId = null; // player whose turn is currently active
 
 // Batch counter for 4-of-a-kind detection
 let _4kCount = 0;
@@ -134,7 +135,7 @@ export function Update(command, payload = {}) {
             break;
         case 'REMOVE_FROM_PILE':
             Audio.playDrawSound();
-            _removeFromPile(payload.count ?? 1);
+            _removeFromPile(payload.count ?? 1, _activePlayerId);
             break;
         case 'CLEAR_PILE':
             _clearPile();
@@ -335,6 +336,7 @@ function _startTimer(playerId, isHuman) {
 // ============================================================
 
 function _highlightPlayer(playerId) {
+    _activePlayerId = playerId;
     document.querySelectorAll('.active-hand').forEach(a => a.classList.remove('active-hand'));
     document.querySelectorAll('.avatar.active').forEach(a => a.classList.remove('active'));
     document.querySelectorAll('.avatar-container.active').forEach(c => {
@@ -532,9 +534,10 @@ function _addCardToPile(cardData) {
     }, 0);
 }
 
-function _removeFromPile(count) {
+function _removeFromPile(count, playerId) {
     const pile = document.getElementById('pile');
     if (!pile) return;
+    if (playerId) Animations.triggerDrawFlight(pile, count, playerId);
     // Never remove the first child — the 9♥ is the permanent base card
     const maxRemovable = Math.max(0, pile.children.length - 1);
     const n = Math.min(count, maxRemovable);

@@ -171,6 +171,60 @@ export function triggerFourOfAKindRipple(pileEl, type = 'four') {
     }
 }
 
+// ---- Draw flight animation --------------------------------------------------
+
+/**
+ * Spawn card-back clones at the pile top and animate them flying to the
+ * drawing player's hand container with a wind-blown arc.
+ *
+ * @param {HTMLElement} pileEl   — the #pile element
+ * @param {number}      count   — number of cards drawn (1–3)
+ * @param {string}      playerId — destination container ID
+ */
+export function triggerDrawFlight(pileEl, count, playerId) {
+    if (!pileEl || !playerId || typeof gsap === 'undefined') return;
+    const destEl = document.getElementById(playerId);
+    if (!destEl) return;
+
+    // Source: top card of pile; destination: centre of hand container
+    const srcEl = pileEl.lastElementChild ?? pileEl;
+    const srcR  = srcEl.getBoundingClientRect();
+    const dstR  = destEl.getBoundingClientRect();
+
+    const srcX  = srcR.left  + srcR.width  / 2;
+    const srcY  = srcR.top   + srcR.height / 2;
+    const dstX  = dstR.left  + dstR.width  / 2;
+    const dstY  = dstR.top   + dstR.height / 2;
+    const cardW = srcR.width  || 52;
+    const cardH = srcR.height || 74;
+
+    // Perpendicular bow so the arc is always natural regardless of flight direction
+    const dx  = dstX - srcX, dy = dstY - srcY;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const bowX = (-dy / len) * 55;
+    const bowY = ( dx / len) * 55;
+
+    for (let i = 0; i < count; i++) {
+        const drift = (Math.random() - 0.5) * 60;  // per-card wind wobble
+        const rot   = (Math.random() - 0.5) * 30;  // mid-flight tilt
+
+        const clone = createCardBack();
+        clone.style.cssText = `position:fixed;left:${srcX - cardW / 2}px;top:${srcY - cardH / 2}px;` +
+                              `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;`;
+        document.body.appendChild(clone);
+
+        // GSAP x/y are transform offsets relative to the CSS left/top origin
+        const midX = (dstX - srcX) / 2 + bowX + drift;
+        const midY = (dstY - srcY) / 2 + bowY;
+        const endX = dstX - srcX;
+        const endY = dstY - srcY;
+
+        const tl = gsap.timeline({ delay: i * 0.08, onComplete: () => clone.remove() });
+        tl.to(clone, { x: midX, y: midY, rotation: rot, scale: 0.9, duration: 0.25, ease: 'power1.out' });
+        tl.to(clone, { x: endX, y: endY, rotation:   0, scale: 0.8, duration: 0.25, ease: 'power2.in'  });
+    }
+}
+
 // ---- Deal animation ---------------------------------------------------------
 
 /**

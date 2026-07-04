@@ -197,6 +197,11 @@ export function triggerDrawFlight(pileEl, count, playerId) {
     const cardW = srcR.width  || 52;
     const cardH = srcR.height || 74;
 
+    // Compute end scale: shrink clone from pile-card size down to hand-card size
+    const handCard = destEl.querySelector('.card');
+    const dstCardW = handCard ? handCard.getBoundingClientRect().width : cardW * 0.6;
+    const endScale = Math.min(1, dstCardW / cardW);  // never scale up
+
     // Perpendicular bow so the arc is always natural regardless of flight direction
     const dx  = dstX - srcX, dy = dstY - srcY;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -220,8 +225,8 @@ export function triggerDrawFlight(pileEl, count, playerId) {
         const endY = dstY - srcY;
 
         const tl = gsap.timeline({ delay: i * 0.08, onComplete: () => clone.remove() });
-        tl.to(clone, { x: midX, y: midY, rotation: rot, scale: 0.9, duration: 0.25, ease: 'power1.out' });
-        tl.to(clone, { x: endX, y: endY, rotation:   0, scale: 0.8, duration: 0.25, ease: 'power2.in'  });
+        tl.to(clone, { x: midX, y: midY, rotation: rot,  scale: 1.05,     duration: 0.25, ease: 'power1.out' });
+        tl.to(clone, { x: endX, y: endY, rotation:   0,  scale: endScale,  duration: 0.25, ease: 'power2.in'  });
     }
 }
 

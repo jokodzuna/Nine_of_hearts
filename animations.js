@@ -201,7 +201,6 @@ export function triggerDrawFlight(pileEl, count, playerId) {
     const handCard = destEl.querySelector('.card');
     const dstCardW = handCard ? handCard.getBoundingClientRect().width : cardW * 0.6;
     const endScale = Math.min(1, dstCardW / cardW);  // never scale up
-    console.log('[flight] cardW=', cardW, 'dstCardW=', dstCardW, 'endScale=', endScale);
 
     // Perpendicular bow so the arc is always natural regardless of flight direction
     const dx  = dstX - srcX, dy = dstY - srcY;

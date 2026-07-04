@@ -212,12 +212,14 @@ export function triggerDrawFlight(pileEl, count, playerId) {
         const drift = (Math.random() - 0.5) * 60;  // per-card wind wobble
         const rot   = (Math.random() - 0.5) * 30;  // mid-flight tilt
 
-        const clone = createCardBack();
-        clone.classList.add('dealt');
+        const clone = document.createElement('div');
         clone.style.cssText = `position:fixed;left:${srcX - cardW / 2}px;top:${srcY - cardH / 2}px;` +
-                              `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;transition:none;`;
+                              `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;overflow:hidden;border-radius:4px;`;
+        const back = document.createElement('div');
+        back.className = 'card-back';
+        back.style.cssText = 'width:100%;height:100%;';
+        clone.appendChild(back);
         document.body.appendChild(clone);
-        gsap.set(clone, { scale: 1, x: 0, y: 0, rotation: 0, transformOrigin: '50% 50%' });
 
         // GSAP x/y are transform offsets relative to the CSS left/top origin
         const midX = (dstX - srcX) / 2 + bowX + drift;

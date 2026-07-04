@@ -215,8 +215,9 @@ export function triggerDrawFlight(pileEl, count, playerId) {
         const clone = createCardBack();
         clone.classList.add('dealt');
         clone.style.cssText = `position:fixed;left:${srcX - cardW / 2}px;top:${srcY - cardH / 2}px;` +
-                              `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;`;
+                              `width:${cardW}px;height:${cardH}px;z-index:200;pointer-events:none;transition:none;`;
         document.body.appendChild(clone);
+        gsap.set(clone, { scale: 1, x: 0, y: 0, rotation: 0, transformOrigin: '50% 50%' });
 
         // GSAP x/y are transform offsets relative to the CSS left/top origin
         const midX = (dstX - srcX) / 2 + bowX + drift;

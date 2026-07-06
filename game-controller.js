@@ -181,6 +181,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
+    document.body.classList.toggle('botfather-mode', isBotfather);
 
     // ---- Engines ----
     const DIFF_PROFILES = {
@@ -702,6 +703,7 @@ function _handleNewGame() {
 
 function _handleMainMenu() {
     _gameActive = false;
+    document.body.classList.remove('botfather-mode');
     _mpMode     = false;
     if (_abandonTimer) { clearTimeout(_abandonTimer); _abandonTimer = null; }
     if (_lastMPMode) {

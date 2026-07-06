@@ -1928,4 +1928,45 @@ body.welcome-active #tapToStart {
     animation: board-shake 0.55s linear forwards;
 }
 
+/* ================================================================
+   Botfather: circuit board background (overrides green felt)
+   ================================================================ */
+
+body.botfather-mode {
+    background: #071410 !important;
+}
+
+body.botfather-mode .game-container {
+    background-color: #071410;
+    background-image:
+        /* Via rings — quarter-circles at tile corners tile into full rings */
+        radial-gradient(circle at 0 0,
+            #071410 0, #071410 3.5px,
+            rgba(40, 200, 80, 0.92) 3.5px, rgba(40, 200, 80, 0.92) 6.5px,
+            transparent 6.5px),
+        /* Horizontal PCB traces */
+        repeating-linear-gradient(0deg,
+            rgba(20, 100, 38, 0.88) 0px, rgba(20, 100, 38, 0.88) 3px,
+            transparent 3px, transparent 75px),
+        /* Vertical PCB traces */
+        repeating-linear-gradient(90deg,
+            rgba(20, 100, 38, 0.88) 0px, rgba(20, 100, 38, 0.88) 3px,
+            transparent 3px, transparent 75px),
+        /* Fine substrate grid (PCB fibreglass texture) */
+        repeating-linear-gradient(0deg,
+            rgba(8, 42, 18, 0.55) 0px, rgba(8, 42, 18, 0.55) 1px,
+            transparent 1px, transparent 15px),
+        repeating-linear-gradient(90deg,
+            rgba(8, 42, 18, 0.55) 0px, rgba(8, 42, 18, 0.55) 1px,
+            transparent 1px, transparent 15px);
+    background-size: 75px 75px, 75px 75px, 75px 75px, 15px 15px, 15px 15px;
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+}
+
+body.botfather-mode .game-container::before {
+    background:
+        radial-gradient(ellipse at 28% 22%, rgba(0, 255, 100, 0.07) 0%, transparent 55%),
+        radial-gradient(ellipse at 72% 78%, rgba(0, 200, 70, 0.05) 0%, transparent 55%);
+}
+
 

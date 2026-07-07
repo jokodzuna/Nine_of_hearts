@@ -798,12 +798,15 @@ body.welcome-active #tapToStart {
         height: calc(var(--u) * 64);
     }
     #bf-countdown {
-        left: calc(var(--offset-x) + var(--u) * 114);
+        left: calc(var(--offset-x) + var(--u) * 98);
         top: unset;
         bottom: calc(var(--offset-y) + var(--u) * 153);
-        transform: translateX(-50%);
+        transform: none;
+        padding: 6px 8px 5px;
     }
     #bf-countdown .bf-timer-display { font-size: calc(var(--u) * 9.5); letter-spacing: calc(var(--u) * 0.8); }
+    #bf-countdown .bf-timer-label  { letter-spacing: 1px; }
+    #bf-countdown .bf-timer-sub    { letter-spacing: 0px; }
     #message {
         position: absolute;
         left: calc(var(--offset-x) + (var(--u) * 46));

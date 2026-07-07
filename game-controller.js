@@ -46,6 +46,7 @@ import {
     onMainMenu,
     onHostLeft,
     onDealStart,
+    onBfTimerExpired,
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
@@ -125,6 +126,7 @@ let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min perman
 
 let _state          = null;
 let _gameActive     = false;
+let _isBotfather    = false;   // true when current game is botfather difficulty
 let _pendingHands   = null;   // botfather: hands stored until deal veil clears
 let _humanTimer     = null;    // setTimeout handle for human auto-move
 
@@ -148,6 +150,7 @@ let _humanFoursThisGame  = 0;
 // ============================================================
 
 onGameStart(_startGame);
+onBfTimerExpired(_bfTimerTimeout);
 onDealStart(_triggerDeal);
 onDealComplete(_startTurn);
 onCardPlayed(_humanPlayCards);
@@ -181,6 +184,7 @@ function _startGame(cfgOverride = null) {
     PLAYER_NAMES[1] = 'Lisa'; PLAYER_NAMES[2] = 'John'; PLAYER_NAMES[3] = 'Carol';
 
     const isBotfather = cfg.difficulty === 'botfather';
+    _isBotfather = isBotfather;
     document.body.classList.toggle('botfather-mode', isBotfather);
 
     // ---- Engines ----
@@ -259,6 +263,7 @@ function _startGame(cfgOverride = null) {
     Update('CLEAR_PILE');
     Update('ADD_TO_PILE', { card: ds.pile[0] });
     if (isBotfather) {
+        Update('SHOW_BF_TIMER', {});
         _pendingHands = hands;   // deal fired by _triggerDeal() when veil clears
     } else {
         _pendingHands = null;
@@ -301,6 +306,7 @@ function _startTurn() {
         Update('ENABLE_PLAY', { enabled: true });
         Update('ENABLE_DRAW', { enabled: drawable > 0 });
         Update('START_TIMER', { playerId: PLAYER_IDS[p], isHuman: true });
+        if (_isBotfather) Update('START_BF_TIMER', {});
         _humanTimer = setTimeout(_humanTimerExpired, HUMAN_TURN_MS);
     } else {
         Update('ENABLE_PLAY', { enabled: false });
@@ -363,6 +369,7 @@ function _applyAndAdvance(move) {
         engine.advanceTree(move);
     }
     Update('STOP_TIMER');
+    if (_isBotfather) Update('STOP_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
     Update('DESELECT_ALL');
@@ -493,9 +500,29 @@ function _allHumansEliminated() {
     return !!(_state.eliminated & (1 << HUMAN));
 }
 
+function _bfTimerTimeout() {
+    if (!_gameActive) return;
+    _gameActive = false;
+    if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+    Update('STOP_TIMER', {});
+    Update('HIDE_BF_TIMER', {});
+    Update('ENABLE_PLAY', { enabled: false });
+    Update('ENABLE_DRAW', { enabled: false });
+    _renderHands(decodeState(_state));
+    Economy.recordGameResult({
+        survived:            false,
+        foursPlayedThisGame: _humanFoursThisGame,
+        gameTimeMs:          Date.now() - _gameStartTime,
+        maxCardsHeld:        _humanMaxCards,
+    }).catch(console.error);
+    Update('SHOW_GAME_OVER_BANNER', { text: "TIME'S UP! YOU ARE THE LOSER!", isMP: false, isHost: false });
+    _mpMode = false;
+}
+
 function _endGame() {
     _gameActive = false;
     Update('STOP_TIMER');
+    if (_isBotfather) Update('HIDE_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 
@@ -533,6 +560,7 @@ function _bannerText(loserIdx) {
 function _forceEndGame() {
     _gameActive = false;
     Update('STOP_TIMER');
+    if (_isBotfather) Update('HIDE_BF_TIMER', {});
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 

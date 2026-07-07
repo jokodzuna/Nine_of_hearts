@@ -798,10 +798,10 @@ body.welcome-active #tapToStart {
         height: calc(var(--u) * 64);
     }
     #bf-countdown {
-        left: calc(var(--offset-x) + var(--u) * 93);
+        left: calc(var(--offset-x) + var(--u) * 114);
         top: unset;
         bottom: calc(var(--offset-y) + var(--u) * 153);
-        transform: none;
+        transform: translateX(-50%);
     }
     #bf-countdown .bf-timer-display { font-size: calc(var(--u) * 9.5); letter-spacing: calc(var(--u) * 0.8); }
     #message {

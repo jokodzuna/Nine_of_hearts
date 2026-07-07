@@ -798,7 +798,7 @@ body.welcome-active #tapToStart {
         height: calc(var(--u) * 64);
     }
     #bf-countdown {
-        left: calc(var(--offset-x) + var(--u) * 98);
+        left: calc(var(--offset-x) + var(--u) * 101);
         top: unset;
         bottom: calc(var(--offset-y) + var(--u) * 153);
         transform: none;

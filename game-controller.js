@@ -250,7 +250,7 @@ function _startGame(cfgOverride = null) {
     if (isBotfather) {
         Update('SETUP_PLAYERS',      { numPlayers: 3, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });
         Update('SETUP_PLAYER_AREAS', { showRight: false, showTop: true, showLeft: false });
-        Update('SET_PLAYER_AVATAR',  { playerId: 'player2Cards', avatarPath: 'Images/bot-avatars/botfather.webp' });
+        Update('SET_PLAYER_AVATAR',  { playerId: 'player2Cards', avatarPath: 'Images/bot-avatars/The Botfather.webp' });
         Update('SET_PLAYER_NAME',    { playerId: 'player2Cards', name: 'The Botfather' });
     } else {
         Update('SETUP_PLAYERS', { numPlayers: cfg.numPlayers, playerName: PLAYER_NAMES[0], avatarPath: cfg.avatarPath });

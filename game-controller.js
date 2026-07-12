@@ -215,7 +215,11 @@ function _startGame(cfgOverride = null) {
         }
     }
     if (cfg.difficulty === 'strategic') {
-        for (let p = 1; p < 4; p++) _engines[p] = new StrategicBot();
+        StrategicBot.prepareGame();
+        for (let p = 1; p < 4; p++) {
+            _engines[p] = new StrategicBot();
+            PLAYER_NAMES[p] = _engines[p].name;
+        }
     }
     if (cfg.difficulty === 'sentient') {
         for (let p = 1; p < 4; p++) _engines[p] = new SentientBot();

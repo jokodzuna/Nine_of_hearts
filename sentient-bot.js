@@ -65,16 +65,43 @@ function _findOtherActive(state, myP) {
 }
 
 // ============================================================
+// SentientBot metadata
+// ============================================================
+
+const SENTIENT_META = [
+    { name: 'Mimir',    avatar: 'Images/bot-avatars/sentient/Mimir.webp'    },
+    { name: 'Nohoilpi', avatar: 'Images/bot-avatars/sentient/Nohoilpi.webp' },
+    { name: 'Oghma',    avatar: 'Images/bot-avatars/sentient/Oghma.webp'    },
+    { name: 'Tyche',    avatar: 'Images/bot-avatars/sentient/Tyche.webp'    },
+];
+
+// Module-level pool — shuffled once per game via SentientBot.prepareGame().
+let _namePool = [];
+
+function _shuffle(arr) { arr.sort(() => Math.random() - 0.5); }
+
+// ============================================================
 // SentientBot
 // ============================================================
 
 export class SentientBot {
     constructor() {
+        if (_namePool.length === 0) _shuffle(_namePool = [...SENTIENT_META]);
+        const meta          = _namePool.pop();
+        this._name          = meta.name;
+        this._avatar        = meta.avatar;
         this._cardKnowledge = null;
         this._pileSeenMask  = 0;
         this._inSimulation  = false;
         this._s2            = new BotfatherBot(); // full delegate for 2P stage
     }
+
+    static prepareGame() {
+        _shuffle(_namePool = [...SENTIENT_META]);
+    }
+
+    get name()       { return this._name; }
+    get avatarPath() { return this._avatar; }
 
     observeMove(state, move) {
         if (this._cardKnowledge === null)

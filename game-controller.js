@@ -222,7 +222,11 @@ function _startGame(cfgOverride = null) {
         }
     }
     if (cfg.difficulty === 'sentient') {
-        for (let p = 1; p < 4; p++) _engines[p] = new SentientBot();
+        SentientBot.prepareGame();
+        for (let p = 1; p < 4; p++) {
+            _engines[p] = new SentientBot();
+            PLAYER_NAMES[p] = _engines[p].name;
+        }
     }
 
     // ---- Players ----

@@ -1362,11 +1362,9 @@ function _ccTimeoutLoss(seat) {
         maxCardsHeld:        _humanMaxCards,
     }).catch(console.error);
 
-    const text = seat === humanSeat
-        ? "TIME'S UP! YOU ARE THE LOSER!"
-        : `${PLAYER_NAMES[seat]} RAN OUT OF TIME!`;
+    const text   = _bannerText(seat);
     const isMP   = _mpMode;
     const isHost = MP.isHost();
     _mpMode = false;
-    Update('SHOW_GAME_OVER_BANNER', { text, isMP, isHost });
+    Update('SHOW_GAME_OVER_BANNER', { text, subtext: 'OUT OF TIME', isMP, isHost });
 }

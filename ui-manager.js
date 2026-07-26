@@ -157,7 +157,7 @@ export function Update(command, payload = {}) {
             _showWinner(payload.playerName ?? '');
             break;
         case 'SHOW_GAME_OVER_BANNER':
-            _showGameOverBanner(payload.text ?? '', payload.isMP ?? false, payload.isHost ?? false);
+            _showGameOverBanner(payload.text ?? '', payload.subtext ?? '', payload.isMP ?? false, payload.isHost ?? false);
             break;
         case 'SHOW_MAIN_MENU':
             WelcomeMenu.showMainMenuScreen();
@@ -519,7 +519,7 @@ function _showMessage(text) {
     if (el) el.textContent = text;
 }
 
-function _showGameOverBanner(text, isMP, isHost) {
+function _showGameOverBanner(text, subtext, isMP, isHost) {
     // Banner sits on top of the game table and stays until covered by closing doors
     const banner = document.createElement('div');
     banner.className = 'game-over-banner';
@@ -529,6 +529,12 @@ function _showGameOverBanner(text, isMP, isHost) {
     textEl.className = 'go-banner-text';
     textEl.textContent = text;
     inner.appendChild(textEl);
+    if (subtext) {
+        const subEl = document.createElement('div');
+        subEl.className = 'go-banner-subtext';
+        subEl.textContent = subtext;
+        inner.appendChild(subEl);
+    }
     banner.appendChild(inner);
     document.body.appendChild(banner);
 

@@ -828,7 +828,7 @@ body.welcome-active #tapToStart {
         height: var(--circle-d);
         width: calc(var(--u) * 40);
     }
-    #chessClockOpp  { left: calc(var(--offset-x) + (var(--u) * 10)); }
+    #chessClockOpp  { left: calc(var(--offset-x) + (var(--u) * 10)); transform: scale(0.9); }
     #chessClockMine { left: calc(var(--offset-x) + (var(--u) * 87)); }
     #chessClockOpp .chess-clock-display,
     #chessClockMine .chess-clock-display { font-size: calc(var(--u) * 6); letter-spacing: calc(var(--u) * 0.3); }
@@ -1395,6 +1395,17 @@ body.welcome-active #tapToStart {
     text-transform: uppercase;
     line-height: 1.18;
     animation: loser-flash 0.65s ease-in-out infinite alternate;
+}
+
+.go-banner-subtext {
+    font-family: 'NHF-Becker', 'Arial Black', Arial, sans-serif;
+    font-size: clamp(13px, 3vw, 26px);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1.3;
+    margin-top: 8px;
+    color: rgba(255,255,255,0.75);
 }
 
 @keyframes loser-flash {

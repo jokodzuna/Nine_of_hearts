@@ -28,6 +28,11 @@ export const INFO_ID = {
 /** Total milliseconds allowed per turn. */
 export const TURN_DURATION_MS = 15000;
 
+// ---- Chess clock (MP heads-up endgame) --------------------------------------
+
+/** Total milliseconds each surviving player gets once the game is down to 2. */
+export const CHESS_CLOCK_MS = 120000;
+
 // ---- Dealing ----------------------------------------------------------------
 
 /** Order in which cards are dealt (matches clockwise table layout). */

@@ -822,6 +822,19 @@ body.welcome-active #tapToStart {
         margin: 0;
     }
 
+    #chessClockOpp, #chessClockMine {
+        position: absolute;
+        bottom: calc(var(--offset-y) + (var(--u) * 15));
+        height: var(--circle-d);
+        width: calc(var(--u) * 40);
+    }
+    #chessClockOpp  { left: calc(var(--offset-x) + (var(--u) * 10)); }
+    #chessClockMine { left: calc(var(--offset-x) + (var(--u) * 87)); }
+    #chessClockOpp .chess-clock-display,
+    #chessClockMine .chess-clock-display { font-size: calc(var(--u) * 6); letter-spacing: calc(var(--u) * 0.3); }
+    #chessClockOpp .chess-clock-label,
+    #chessClockMine .chess-clock-label   { font-size: calc(var(--u) * 2); letter-spacing: 1px; }
+
     #yourCards {
         position: absolute;
         left: calc(var(--offset-x) + (var(--u) * 5));
@@ -2059,5 +2072,54 @@ body.botfather-mode .game-container::before {
     from { box-shadow: 0 0 10px #ff1144, 0 0 20px rgba(255,17,68,0.28); }
     to   { box-shadow: 0 0 26px #ff1144, 0 0 55px rgba(255,17,68,0.62), inset 0 0 18px rgba(255,17,68,0.13); }
 }
+
+/* ---- Chess Clock (MP heads-up endgame: 2 min per surviving human) ---- */
+.chess-clock {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 10;
+    font-family: 'Courier New', monospace;
+    transition: opacity 0.3s ease;
+}
+.chess-clock-label {
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    line-height: 1;
+    opacity: 0.6;
+}
+.chess-clock-display {
+    line-height: 1.2;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+}
+.chess-clock.clock-paused { opacity: 0.5; }
+
+/* "Mine" — same green palette as the Botfather countdown */
+#chessClockMine {
+    background: rgba(0, 6, 3, 0.92);
+    border: 1px solid #00ff88;
+    box-shadow: 0 0 10px #00ff88, 0 0 22px rgba(0,255,136,0.22), inset 0 0 10px rgba(0,255,136,0.05);
+}
+#chessClockMine .chess-clock-label   { color: rgba(0,255,136,0.55); }
+#chessClockMine .chess-clock-display { color: #00ff88; text-shadow: 0 0 8px #00ff88, 0 0 18px rgba(0,255,136,0.55); }
+
+/* "Opponent" — black */
+#chessClockOpp {
+    background: rgba(0, 0, 0, 0.92);
+    border: 1px solid #444;
+    box-shadow: 0 0 8px rgba(0,0,0,0.6), inset 0 0 10px rgba(255,255,255,0.03);
+}
+#chessClockOpp .chess-clock-label   { color: rgba(255,255,255,0.4); }
+#chessClockOpp .chess-clock-display { color: #eaeaea; text-shadow: 0 0 6px rgba(255,255,255,0.25); }
+
+/* Warning ≤30 s / Danger ≤10 s — applies to either widget */
+.chess-clock.clock-warn   { border-color: #ff9900; box-shadow: 0 0 10px #ff9900, 0 0 22px rgba(255,153,0,0.22); }
+.chess-clock.clock-warn   .chess-clock-display { color: #ff9900; text-shadow: 0 0 8px #ff9900; }
+.chess-clock.clock-danger { border-color: #ff1144; box-shadow: 0 0 14px #ff1144, 0 0 32px rgba(255,17,68,0.38); animation: bf-danger-pulse 0.45s ease-in-out infinite alternate; }
+.chess-clock.clock-danger .chess-clock-display { color: #ff1144; text-shadow: 0 0 8px #ff1144; }
 
 

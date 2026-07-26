@@ -123,6 +123,10 @@ export function getPlayerConfig()      { return WelcomeMenu.getPlayerConfig(); }
  * │ START_TIMER     │ { playerId, isHuman?: bool }                              │
  * │ STOP_TIMER      │ {}                                                        │
  * ├─────────────────┼──────────────────────────────────────────────────────────┤
+ * │ SHOW_CHESS_CLOCKS│ { dual: bool }  — dual=false shows only "mine"          │
+ * │ HIDE_CHESS_CLOCKS│ {}                                                       │
+ * │ SYNC_CHESS_CLOCK │ { mineMs, oppMs:number|null, runningSide:'mine'|'opp'|null } │
+ * ├─────────────────┼──────────────────────────────────────────────────────────┤
  * │ ANIMATE_DEAL    │ { hands: { [playerId]: [{rank,suit}] } }                  │
  * │                 │   Fires onDealComplete() when done.                       │
  * ├─────────────────┼──────────────────────────────────────────────────────────┤
@@ -171,6 +175,9 @@ export function Update(command, payload = {}) {
         case 'HIDE_BF_TIMER':  _hideBfTimer();  break;
         case 'START_BF_TIMER': _startBfTimer(); break;
         case 'STOP_BF_TIMER':  _stopBfTimer();  break;
+        case 'SHOW_CHESS_CLOCKS': _showChessClocks(payload.dual ?? true); break;
+        case 'HIDE_CHESS_CLOCKS': _hideChessClocks(); break;
+        case 'SYNC_CHESS_CLOCK':  _syncChessClock(payload); break;
         case 'ANIMATE_DEAL':
             Animations.animateDealing(payload.hands, payload.humanPlayerId).then(() => {
                 if (_cbDealComplete) _cbDealComplete();
@@ -393,6 +400,82 @@ function _startBfTimer() {
 function _stopBfTimer() {
     if (_bfCd.rafId) { cancelAnimationFrame(_bfCd.rafId); _bfCd.rafId = null; }
     _bfCd.running = false;
+}
+
+// ============================================================
+// Chess Clock  (MP heads-up endgame — visual only, values are
+// authoritative from game-controller / synced Firebase state)
+// ============================================================
+
+let _ccUI = { rafId: null, mineMs: null, oppMs: null, runningSide: null, syncedAt: 0 };
+
+function _fmtClock(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+}
+
+function _applyClockClasses(el, ms, isRunning) {
+    if (!el) return;
+    el.classList.toggle('clock-paused', !isRunning);
+    const secs = ms / 1000;
+    el.classList.toggle('clock-danger', secs <= 10);
+    el.classList.toggle('clock-warn', secs > 10 && secs <= 30);
+}
+
+function _showChessClocks(dual) {
+    const oppEl  = document.getElementById('chessClockOpp');
+    const mineEl = document.getElementById('chessClockMine');
+    if (mineEl) mineEl.style.display = 'flex';
+    if (oppEl)  oppEl.style.display  = dual ? 'flex' : 'none';
+}
+
+function _hideChessClocks() {
+    if (_ccUI.rafId) cancelAnimationFrame(_ccUI.rafId);
+    _ccUI = { rafId: null, mineMs: null, oppMs: null, runningSide: null, syncedAt: 0 };
+    const oppEl  = document.getElementById('chessClockOpp');
+    const mineEl = document.getElementById('chessClockMine');
+    if (mineEl) { mineEl.style.display = 'none'; mineEl.classList.remove('clock-warn', 'clock-danger', 'clock-paused'); }
+    if (oppEl)  { oppEl.style.display  = 'none'; oppEl.classList.remove('clock-warn', 'clock-danger', 'clock-paused'); }
+}
+
+/**
+ * Re-baseline the visual clocks against a fresh authoritative reading and
+ * (re)start the interpolation loop. mineMs/oppMs are the *live* remaining
+ * milliseconds at the instant this is called — oppMs may be null (single-clock
+ * mode, vs a genuine bot survivor).
+ */
+function _syncChessClock({ mineMs, oppMs = null, runningSide = null }) {
+    if (_ccUI.rafId) cancelAnimationFrame(_ccUI.rafId);
+    _ccUI.mineMs      = mineMs;
+    _ccUI.oppMs       = oppMs;
+    _ccUI.runningSide = runningSide;
+    _ccUI.syncedAt    = performance.now();
+
+    const mineDisp = document.getElementById('chessClockMineDisplay');
+    const oppDisp  = document.getElementById('chessClockOppDisplay');
+    const mineEl   = document.getElementById('chessClockMine');
+    const oppEl    = document.getElementById('chessClockOpp');
+
+    const tick = () => {
+        const elapsed  = performance.now() - _ccUI.syncedAt;
+        const liveMine = _ccUI.runningSide === 'mine'
+            ? Math.max(0, _ccUI.mineMs - elapsed) : _ccUI.mineMs;
+
+        if (mineDisp && liveMine != null) mineDisp.textContent = _fmtClock(liveMine);
+        _applyClockClasses(mineEl, liveMine, _ccUI.runningSide === 'mine');
+
+        if (_ccUI.oppMs != null) {
+            const liveOpp = _ccUI.runningSide === 'opp'
+                ? Math.max(0, _ccUI.oppMs - elapsed) : _ccUI.oppMs;
+            if (oppDisp) oppDisp.textContent = _fmtClock(liveOpp);
+            _applyClockClasses(oppEl, liveOpp, _ccUI.runningSide === 'opp');
+        }
+
+        _ccUI.rafId = requestAnimationFrame(tick);
+    };
+    tick();
 }
 
 // ============================================================

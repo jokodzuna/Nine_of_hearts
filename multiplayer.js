@@ -332,6 +332,15 @@ export async function pushMove(newState) {
     });
 }
 
+/**
+ * Host-only: push the authoritative chess-clock snapshot (heads-up endgame).
+ * Guests receive it via the 'clockUpdate' event and never write it themselves.
+ */
+export async function pushClock(clockObj) {
+    if (!_roomCode) return;
+    await update(ref(_db, `rooms/${_roomCode}`), { clock: clockObj ?? null });
+}
+
 /** Detach listener and reset session. */
 export function leaveRoom() {
     _stopHeartbeat();
@@ -623,6 +632,10 @@ function _subscribeRoom(code) {
 
         _maxPlayers = room.maxPlayers ?? _maxPlayers;
         _players    = players;
+
+        // Chess-clock sync (heads-up endgame) — fires on every snapshot so a
+        // freshly (re)subscribed client always receives the live values.
+        if (room.clock !== undefined) _emit('clockUpdate', room.clock);
 
         // ---- Player connect / AI-status diff detection ----------------------
         const duringGame = room.status === 'playing' || _prevStatus === 'playing';

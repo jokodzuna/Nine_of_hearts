@@ -50,9 +50,9 @@ import {
 } from './ui-manager.js';
 
 import * as MP from './multiplayer.js';
-const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost } = MP;
+const { convertToBot, incrementTurnsMissed, permanentBot, tryPromoteHost, pushClock } = MP;
 
-import { AI_AVATARS, DEFAULT_AVATAR } from './constants.js';
+import { AI_AVATARS, DEFAULT_AVATAR, CHESS_CLOCK_MS } from './constants.js';
 import * as Economy from './economy.js';
 import * as Audio  from './audio.js';
 
@@ -121,6 +121,18 @@ let _disconnectedUids   = {};   // playerIdx → uid, for incrementTurnsMissed
 let _reconnectTimeouts  = {};   // playerIdx → setTimeout handle (5-min permanent-bot)
 
 // ============================================================
+// Chess Clock  (MP heads-up endgame — 2 min per surviving human)
+// ============================================================
+//
+// mode: null | 'single' (1 human vs 1 genuine bot) | 'dual' (human vs human)
+// seats: the 1 or 2 player indices being timed
+// ms:    seatIdx -> authoritative remaining ms (frozen while that seat isn't running)
+// runningSeat: seat idx currently ticking, or null
+// turnStartedAt: Date.now() epoch ms when runningSeat started ticking
+let _cc = { mode: null, seats: [], ms: {}, runningSeat: null, turnStartedAt: 0 };
+let _ccWatchInterval = null;
+
+// ============================================================
 // Game State
 // ============================================================
 
@@ -169,6 +181,7 @@ MP.on('connectionRestored',   _handleConnectionRestored);
 MP.on('selfReconnected',      _handleSelfReconnected);
 MP.on('hostHeartbeatLost',    _handleHostHeartbeatLost);
 MP.on('hostHeartbeatRestored',_handleHostHeartbeatRestored);
+MP.on('clockUpdate',          _handleClockUpdate);
 
 // ============================================================
 // Game Flow
@@ -178,6 +191,7 @@ function _startGame(cfgOverride = null) {
     const cfg = cfgOverride ?? getPlayerConfig();
     _lastMPMode      = false;
     _lastLocalConfig = { ...cfg };
+    _ccReset();   // clear any stale chess-clock state from a previous MP game
 
     // Reset any per-game overrides from a previous run
     PLAYER_IDS[1] = 'player1Cards';
@@ -531,6 +545,7 @@ function _endGame() {
     _gameActive = false;
     Update('STOP_TIMER');
     if (_isBotfather) Update('HIDE_BF_TIMER', {});
+    _ccReset();
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 
@@ -569,6 +584,7 @@ function _forceEndGame() {
     _gameActive = false;
     Update('STOP_TIMER');
     if (_isBotfather) Update('HIDE_BF_TIMER', {});
+    _ccReset();
     Update('ENABLE_PLAY', { enabled: false });
     Update('ENABLE_DRAW', { enabled: false });
 
@@ -920,6 +936,7 @@ function _handleMPHostStart({ players, maxPlayers }) {
  */
 function _startMPGame({ rawState, players, myIdx, maxPlayers, isReconnect = false, turnsMissed = 0 }) {
     _lastMPMode = true;
+    _ccReset();   // fresh MP game — chess-clock (re)activation is decided in _startMPTurn
     const initialState = MP.deserialiseState(rawState);
 
     // Seats that are either unoccupied or currently AI-controlled are bot seats
@@ -1057,6 +1074,9 @@ function _startMPTurn() {
     if (isGameOver(_state)) { _endGame(); return; }
     if (_allHumansEliminated()) { _forceEndGame(); return; }
 
+    _ccMaybeActivate();
+    _ccOnTurnBoundary(_state.currentPlayer);
+
     const ds = decodeState(_state);
     const p  = _state.currentPlayer;
 
@@ -1184,4 +1204,169 @@ async function _applyMPMove(move) {
     // highlights the other player and waits; the guard in _mpBotTurn prevents
     // duplicate bot execution.
     setTimeout(_startMPTurn, POST_MOVE_MS);
+}
+
+// ============================================================
+// Chess Clock  (MP heads-up endgame — 2 min per surviving human)
+//
+// Activates once exactly 2 seats remain (or from turn 1 if the room started
+// as a 2-player game). If one of the two survivors is a genuine bot seat
+// (never controlled by a human), only a single clock times the human — a
+// disconnected-but-reconnectable human still counts as human and keeps
+// draining while offline. Every client independently derives the live
+// countdown from the same synced ms/turnStartedAt values, so expiry is
+// detected the same way on host and guests alike (mirrors isGameOver()).
+// ============================================================
+
+/** True only for seats that were never a real human (unoccupied at game
+ *  start, or a disconnected human whose 5-min reconnect window expired). */
+function _isGenuineBotSeat(idx) {
+    return _mpBotIdxs.includes(idx) && !(idx in _disconnectedUids);
+}
+
+function _ccSurvivors() {
+    const s = [];
+    for (let i = 0; i < NUM_PLAYERS; i++) if (!(_state.eliminated & (1 << i))) s.push(i);
+    return s;
+}
+
+function _ccReset() {
+    _cc = { mode: null, seats: [], ms: {}, runningSeat: null, turnStartedAt: 0 };
+    if (_ccWatchInterval) { clearInterval(_ccWatchInterval); _ccWatchInterval = null; }
+    Update('HIDE_CHESS_CLOCKS');
+}
+
+/** One-time activation the moment exactly 2 seats remain. No-op afterwards. */
+function _ccMaybeActivate() {
+    if (!_mpMode || !_state || _cc.mode) return;
+    const surv = _ccSurvivors();
+    if (surv.length !== 2) return;
+
+    const [a, b] = surv;
+    const aBot = _isGenuineBotSeat(a);
+    const bBot = _isGenuineBotSeat(b);
+    if (aBot && bBot) return;   // shouldn't happen in a human-hosted room; guard anyway
+
+    if (aBot || bBot) {
+        const human = aBot ? b : a;
+        _cc.mode  = 'single';
+        _cc.seats = [human];
+        _cc.ms    = { [human]: CHESS_CLOCK_MS };
+    } else {
+        _cc.mode  = 'dual';
+        _cc.seats = [a, b];
+        _cc.ms    = { [a]: CHESS_CLOCK_MS, [b]: CHESS_CLOCK_MS };
+    }
+    _cc.runningSeat   = null;
+    _cc.turnStartedAt = 0;
+
+    if (MP.isHost()) pushClock({ ..._cc }).catch(e => console.error('[MP] pushClock failed:', e));
+    _ccStartWatch();
+    _ccSyncUI();
+}
+
+/** Called every turn change: freeze the outgoing seat's clock, start the incoming one. */
+function _ccOnTurnBoundary(newCurrent) {
+    if (!_cc.mode) return;
+
+    if (_cc.runningSeat !== null && _cc.runningSeat !== newCurrent) {
+        const elapsed = Date.now() - _cc.turnStartedAt;
+        _cc.ms[_cc.runningSeat] = Math.max(0, (_cc.ms[_cc.runningSeat] ?? 0) - elapsed);
+        _cc.runningSeat = null;
+    }
+    if (_cc.seats.includes(newCurrent) && _cc.runningSeat !== newCurrent) {
+        _cc.runningSeat   = newCurrent;
+        _cc.turnStartedAt = Date.now();
+    }
+
+    if (MP.isHost()) pushClock({ ..._cc }).catch(e => console.error('[MP] pushClock failed:', e));
+    _ccSyncUI();
+}
+
+/** Guest-side: mirror the host's authoritative snapshot. */
+function _handleClockUpdate(clock) {
+    if (MP.isHost()) return;   // host already owns the live copy
+    if (!clock || !clock.mode) {
+        _cc = { mode: null, seats: [], ms: {}, runningSeat: null, turnStartedAt: 0 };
+        Update('HIDE_CHESS_CLOCKS');
+        return;
+    }
+    _cc = {
+        mode:          clock.mode,
+        seats:         clock.seats ?? [],
+        ms:            { ...(clock.ms ?? {}) },
+        runningSeat:   clock.runningSeat ?? null,
+        turnStartedAt: clock.turnStartedAt ?? 0,
+    };
+    _ccStartWatch();
+    _ccSyncUI();
+}
+
+/** Polls every 500ms for the running seat's expiry — runs on host and guests alike. */
+function _ccStartWatch() {
+    if (_ccWatchInterval) return;
+    _ccWatchInterval = setInterval(() => {
+        if (!_mpMode || !_gameActive || !_cc.mode || _cc.runningSeat === null) return;
+        const live = (_cc.ms[_cc.runningSeat] ?? 0) - (Date.now() - _cc.turnStartedAt);
+        if (live <= 0) _ccTimeoutLoss(_cc.runningSeat);
+    }, 500);
+}
+
+/** Pushes the current authoritative clock state to the UI layer. */
+function _ccSyncUI() {
+    if (!_cc.mode) return;
+    const now = Date.now();
+    const liveOf = seat => {
+        if (seat == null) return null;
+        const base = _cc.ms[seat] ?? 0;
+        return _cc.runningSeat === seat ? Math.max(0, base - (now - _cc.turnStartedAt)) : base;
+    };
+
+    if (_cc.mode === 'single') {
+        const seat = _cc.seats[0];
+        Update('SHOW_CHESS_CLOCKS', { dual: false });
+        Update('SYNC_CHESS_CLOCK', {
+            mineMs:      liveOf(seat),
+            oppMs:       null,
+            runningSide: _cc.runningSeat === seat ? 'mine' : null,
+        });
+    } else {
+        const mySeat  = _cc.seats.includes(_myMPIdx) ? _myMPIdx : _cc.seats[1];
+        const oppSeat = _cc.seats.find(s => s !== mySeat);
+        Update('SHOW_CHESS_CLOCKS', { dual: true });
+        Update('SYNC_CHESS_CLOCK', {
+            mineMs:      liveOf(mySeat),
+            oppMs:       liveOf(oppSeat),
+            runningSide: _cc.runningSeat === mySeat ? 'mine' : (_cc.runningSeat === oppSeat ? 'opp' : null),
+        });
+    }
+}
+
+/** A seat's chess clock hit zero — they lose immediately, regardless of hand size. */
+function _ccTimeoutLoss(seat) {
+    if (!_gameActive) return;
+    _gameActive = false;
+    if (_ccWatchInterval) { clearInterval(_ccWatchInterval); _ccWatchInterval = null; }
+    if (_humanTimer) { clearTimeout(_humanTimer); _humanTimer = null; }
+    Update('STOP_TIMER');
+    Update('HIDE_CHESS_CLOCKS');
+    Update('ENABLE_PLAY', { enabled: false });
+    Update('ENABLE_DRAW', { enabled: false });
+
+    const humanSeat = _myMPIdx;
+    const survived  = seat !== humanSeat;
+    Economy.recordGameResult({
+        survived,
+        foursPlayedThisGame: _humanFoursThisGame,
+        gameTimeMs:          Date.now() - _gameStartTime,
+        maxCardsHeld:        _humanMaxCards,
+    }).catch(console.error);
+
+    const text = seat === humanSeat
+        ? "TIME'S UP! YOU ARE THE LOSER!"
+        : `${PLAYER_NAMES[seat]} RAN OUT OF TIME!`;
+    const isMP   = _mpMode;
+    const isHost = MP.isHost();
+    _mpMode = false;
+    Update('SHOW_GAME_OVER_BANNER', { text, isMP, isHost });
 }

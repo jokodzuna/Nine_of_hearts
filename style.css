@@ -1311,6 +1311,14 @@ body.welcome-active #tapToStart {
 }
 .mp-host-ctrl.hidden { display: none; }
 
+/* Match the lobby panel's own width instead of .menu-btn-start's fixed 440px cap,
+   so it lines up exactly with the Back button underneath it. */
+#mp-start-game-btn {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+}
+
 .mp-max-row {
     display: flex;
     align-items: center;

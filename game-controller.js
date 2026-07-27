@@ -32,6 +32,7 @@ import { CluelessBot }   from './clueless-bot.js';
 import { LearningBot }   from './learning-bot.js';
 import { StrategicBot }  from './strategic-bot.js';
 import { SentientBot }   from './sentient-bot.js';
+import { BotfatherBot }  from './strategist2-botfather.js';
 
 import {
     Update,
@@ -210,10 +211,11 @@ function _startGame(cfgOverride = null) {
         learning:  [null, null,     null,      null     ],
         strategic: [null, null,        null,         null        ],
         sentient:  [null, null,     null,      null     ],
-        botfather: [null, 'shark',  null,       null    ],
+        botfather: [null, null,    null,       null    ],
     };
     const profiles = DIFF_PROFILES[cfg.difficulty] ?? DIFF_PROFILES.hard;
     for (let p = 1; p < 4; p++) _engines[p] = profiles[p] ? new ISMCTSEngine(profiles[p]) : null;
+    if (cfg.difficulty === 'botfather') _engines[1] = new BotfatherBot();
     if (cfg.difficulty === 'clueless') {
         CluelessBot.prepareGame();
         for (let p = 1; p < 4; p++) {

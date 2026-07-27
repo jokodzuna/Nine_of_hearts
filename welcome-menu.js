@@ -508,12 +508,8 @@ export function buildPostGameMenu(gs, isMP, isHost) {
     mainMenuBtn.textContent = 'MAIN MENU';
     mainMenuBtn.addEventListener('click', () => {
         disableAll();
-        // Fully tear down the MP session so a fresh Create/Join works afterwards —
-        // without this the host's old room + Firebase listener lingered forever.
-        if (isMP) {
-            if (isHost) MP.hostReturnToMenu().catch(e => console.error('[MP] hostReturnToMenu failed:', e));
-            else        MP.leaveRoom();
-        }
+        // MP room teardown (hostReturnToMenu / leaveRoom) happens in
+        // game-controller's onMainMenu handler, fired below via _doMainMenuTransition.
         MP.clearLastRoom();
         refreshRejoinButton();
         _doMainMenuTransition(gs);

@@ -231,6 +231,11 @@ export async function updateAvatar(avatarPath) {
 export async function createRoom({ nickname, avatarPath, maxPlayers = 4 }) {
     if (!_uid) throw new Error('Not authenticated');
 
+    // Defensive: if a previous session never cleaned up (e.g. a failed
+    // hostReturnToMenu write), don't let its leftover listener/heartbeat
+    // interfere with the new room.
+    if (_roomCode) leaveRoom();
+
     // Pick an unused 4-digit code
     let code;
     for (;;) {
@@ -496,9 +501,16 @@ export async function tryPromoteHost() {
 export async function hostReturnToMenu() {
     if (!_isHost || !_roomCode) return;
     const code = _roomCode;
-    await update(ref(_db, `rooms/${code}`), { status: 'hostLeft' });
-    clearLastRoom();
-    leaveRoom();
+    try {
+        await update(ref(_db, `rooms/${code}`), { status: 'hostLeft' });
+    } catch (e) {
+        console.error('[MP] hostReturnToMenu: failed to notify guests:', e);
+        // Fall through — local cleanup must happen regardless, otherwise this
+        // client gets stuck unable to create/join a new room.
+    } finally {
+        clearLastRoom();
+        leaveRoom();
+    }
 }
 
 // ---- State serialisation / deserialisation ----------------------------------

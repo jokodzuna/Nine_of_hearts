@@ -188,6 +188,7 @@ function _buildMPPanel() {
     choiceSec.className = 'mp-section hidden';
 
     const createBtn = document.createElement('button');
+    createBtn.id = 'mp-create-btn';
     createBtn.className = 'menu-btn';
     createBtn.textContent = '\uFF0B Create Room';
     createBtn.addEventListener('click', async () => {
@@ -219,6 +220,7 @@ function _buildMPPanel() {
     codeInput.inputMode = 'numeric';
 
     const joinBtn = document.createElement('button');
+    joinBtn.id = 'mp-join-btn';
     joinBtn.className = 'menu-btn';
     joinBtn.textContent = '\u2192 Join Room';
     joinBtn.addEventListener('click', async () => {
@@ -338,6 +340,16 @@ function _mpShowSection(id) {
         if (el) el.classList.toggle('hidden', sec !== id);
     }
     document.getElementById('mp-error')?.classList.add('hidden');
+
+    // Create/Join buttons are only ever re-enabled on error — re-enable them
+    // here too, otherwise a second Create/Join attempt after a completed
+    // session silently does nothing (button stuck disabled from the first click).
+    if (id === 'choice') {
+        const createBtn = document.getElementById('mp-create-btn');
+        const joinBtn   = document.getElementById('mp-join-btn');
+        if (createBtn) createBtn.disabled = false;
+        if (joinBtn)   joinBtn.disabled   = false;
+    }
 }
 
 function _mpSetError(msg) {
